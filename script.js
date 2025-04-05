@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             // Rufe DEINEN lokalen Server-Endpunkt auf (Port 3000 ist Standard in server.js)
             // encodeURIComponent stellt sicher, dass auch Nicknames mit Sonderzeichen funktionieren
-            const response = await fetch(`http://localhost:3000/api/faceit-data?nickname=${encodeURIComponent(nickname)}`);
+            const response = await fetch(`https://ron1n1221-github-io.vercel.app/?nickname=${encodeURIComponent(nickname)}`);
 
             if (!response.ok) {
                 // Versuche, die Fehlermeldung vom Server zu bekommen
