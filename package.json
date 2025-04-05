@@ -1,0 +1,26 @@
+{
+  "name": "faceiteloviewer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ronin1221/ron1n1221.github.io.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ronin1221/ron1n1221.github.io/issues"
+  },
+  "homepage": "https://github.com/ronin1221/ron1n1221.github.io#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "node-fetch": "^2.7.0"
+  }
+}

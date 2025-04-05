@@ -1,0 +1,8 @@
+# Ignoriere die Datei mit den Secrets/API Keys
+.env
+
+# Ignoriere den Ordner mit den installierten Paketen
+node_modules/
+
+# Optional: macOS Systemdatei, die man oft ignoriert
+.DS_Store
