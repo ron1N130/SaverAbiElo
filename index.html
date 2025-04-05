@@ -2,27 +2,46 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Faceit Elo Tracker</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <title>Faceit Elo Viewer</title>
 </head>
 <body>
-<header>
-    <h1>Faceit Elo Tracker</h1>
-</header>
-<main>
-    <div id="loading-indicator">Lade Spielerdaten...</div>
-    <div id="error-message" style="color: red; display: none;"></div>
-    <div id="player-list" class="player-grid">
-    </div>
-</main>
-<footer>
-    <p>Daten von Faceit API</p>
-    <p>&copy;Alle Rechte vorbehalten.</p>
-</footer>
-<script src="script.js"></script>
+<h1>Faceit Elo Viewer</h1>
+<!-- Hier wird die Elo angezeigt -->
+<div id="elo-display">Lade Elo...</div>
+
+<script>
+    // Konfiguriere deinen Faceit-Nickname und API-Key
+    const nickname = "YourNickname"; // Ersetze "YourNickname" durch den tatsächlichen Namen
+    const apiKey = "YOUR_API_KEY";   // Achtung: Für Production solltest du den API-Key nicht direkt im Client-Code speichern!
+
+    // URL für den API-Aufruf – laut Dokumentation wird der Schlüssel "csgo" weiterhin verwendet.
+    const url = `https://open.faceit.com/data/v4/players?nickname=${nickname}&game=csgo`;
+
+    fetch(url, {
+        headers: {
+            "Authorization": `Bearer ${apiKey}`
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Fehler beim Laden der Daten: " + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("API-Daten:", data); // Zum Debuggen: Zeigt die komplette JSON-Antwort in der Konsole an.
+
+            // Prüfe, ob der Wert vorhanden ist
+            if(data.games && data.games.csgo && typeof data.games.csgo.faceit_elo !== 'undefined') {
+                document.getElementById("elo-display").innerText = "Elo: " + data.games.csgo.faceit_elo;
+            } else {
+                document.getElementById("elo-display").innerText = "Elo nicht verfügbar";
+            }
+        })
+        .catch(error => {
+            console.error("Fehler:", error);
+            document.getElementById("elo-display").innerText = "Fehler beim Abrufen der Elo.";
+        });
+</script>
 </body>
 </html>
