@@ -1,18 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Die Liste der Spieler wird jetzt aus players.json geladen.
-    // const playerNicknames = [ ... ]; // <- Diese Zeile wird entfernt/ersetzt.
-
+    // Die Liste der Spieler wird aus players.json geladen.
     const playerListElement = document.getElementById('player-list');
     const loadingIndicator = document.getElementById('loading-indicator');
     const errorMessageElement = document.getElementById('error-message');
 
-    // Funktion zum Abrufen von Spielerdaten von der Vercel API Funktion (unverändert)
+    // Funktion zum Abrufen von Spielerdaten von der Vercel API Funktion
     async function getPlayerData(nickname) {
         try {
             const apiUrl = `/api/faceit-data?nickname=${encodeURIComponent(nickname)}`;
-            // console.log(`Workspaceing from: ${apiUrl}`); // Log zur Überprüfung - kann auskommentiert werden
             const response = await fetch(apiUrl);
-
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ error: `Server error: ${response.status}` }));
                 let displayError = errorData.error || `Server error: ${response.status}`;
@@ -23,90 +19,91 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 throw new Error(displayError);
             }
-
             const playerData = await response.json();
+            // Stelle sicher, dass elo eine Zahl ist für die Sortierung, sonst 0
+            // Wichtig: Wir speichern die Original-Elo (kann 'N/A' sein) für die Anzeige
+            // und erstellen eine separate Eigenschaft für die Sortierung.
+            playerData.sortElo = parseInt(playerData.elo, 10) || 0;
             return playerData;
-
         } catch (error) {
-            console.error(`Fehler beim Abrufen von Daten für ${nickname} von Vercel API:`, error);
-            return { nickname: nickname, error: error.message };
+            console.error(`Fehler beim Abrufen von Daten für ${nickname}:`, error);
+            // Gib sortElo 0 zurück bei Fehler, damit Sortierung funktioniert
+            return { nickname: nickname, error: error.message, elo: 'N/A', sortElo: 0 };
         }
     }
 
-    // Funktion zum Anzeigen der Spielerdaten in der HTML-Liste (unverändert)
-    function displayPlayer(player) {
-        const card = document.createElement('div');
-        card.classList.add('player-card');
+    // NEUE Funktion zum Anzeigen der Spieler in einer Liste
+    function displayPlayerList(players) {
+        playerListElement.innerHTML = ''; // Liste leeren
 
-        const avatarUrl = player.avatar || 'default_avatar.png';
+        players.forEach((player) => {
+            // Wir brauchen den Rank nicht mehr explizit, da <ol> nummeriert
+            const listItem = document.createElement('li');
 
-        if (player.error) {
-            card.innerHTML = `
-                <h2>${player.nickname}</h2>
-                <p style="color: #ff6b6b;">Fehler: ${player.error}</p>
-                 <p style="font-size: 0.8em; color: #aaa;">(Prüfe Nickname & Vercel Logs)</p>
-            `;
-        } else {
-            if (player.level && player.level !== 'N/A') {
-                card.classList.add(`level-${player.level}`);
+            if (player.error) {
+                listItem.classList.add('error-item');
+                // Zeige nur Name und Fehler an
+                listItem.innerHTML = `
+                    <span>${player.nickname} - Fehler: ${player.error}</span>
+                `;
+            } else {
+                const avatarUrl = player.avatar || 'default_avatar.png';
+                const faceitProfileUrl = player.faceitUrl && player.faceitUrl.startsWith('http')
+                    ? player.faceitUrl
+                    : `https://${player.faceitUrl}`; // Fallback für Profil-URL
+
+                listItem.innerHTML = `
+                    <div class="player-info">
+                       <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil von ${player.nickname} öffnen">
+                          <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
+                       </a>
+                       <a href="${faceitProfileUrl}" target="_blank" class="player-name">
+                           ${player.nickname}
+                       </a>
+                    </div>
+                    <div class="player-elo">${player.elo === 'N/A' ? 'N/A' : player.elo}</div>
+                 `;
+                // Kein Level-Bild oder Text mehr hier
             }
-
-            const faceitProfileUrl = player.faceitUrl && player.faceitUrl.startsWith('http')
-                ? player.faceitUrl
-                : `https://${player.faceitUrl}`;
-
-            card.innerHTML = `
-                <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil von ${player.nickname} öffnen">
-                    <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
-                </a>
-                <a href="${faceitProfileUrl}" target="_blank" style="color: inherit; text-decoration: none;" title="Faceit Profil von ${player.nickname} öffnen">
-                    <h2>${player.nickname}</h2>
-                </a>
-                <div class="elo">${player.elo !== 'N/A' ? player.elo : '----'}</div>
-                <div class="level">
-                    ${player.levelImageUrl ? `<img src="${player.levelImageUrl}" alt="Level ${player.level}">` : ''}
-                    Level ${player.level !== 'N/A' ? player.level : '-'}
-                </div>
-                 <a href="${faceitProfileUrl}" target="_blank" class="profile-link">Profil ansehen</a>
-            `;
-        }
-        playerListElement.appendChild(card);
+            playerListElement.appendChild(listItem);
+        });
     }
 
-    // Hauptfunktion zum Laden aller Spieler (JETZT MIT FETCH FÜR players.json)
+    // Hauptfunktion zum Laden aller Spieler (MIT SORTIERUNG)
     async function loadAllPlayers() {
         loadingIndicator.style.display = 'block';
         errorMessageElement.style.display = 'none';
         errorMessageElement.textContent = '';
         playerListElement.innerHTML = '';
 
-        let playerNicknames = []; // Leeres Array für die Nicknames
+        let playerNicknames = [];
 
         try {
-            // Schritt 1: Lade die Liste der Nicknames aus players.json
-            const response = await fetch('/players.json'); // Lädt die Datei aus dem Root-Verzeichnis
+            const response = await fetch('/players.json');
             if (!response.ok) {
                 throw new Error(`Fehler beim Laden der Spielerliste (players.json): ${response.status}`);
             }
-            playerNicknames = await response.json(); // Wandelt den Inhalt der Datei in ein JavaScript-Array um
+            playerNicknames = await response.json();
 
             if (!Array.isArray(playerNicknames) || playerNicknames.length === 0) {
                 throw new Error("Spielerliste (players.json) ist leer oder im falschen Format.");
             }
 
-            // Schritt 2: Erstelle Promises für alle API-Aufrufe basierend auf der geladenen Liste
             const playerPromises = playerNicknames.map(nickname => getPlayerData(nickname));
+            let playersData = await Promise.all(playerPromises);
 
-            // Schritt 3: Warte auf alle API-Aufrufe und zeige die Daten an
-            const playersData = await Promise.all(playerPromises);
-            playersData.forEach(player => displayPlayer(player));
+            // === Sortiere das Array absteigend nach sortElo ===
+            playersData.sort((a, b) => b.sortElo - a.sortElo); // Sortiert von hoch nach niedrig
+
+            // Zeige die sortierte Liste an
+            displayPlayerList(playersData);
 
         } catch (error) {
             console.error("Fehler beim Laden der Spieler:", error);
             errorMessageElement.textContent = `Fehler: ${error.message}`;
             errorMessageElement.style.display = 'block';
         } finally {
-            loadingIndicator.style.display = 'none'; // Ladeanzeige ausblenden
+            loadingIndicator.style.display = 'none';
         }
     }
 

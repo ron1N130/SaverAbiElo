@@ -1,9 +1,9 @@
 :root {
     --background-color: #1f1f23; /* Dunkler Hintergrund */
-    --card-background: #2a2a2e; /* Kartenhintergrund */
+    --card-background: #2a2a2e; /* Kartenhintergrund / Listen Item Hintergrund */
     --text-color: #efeff1;       /* Heller Text */
     --primary-color: #ff5500;    /* Faceit Orange als Akzent */
-    --level10-color: #e41a1c;    /* Beispiel Farbe für Level 10 */
+    --level10-color: #e41a1c;    /* Beispiel Farbe für Level 10 (wird aktuell nicht verwendet) */
     --font-family: 'Roboto', sans-serif;
     --border-radius: 8px;
 }
@@ -33,8 +33,8 @@ header h1 {
 
 main {
     padding: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
+    max-width: 1200px; /* Behalte max-width für den Hauptcontainer */
+    margin: 0 auto; /* Zentriert den Hauptcontainer */
     flex-grow: 1; /* Lässt den Main-Bereich wachsen, um Platz zu füllen */
     width: 100%; /* Nimmt volle Breite innerhalb der max-width Grenze */
     box-sizing: border-box; /* Padding wird in die Breite einberechnet */
@@ -47,101 +47,96 @@ main {
     padding: 2rem;
 }
 
-.player-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Responsives Grid */
-    gap: 1.5rem;
-}
-
-.player-card {
-    background-color: var(--card-background);
+/* --- Neue Styles für die kompakte Liste --- */
+.player-list-compact {
+    list-style: decimal; /* Verwendet Standard-Nummerierung von <ol> */
+    list-style-position: inside; /* Nummerierung innerhalb des Listenelements */
+    padding: 0;
+    max-width: 600px; /* Begrenzt die Breite der Liste */
+    margin: 2rem auto; /* Zentriert die Liste */
+    border: 1px solid var(--card-background); /* Optional: Rahmen um die Liste */
     border-radius: var(--border-radius);
-    padding: 1.5rem;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    overflow: hidden; /* Stellt sicher, dass border-radius greift */
+}
+
+.player-list-compact li {
+    background-color: var(--card-background);
+    /* border-radius: var(--border-radius); // Entfernt, da der Container den Radius hat */
+    margin-bottom: 0; /* Kein Abstand mehr zwischen Items */
+    border-bottom: 1px solid #333; /* Trennlinie zwischen Items */
+    padding: 0.8rem 1.5rem; /* Etwas kompakteres Padding */
     display: flex;
-    flex-direction: column;
     align-items: center;
-    text-align: center;
-    border-left: 5px solid var(--primary-color); /* Akzentlinie */
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    justify-content: space-between; /* Elemente verteilen */
+    /* border-left: 4px solid var(--primary-color); // Entfernt, Design im Screenshot hat das nicht */
+    counter-increment: player-rank-counter; /* Zähler für Pseudo-Element */
+}
+.player-list-compact li:last-child {
+    border-bottom: none; /* Keine Linie beim letzten Element */
 }
 
-.player-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.3);
+/* Alternative für Ranking-Nummer mit Pseudo-Element (flexibler) */
+.player-list-compact li::before {
+    /* content: counter(player-rank-counter) "."; // Erzeugt "1.", "2." etc. */
+    /* Stattdessen verwenden wir die <ol> Nummerierung, oben list-style: decimal */
 }
 
-.player-card img.avatar {
-    width: 80px;
-    height: 80px;
+.player-list-compact .player-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem; /* Abstand zwischen Avatar und Name */
+    flex-grow: 1; /* Nimmt verfügbaren Platz ein */
+    margin-left: 0.5rem; /* Abstand zur Nummerierung */
+}
+
+.player-list-compact img.avatar {
+    width: 40px; /* Kleinerer Avatar */
+    height: 40px;
     border-radius: 50%;
-    margin-bottom: 1rem;
-    border: 3px solid var(--text-color);
     object-fit: cover;
-    background-color: #444; /* Platzhalterfarbe, falls Bild fehlt */
+    background-color: #444;
 }
 
-.player-card h2 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.4rem;
+.player-list-compact .player-name {
+    font-size: 1.1rem;
+    font-weight: bold;
     color: var(--text-color);
-    word-break: break-all; /* Lange Namen umbrechen */
+    text-decoration: none;
+}
+.player-list-compact .player-name:hover {
+    color: var(--primary-color);
 }
 
-.player-card .elo {
-    font-size: 1.8rem;
+
+.player-list-compact .player-elo {
+    font-size: 1.1rem; /* Etwas kleiner für kompakte Liste */
     font-weight: 700;
     color: var(--primary-color);
-    margin-bottom: 0.5rem;
-}
-
-.player-card .level {
-    font-size: 1rem;
-    margin-bottom: 1rem;
-    display: flex; /* Für bessere Ausrichtung von Bild und Text */
-    align-items: center;
-    justify-content: center; /* Zentriert Inhalt horizontal */
-}
-
-.player-card .level img {
-    width: 25px; /* Größe des Level-Icons anpassen */
-    height: auto;
-    vertical-align: middle; /* Icon und Text besser ausrichten */
-    margin-right: 0.5rem;
-}
-
-.profile-link {
-    display: inline-block;
-    margin-top: 1rem;
-    padding: 0.5rem 1rem;
-    background-color: var(--primary-color);
-    color: #fff;
-    border-radius: 4px;
-    text-decoration: none;
-    font-weight: bold;
-    transition: background-color 0.3s ease;
-}
-
-.profile-link:hover {
-    background-color: #e64a00; /* Etwas dunkleres Orange */
-    color: #fff;
+    min-width: 50px; /* Feste Mindestbreite für Ausrichtung */
+    text-align: right;
+    margin-left: 1rem; /* Abstand zum Namen */
 }
 
 
-/* Spezifische Farbe für Level 10 (Beispiel) */
-.player-card.level-10 {
-    border-left-color: var(--level10-color);
+/* Stil für Fehler in der Liste */
+.player-list-compact li.error-item {
+    justify-content: flex-start; /* Fehler linksbündig */
+    /* border-left-color: #ff6b6b; // Entfernt */
+    background-color: #3f2a2e; /* Leicht rötlicher Hintergrund für Fehler */
+    color: #ffabab;
+    font-style: italic;
 }
-.player-card.level-10 .elo {
-    color: var(--level10-color);
+.player-list-compact li.error-item::marker { /* Stil für Nummer bei Fehler */
+    color: #ff8a8a;
 }
+
 
 footer {
     text-align: center;
     padding: 1.5rem;
-    margin-top: 2rem; /* Sorgt für Abstand zum Inhalt darüber */
+    margin-top: 2rem;
     font-size: 0.9rem;
     color: #aaa;
-    background-color: var(--card-background); /* Passend zum Header */
+    background-color: var(--card-background);
     border-top: 1px solid #333;
 }
