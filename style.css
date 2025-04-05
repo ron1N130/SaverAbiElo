@@ -3,7 +3,7 @@
     --card-background: #2a2a2e; /* Kartenhintergrund / Listen Item Hintergrund */
     --text-color: #efeff1;       /* Heller Text */
     --primary-color: #ff5500;    /* Faceit Orange als Akzent */
-    --level10-color: #e41a1c;    /* Beispiel Farbe für Level 10 (wird aktuell nicht verwendet) */
+    /* --level10-color: #e41a1c; */ /* Nicht mehr verwendet */
     --font-family: 'Roboto', sans-serif;
     --border-radius: 8px;
 }
@@ -14,9 +14,9 @@ body {
     color: var(--text-color);
     margin: 0;
     line-height: 1.6;
-    display: flex; /* Ermöglicht Footer am unteren Rand */
-    flex-direction: column; /* Stellt sicher, dass sich Elemente untereinander anordnen */
-    min-height: 100vh; /* Mindesthöhe des Body auf volle Viewport-Höhe */
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }
 
 header {
@@ -33,11 +33,22 @@ header h1 {
 
 main {
     padding: 2rem;
-    max-width: 1200px; /* Behalte max-width für den Hauptcontainer */
-    margin: 0 auto; /* Zentriert den Hauptcontainer */
-    flex-grow: 1; /* Lässt den Main-Bereich wachsen, um Platz zu füllen */
-    width: 100%; /* Nimmt volle Breite innerhalb der max-width Grenze */
-    box-sizing: border-box; /* Padding wird in die Breite einberechnet */
+    max-width: 1200px;
+    margin: 0 auto;
+    flex-grow: 1;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Styling für Überschriften innerhalb von main */
+main h2 {
+    text-align: center;
+    color: var(--primary-color);
+    margin-top: 2rem;
+    margin-bottom: 1.5rem;
+}
+main h2:first-of-type { /* Kein oberer Margin für die erste Überschrift */
+    margin-top: 0;
 }
 
 
@@ -47,50 +58,66 @@ main {
     padding: 2rem;
 }
 
-/* --- Neue Styles für die kompakte Liste --- */
-.player-list-compact {
-    list-style: decimal; /* Verwendet Standard-Nummerierung von <ol> */
-    list-style-position: inside; /* Nummerierung innerhalb des Listenelements */
-    padding: 0;
-    max-width: 600px; /* Begrenzt die Breite der Liste */
-    margin: 2rem auto; /* Zentriert die Liste */
-    border: 1px solid var(--card-background); /* Optional: Rahmen um die Liste */
+/* --- NEU: Styles für den Chart Container --- */
+#chart-container {
+    width: 100%;
+    max-width: 900px; /* Maximale Breite des Graphen */
+    margin: 0 auto 2rem auto; /* Zentrieren und Abstand nach unten */
+    padding: 1.5rem;
+    background-color: var(--card-background);
     border-radius: var(--border-radius);
-    overflow: hidden; /* Stellt sicher, dass border-radius greift */
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+#chart-container h2 { /* Styling für die Graphen-Überschrift */
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    color: var(--primary-color);
+}
+
+/* Canvas selbst soll responsive sein */
+#eloChart {
+    max-height: 450px; /* Maximale Höhe, um zu große Graphen zu vermeiden */
+}
+
+
+/* --- Styles für die kompakte Liste (wie zuvor) --- */
+.player-list-compact {
+    list-style: decimal;
+    list-style-position: inside;
+    padding: 0;
+    max-width: 600px;
+    margin: 0 auto; /* Zentriert die Liste unterhalb des Graphen (falls vorhanden) */
+    border: 1px solid var(--card-background);
+    border-radius: var(--border-radius);
+    overflow: hidden;
 }
 
 .player-list-compact li {
     background-color: var(--card-background);
-    /* border-radius: var(--border-radius); // Entfernt, da der Container den Radius hat */
-    margin-bottom: 0; /* Kein Abstand mehr zwischen Items */
-    border-bottom: 1px solid #333; /* Trennlinie zwischen Items */
-    padding: 0.8rem 1.5rem; /* Etwas kompakteres Padding */
+    margin-bottom: 0;
+    border-bottom: 1px solid #333;
+    padding: 0.8rem 1.5rem;
     display: flex;
     align-items: center;
-    justify-content: space-between; /* Elemente verteilen */
-    /* border-left: 4px solid var(--primary-color); // Entfernt, Design im Screenshot hat das nicht */
-    counter-increment: player-rank-counter; /* Zähler für Pseudo-Element */
+    justify-content: space-between;
+    counter-increment: player-rank-counter;
 }
 .player-list-compact li:last-child {
-    border-bottom: none; /* Keine Linie beim letzten Element */
-}
-
-/* Alternative für Ranking-Nummer mit Pseudo-Element (flexibler) */
-.player-list-compact li::before {
-    /* content: counter(player-rank-counter) "."; // Erzeugt "1.", "2." etc. */
-    /* Stattdessen verwenden wir die <ol> Nummerierung, oben list-style: decimal */
+    border-bottom: none;
 }
 
 .player-list-compact .player-info {
     display: flex;
     align-items: center;
-    gap: 1rem; /* Abstand zwischen Avatar und Name */
-    flex-grow: 1; /* Nimmt verfügbaren Platz ein */
-    margin-left: 0.5rem; /* Abstand zur Nummerierung */
+    gap: 1rem;
+    flex-grow: 1;
+    margin-left: 0.5rem;
 }
 
 .player-list-compact img.avatar {
-    width: 40px; /* Kleinerer Avatar */
+    width: 40px;
     height: 40px;
     border-radius: 50%;
     object-fit: cover;
@@ -107,29 +134,24 @@ main {
     color: var(--primary-color);
 }
 
-
 .player-list-compact .player-elo {
-    font-size: 1.1rem; /* Etwas kleiner für kompakte Liste */
+    font-size: 1.1rem;
     font-weight: 700;
     color: var(--primary-color);
-    min-width: 50px; /* Feste Mindestbreite für Ausrichtung */
+    min-width: 50px;
     text-align: right;
-    margin-left: 1rem; /* Abstand zum Namen */
+    margin-left: 1rem;
 }
 
-
-/* Stil für Fehler in der Liste */
 .player-list-compact li.error-item {
-    justify-content: flex-start; /* Fehler linksbündig */
-    /* border-left-color: #ff6b6b; // Entfernt */
-    background-color: #3f2a2e; /* Leicht rötlicher Hintergrund für Fehler */
+    justify-content: flex-start;
+    background-color: #3f2a2e;
     color: #ffabab;
     font-style: italic;
 }
-.player-list-compact li.error-item::marker { /* Stil für Nummer bei Fehler */
+.player-list-compact li.error-item::marker {
     color: #ff8a8a;
 }
-
 
 footer {
     text-align: center;
