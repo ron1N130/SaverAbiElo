@@ -16,13 +16,8 @@ app.get('/api/faceit-data', async (req, res) => {
     const nickname = req.query.nickname;
     console.log(`[API Function] Handler started for nickname: ${nickname}`);
 
-    if (!nickname) {
-        return res.status(400).json({ error: 'Nickname query parameter is required' });
-    }
-    if (!FACEIT_API_KEY) {
-        console.error("FEHLER: FACEIT_API_KEY nicht als Umgebungsvariable gefunden!");
-        return res.status(500).json({ error: 'Server configuration error: API Key missing' });
-    }
+    if (!nickname) { return res.status(400).json({ error: 'Nickname query parameter is required' }); }
+    if (!FACEIT_API_KEY) { console.error("FEHLER: FACEIT_API_KEY fehlt!"); return res.status(500).json({ error: 'Server configuration error: API Key missing' }); }
 
     const headers = { 'Authorization': `Bearer ${FACEIT_API_KEY}` };
 
@@ -32,14 +27,9 @@ app.get('/api/faceit-data', async (req, res) => {
         const playerDetailsResponse = await fetch(`${API_BASE_URL}/players?nickname=${nickname}`, { headers });
         console.log(`[API Function] Player Details Response Status for ${nickname}: ${playerDetailsResponse.status}`);
 
-        if (!playerDetailsResponse.ok) {
-            if (playerDetailsResponse.status === 404) {
-                console.log(`[API Function] Player not found: ${nickname}`);
-                return res.status(404).json({ error: `Spieler "${nickname}" nicht gefunden.` });
-            } else {
-                console.error(`[API Function] Faceit API error (Player Details): ${playerDetailsResponse.status} for ${nickname}`);
-                throw new Error(`Faceit API error (Player Details): ${playerDetailsResponse.status}`);
-            }
+        if (!playerDetailsResponse.ok) { /* ... Fehlerbehandlung wie zuvor ... */
+            if (playerDetailsResponse.status === 404) { return res.status(404).json({ error: `Spieler "${nickname}" nicht gefunden.` }); }
+            else { throw new Error(`Faceit API error (Player Details): ${playerDetailsResponse.status}`); }
         }
         const playerData = await playerDetailsResponse.json();
         const playerId = playerData.player_id;
@@ -54,15 +44,15 @@ app.get('/api/faceit-data', async (req, res) => {
 
             if (historyResponse.ok) {
                 const historyData = await historyResponse.json();
-                // Logge die Struktur der History-Antwort zum Debuggen
-                // console.log('[API Function] Received History Data Structure:', JSON.stringify(historyData, null, 2));
+                // NEU: Logge die rohe History-Antwort, um die Struktur zu sehen
+                console.log('[API Function] Raw History Data for ' + nickname + ':', JSON.stringify(historyData, null, 2));
 
                 if (historyData && Array.isArray(historyData.items)) {
-                    // Annahme: 'elo' Feld existiert in jedem Match-Item. Wenn nicht, muss hier angepasst werden!
+                    // Extrahiere Elo-Werte (wir bleiben bei der Annahme 'match.elo', passen es ggf. nach Log-Analyse an)
                     eloHistory = historyData.items
-                        .map(match => parseInt(match.elo, 10)) // Elo aus jedem Match holen
-                        .filter(elo => !isNaN(elo)); // Nur gültige Zahlen behalten
-                    eloHistory.reverse(); // Reihenfolge umdrehen (Alt -> Neu)
+                        .map(match => parseInt(match.elo, 10))
+                        .filter(elo => !isNaN(elo));
+                    eloHistory.reverse(); // Alt -> Neu
                     console.log(`[API Function] Found ${eloHistory.length} valid Elo entries in history for ${nickname}`);
                 } else {
                     console.warn(`[API Function] Match history items not found or not an array for ${nickname}`);
@@ -77,7 +67,6 @@ app.get('/api/faceit-data', async (req, res) => {
         // === Schritt 3: Daten kombinieren ===
         const gameId = 'cs2';
         const gameData = playerData.games && playerData.games[gameId] ? playerData.games[gameId] : null;
-
         const responseData = {
             nickname: playerData.nickname,
             avatar: playerData.avatar || 'default_avatar.png',
@@ -85,12 +74,9 @@ app.get('/api/faceit-data', async (req, res) => {
             elo: gameData?.faceit_elo || 'N/A',
             level: gameData?.skill_level || 'N/A',
             sortElo: parseInt(gameData?.faceit_elo, 10) || 0,
-            eloHistory: eloHistory // Das Array mit der Elo-Historie
+            eloHistory: eloHistory
         };
-
-        // NEU: Logge das gesamte Objekt, das an das Frontend gesendet wird
-        console.log(`[API Function] Sending responseData for ${nickname}:`, JSON.stringify(responseData, null, 0)); // Kompaktes Log
-
+        console.log(`[API Function] Sending responseData for ${nickname}:`, JSON.stringify(responseData, null, 0));
         res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
         res.json(responseData);
 
