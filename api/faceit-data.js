@@ -73,9 +73,11 @@ app.get('/api/faceit-data', async (req, res) => {
             nickname: playerData.nickname,
             avatar: playerData.avatar || 'default_avatar.png',
             faceitUrl: playerData.faceit_url.replace('{lang}', 'en'),
-            elo: playerStats.lifetime?.k5 || 'N/A',
-            level: playerStats.lifetime?.k6 || 'N/A',
-            levelImageUrl: playerStats.lifetime?.k6 ? `https://cdn-frontend.faceit.com/web/960/src/app/assets/images-compress/skill-level/skill_level_${playerStats.lifetime.k6}_sm.png` : null
+            // Verwende die Standard-Feldnamen aus der Faceit API
+            elo: playerStats.lifetime?.faceit_elo || 'N/A',
+            level: playerStats.lifetime?.skill_level || 'N/A',
+            // Aktualisiere auch die URL für das Level-Icon, um skill_level zu verwenden
+            levelImageUrl: playerStats.lifetime?.skill_level ? `https://cdn-frontend.faceit.com/web/960/src/app/assets/images-compress/skill-level/skill_level_${playerStats.lifetime.skill_level}_sm.png` : null
         };
 
         console.log(`[API Function] Sending data for ${nickname}`);
