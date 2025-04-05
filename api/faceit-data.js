@@ -55,15 +55,15 @@ app.get('/api/faceit-data', async (req, res) => {
         if (statsResponse.ok) { // Status 200-299
             playerStats = await statsResponse.json();
             console.log(`[API Function] Found stats for: ${playerId}`);
+            // NEU: Gib das empfangene Stats-Objekt im Log aus
+            console.log('[API Function] Received playerStats Object:', JSON.stringify(playerStats, null, 2));
         } else if (statsResponse.status === 404) { // Status 404
-            console.warn(`[API Function] No CS2 stats found for ${nickname} (${playerId}). Status: 404.`); // <-- Log angepasst auf CS2
-        } else { // Alle anderen Fehlerstatus (401, 403, 500 etc.)
+            console.warn(`[API Function] No CS2 stats found for ${nickname} (${playerId}). Status: 404.`);
+        } else { // Alle anderen Fehlerstatus
             console.error(`[API Function] Faceit API error (Player Stats): ${statsResponse.status} for ${playerId}`);
-            // Wir werfen hier vielleicht keinen Fehler mehr, sondern loggen nur und liefern N/A zurück
-            // throw new Error(`Faceit API error (Player Stats): ${statsResponse.status}`);
         }
 
-        // Daten kombinieren und zurücksenden
+        // Daten kombinieren und zurücksenden (bleibt erstmal gleich)
         const responseData = {
             nickname: playerData.nickname,
             avatar: playerData.avatar || 'default_avatar.png',
