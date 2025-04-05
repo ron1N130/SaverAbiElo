@@ -1,33 +1,20 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Konfiguration ---
-    // Liste der Faceit Nicknames, die du tracken möchtest
-    const playerNicknames = [
-        'ron1N', // Beispiel: Deinen Nickname hier eintragen!
-        'NICKNAME_2', // Ersetze dies
-        'NICKNAME_3'  // Füge weitere hinzu oder entferne welche
-        // Beispiel: 's1mple'
-    ];
-    // --- Ende Konfiguration ---
+    // Die Liste der Spieler wird jetzt aus players.json geladen.
+    // const playerNicknames = [ ... ]; // <- Diese Zeile wird entfernt/ersetzt.
 
     const playerListElement = document.getElementById('player-list');
     const loadingIndicator = document.getElementById('loading-indicator');
     const errorMessageElement = document.getElementById('error-message');
 
-    // Funktion zum Abrufen von Spielerdaten von der Vercel API Funktion
+    // Funktion zum Abrufen von Spielerdaten von der Vercel API Funktion (unverändert)
     async function getPlayerData(nickname) {
         try {
-            // Rufe den API Endpunkt auf Vercel über einen relativen Pfad auf.
-            // Dies funktioniert, weil das Frontend (HTML/JS) und die API Funktion
-            // auf derselben Vercel Domain gehostet werden.
-            // Der Pfad muss mit dem Pfad übereinstimmen, den Vercel für deine Funktion verwendet!
-            // Überprüfe dies ggf. im Vercel Dashboard. '/api/faceit-data' ist eine häufige Konvention.
             const apiUrl = `/api/faceit-data?nickname=${encodeURIComponent(nickname)}`;
-            console.log(`Workspaceing from: ${apiUrl}`); // Log zur Überprüfung des API-Pfads
+            // console.log(`Workspaceing from: ${apiUrl}`); // Log zur Überprüfung - kann auskommentiert werden
             const response = await fetch(apiUrl);
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ error: `Server error: ${response.status}` }));
-                // Versuche, eine spezifischere Fehlermeldung zu geben
                 let displayError = errorData.error || `Server error: ${response.status}`;
                 if (response.status === 404 && displayError.includes("nicht gefunden")) {
                     displayError = `Spieler "${nickname}" nicht gefunden.`;
@@ -86,25 +73,40 @@ document.addEventListener('DOMContentLoaded', () => {
         playerListElement.appendChild(card);
     }
 
-    // Hauptfunktion zum Laden aller Spieler (unverändert)
+    // Hauptfunktion zum Laden aller Spieler (JETZT MIT FETCH FÜR players.json)
     async function loadAllPlayers() {
         loadingIndicator.style.display = 'block';
         errorMessageElement.style.display = 'none';
         errorMessageElement.textContent = '';
         playerListElement.innerHTML = '';
 
-        const playerPromises = playerNicknames.map(nickname => getPlayerData(nickname));
+        let playerNicknames = []; // Leeres Array für die Nicknames
 
         try {
+            // Schritt 1: Lade die Liste der Nicknames aus players.json
+            const response = await fetch('/players.json'); // Lädt die Datei aus dem Root-Verzeichnis
+            if (!response.ok) {
+                throw new Error(`Fehler beim Laden der Spielerliste (players.json): ${response.status}`);
+            }
+            playerNicknames = await response.json(); // Wandelt den Inhalt der Datei in ein JavaScript-Array um
+
+            if (!Array.isArray(playerNicknames) || playerNicknames.length === 0) {
+                throw new Error("Spielerliste (players.json) ist leer oder im falschen Format.");
+            }
+
+            // Schritt 2: Erstelle Promises für alle API-Aufrufe basierend auf der geladenen Liste
+            const playerPromises = playerNicknames.map(nickname => getPlayerData(nickname));
+
+            // Schritt 3: Warte auf alle API-Aufrufe und zeige die Daten an
             const playersData = await Promise.all(playerPromises);
             playersData.forEach(player => displayPlayer(player));
 
         } catch (error) {
-            console.error("Ein unerwarteter Fehler ist beim Laden der Spieler aufgetreten:", error);
-            errorMessageElement.textContent = `Ein Fehler ist aufgetreten: ${error.message}.`;
+            console.error("Fehler beim Laden der Spieler:", error);
+            errorMessageElement.textContent = `Fehler: ${error.message}`;
             errorMessageElement.style.display = 'block';
         } finally {
-            loadingIndicator.style.display = 'none';
+            loadingIndicator.style.display = 'none'; // Ladeanzeige ausblenden
         }
     }
 
