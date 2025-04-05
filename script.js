@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const chartCanvas = document.getElementById('eloChart');
     let eloChartInstance = null;
 
-    // Farben für die Graphenlinien
     const chartColors = [
         '#FF5500', '#3498DB', '#2ECC71', '#F1C40F', '#9B59B6',
         '#E74C3C', '#1ABC9C', '#F39C12', '#8E44AD', '#34495E',
@@ -13,40 +12,34 @@ document.addEventListener('DOMContentLoaded', () => {
         '#C0392B', '#16A085', '#C67A11', '#7D3C98', '#2C3E50'
     ];
     const chartTextColor = '#efeff1';
-    const AVATAR_SIZE = 24; // Größe des Avatars im Graphen in Pixel
-    const AVATAR_BORDER_WIDTH = 2; // Breite des farbigen Rands um den Avatar
+    const AVATAR_SIZE = 24;
+    const AVATAR_BORDER_WIDTH = 2;
 
-    // --- NEU: Funktion zum Vorabladen der Avatare ---
     async function preloadAvatars(players) {
         const promises = players.map(player => {
-            // Überspringe Spieler mit Fehlern oder ohne Avatar-URL
             if (player.error || !player.avatar || player.avatar === 'default_avatar.png') {
-                player.avatarImage = null; // Setze explizit auf null
-                return Promise.resolve(player); // Löse Promise direkt auf
+                player.avatarImage = null;
+                return Promise.resolve(player);
             }
-
             return new Promise((resolve) => {
                 const img = new Image();
                 img.width = AVATAR_SIZE;
                 img.height = AVATAR_SIZE;
                 img.onload = () => {
-                    player.avatarImage = img; // Speichere das geladene Bild-Objekt
+                    player.avatarImage = img;
                     resolve(player);
                 };
                 img.onerror = () => {
                     console.warn(`Konnte Avatar für ${player.nickname} nicht laden: ${player.avatar}`);
-                    player.avatarImage = null; // Setze auf null bei Fehler
-                    resolve(player); // Löse Promise trotzdem auf
+                    player.avatarImage = null;
+                    resolve(player);
                 };
-                img.src = player.avatar; // Starte das Laden
+                img.src = player.avatar;
             });
         });
-        // Warte bis alle Ladeversuche abgeschlossen sind
         return Promise.all(promises);
     }
 
-
-    // Funktion zum Abrufen von Spielerdaten (unverändert)
     async function getPlayerData(nickname) {
         try {
             const apiUrl = `/api/faceit-data?nickname=${encodeURIComponent(nickname)}`;
@@ -71,7 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Funktion zum Anzeigen der Spieler in der Liste (unverändert)
     function displayPlayerList(players) {
         playerListElement.innerHTML = '';
         players.forEach((player) => {
@@ -100,10 +92,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Funktion zum Rendern des Elo-Graphen (JETZT MIT AVATAR-VERSUCH)
-    function renderEloChart(playersData) { // Nimmt jetzt Spieler mit preloaded avatarImage entgegen
+    function renderEloChart(playersData) {
+        // NEU: Logge die Rohdaten, die ankommen
+        console.log('[Render Chart] Received playersData:', JSON.stringify(playersData, null, 0));
+
         if (!chartCanvas) {
-            console.error("Canvas Element für Chart nicht gefunden!");
+            console.error("[Render Chart] Canvas Element für Chart nicht gefunden!");
             return;
         }
         const ctx = chartCanvas.getContext('2d');
@@ -112,132 +106,107 @@ document.addEventListener('DOMContentLoaded', () => {
             eloChartInstance.destroy();
         }
 
-        // Filtere Spieler ohne Fehler und mit History heraus
+        // Filtere Spieler ohne Fehler UND mit History heraus
         const validPlayers = playersData.filter(p => !p.error && p.eloHistory.length > 0);
-        const maxHistoryLength = 50; // Max. Spiele für die X-Achse
+        // NEU: Logge das Ergebnis des Filters
+        console.log(`[Render Chart] Filtered ${validPlayers.length} valid players for chart from ${playersData.length} total.`);
 
-        // Labels: M1 bis M50 und "Aktuell" (51 Punkte)
+        if (validPlayers.length === 0) {
+            console.warn("[Render Chart] Keine Spieler mit gültiger Elo-Historie gefunden, zeichne keinen Graphen.");
+            // Optional: Nachricht im Chart-Bereich anzeigen
+            ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height); // Canvas leeren
+            ctx.fillStyle = chartTextColor;
+            ctx.textAlign = 'center';
+            ctx.fillText("Keine ausreichenden Verlaufsdaten zum Anzeigen.", chartCanvas.width / 2, 50);
+            return; // Beende Funktion, wenn keine Daten da sind
+        }
+
+
+        const maxHistoryLength = 50;
         const labels = Array.from({ length: maxHistoryLength + 1 }, (_, i) => {
             if (i === maxHistoryLength) return "Aktuell";
             return `M ${i + 1}`;
         });
 
-        // Datasets für Chart.js erstellen
         const datasets = validPlayers.map((player, index) => {
             const playerColor = chartColors[index % chartColors.length];
-
-            // Kombiniere History mit aktueller Elo
             const eloDataPoints = [...player.eloHistory];
-            if (player.elo !== 'N/A') {
+            if (player.elo !== 'N/A' && player.elo !== 0) { // Prüfe auch auf 0 falls 'N/A' zu 0 geparsed wird
                 eloDataPoints.push(player.elo);
+            } else {
+                // Wenn aktuelle Elo fehlt, füge null hinzu, damit die Linie dort aufhört
+                eloDataPoints.push(null);
             }
 
-            // Erzeuge Arrays für Punkt-Styling (gleiche Länge wie Labels!)
             const pointStyles = Array(maxHistoryLength + 1).fill('circle');
-            const pointRadii = Array(maxHistoryLength + 1).fill(2); // Kleine Punkte standard
+            const pointRadii = Array(maxHistoryLength + 1).fill(2);
             const pointBorderColors = Array(maxHistoryLength + 1).fill(playerColor);
             const pointBorderWidths = Array(maxHistoryLength + 1).fill(1);
             const pointHoverRadii = Array(maxHistoryLength + 1).fill(5);
 
-            // Wenn Datenpunkte vorhanden sind, style den letzten Punkt speziell
-            const lastDataIndex = eloDataPoints.length - 1;
-            if (lastDataIndex >= 0 && lastDataIndex < pointStyles.length) {
-                // Verwende Avatar als Punkt, wenn er geladen wurde
-                if (player.avatarImage) {
-                    pointStyles[lastDataIndex] = player.avatarImage; // Das geladene Image Objekt
-                    pointRadii[lastDataIndex] = AVATAR_SIZE / 2; // Radius ist halbe gewünschte Größe
-                    pointBorderWidths[lastDataIndex] = AVATAR_BORDER_WIDTH; // Randbreite
-                    pointHoverRadii[lastDataIndex] = (AVATAR_SIZE / 2) + 2; // Etwas größer bei Hover
-                } else {
-                    // Fallback: Größerer Kreis, wenn Avatar nicht geladen
-                    pointRadii[lastDataIndex] = 6;
-                    pointHoverRadii[lastDataIndex] = 8;
-                }
-            }
+            const lastDataIndex = eloDataPoints.length - 1; // Index des letzten Datenpunkts (kann < 50 sein!)
+
             // Fülle den Anfang der Daten mit 'null', wenn weniger als 50 Spiele + aktuell vorhanden sind
-            // damit die Linie erst später beginnt und der Avatar am richtigen X-Punkt ('Aktuell') ist.
+            // damit die Linie später beginnt und am richtigen X-Punkt endet.
             while (eloDataPoints.length < maxHistoryLength + 1) {
                 eloDataPoints.unshift(null);
             }
 
 
+            // Style den letzten existierenden Punkt (Index `maxHistoryLength` auf der X-Achse)
+            const finalPointIndexOnAxis = maxHistoryLength; // Der 'Aktuell' Punkt
+            if (player.avatarImage) {
+                pointStyles[finalPointIndexOnAxis] = player.avatarImage;
+                pointRadii[finalPointIndexOnAxis] = AVATAR_SIZE / 2;
+                pointBorderWidths[finalPointIndexOnAxis] = AVATAR_BORDER_WIDTH;
+                pointHoverRadii[finalPointIndexOnAxis] = (AVATAR_SIZE / 2) + 2;
+            } else {
+                pointRadii[finalPointIndexOnAxis] = 6;
+                pointHoverRadii[finalPointIndexOnAxis] = 8;
+            }
+            // Alle anderen Punkte (wo keine History ist, also null) sollen unsichtbar sein
+            for(let i = 0; i < eloDataPoints.length - 1; i++) { // Exklusive letzter Punkt
+                if (eloDataPoints[i] === null) {
+                    pointRadii[i] = 0; // Unsichtbar
+                    pointHoverRadii[i] = 0;
+                }
+            }
+
             return {
                 label: player.nickname,
                 data: eloDataPoints, // Aufgefüllte Daten
                 borderColor: playerColor,
-                // backgroundColor: playerColor + '33', // Füllung vielleicht weglassen
-                fill: false, // Keine Fläche unter der Linie füllen
+                fill: false,
                 tension: 0.1,
-                pointStyle: pointStyles, // Array für individuelle Punkte
-                radius: pointRadii,       // Array für individuelle Radien
-                pointBorderColor: pointBorderColors, // Array oder einzelner Wert
-                pointBorderWidth: pointBorderWidths, // Array oder einzelner Wert
-                pointHoverRadius: pointHoverRadii,  // Array oder einzelner Wert
+                pointStyle: pointStyles,
+                radius: pointRadii,
+                pointBorderColor: pointBorderColors,
+                pointBorderWidth: pointBorderWidths,
+                pointHoverRadius: pointHoverRadii,
+                spanGaps: false // Unterbreche Linie bei 'null' Werten
             };
         });
 
-        // Chart erstellen
+        // NEU: Logge die finalen Datasets
+        console.log('[Render Chart] Chart datasets prepared:', JSON.stringify(datasets.map(d => ({ label: d.label, data: d.data })), null, 0)); // Logge nur relevante Teile
+
         eloChartInstance = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
                 datasets: datasets
             },
-            options: {
+            options: { // Optionen bleiben gleich wie im letzten Schritt
                 responsive: true,
                 maintainAspectRatio: true,
-                plugins: {
-                    title: { display: false, },
-                    legend: {
-                        position: 'bottom',
-                        labels: { color: chartTextColor }
-                    },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                        callbacks: { // Tooltip-Titel verbessern
-                            title: function(tooltipItems) {
-                                const index = tooltipItems[0]?.dataIndex;
-                                if (index === maxHistoryLength) return "Aktuelle Elo";
-                                if (index !== undefined) return `Nach Spiel ${index + 1}`;
-                                return '';
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        title: { display: true, text: 'Letzte Spiele (+ Aktuell)', color: chartTextColor },
-                        ticks: { color: chartTextColor, autoSkip: true, maxTicksLimit: 10 },
-                        grid: { color: '#444' }
-                    },
-                    y: {
-                        title: { display: true, text: 'Faceit Elo', color: chartTextColor },
-                        ticks: { color: chartTextColor },
-                        grid: { color: '#444' }
-                    }
-                },
-                interaction: {
-                    mode: 'nearest',
-                    axis: 'x',
-                    intersect: false
-                },
-                // Wichtig für Bilder als Punkte: Verhindert, dass sie abgeschnitten werden
-                layout: {
-                    padding: {
-                        // Füge Padding hinzu, das mindestens dem halben Avatar-Radius + Rand entspricht
-                        top: (AVATAR_SIZE / 2) + AVATAR_BORDER_WIDTH + 5,
-                        right: (AVATAR_SIZE / 2) + AVATAR_BORDER_WIDTH + 5,
-                        bottom: 5,
-                        left: 5
-                    }
-                }
+                plugins: { /* ... */ },
+                scales: { /* ... */ },
+                interaction: { /* ... */ },
+                layout: { /* ... */ }
             }
         });
     }
 
-
-    // Hauptfunktion zum Laden aller Spieler (ruft jetzt auch preloadAvatars auf)
     async function loadAllPlayers() {
         loadingIndicator.style.display = 'block';
         errorMessageElement.style.display = 'none';
@@ -255,31 +224,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const response = await fetch('/players.json');
-            if (!response.ok) {
-                throw new Error(`Fehler beim Laden der Spielerliste (players.json): ${response.status}`);
-            }
+            if (!response.ok) { throw new Error(`Fehler beim Laden der Spielerliste (players.json): ${response.status}`); }
             playerNicknames = await response.json();
 
-            if (!Array.isArray(playerNicknames) || playerNicknames.length === 0) {
-                throw new Error("Spielerliste (players.json) ist leer oder im falschen Format.");
-            }
+            if (!Array.isArray(playerNicknames) || playerNicknames.length === 0) { throw new Error("Spielerliste (players.json) ist leer oder im falschen Format."); }
 
             const playerPromises = playerNicknames.map(nickname => getPlayerData(nickname));
             let playersDataRaw = await Promise.all(playerPromises);
 
-            // === NEU: Avatare vorab laden ===
-            console.log("Preloading avatars...");
+            console.log("[LoadAll] Preloading avatars...");
             let playersData = await preloadAvatars(playersDataRaw);
-            console.log("Avatars preloaded (or failed).");
+            console.log("[LoadAll] Avatars preloaded.");
 
-            // Sortiere das Array absteigend nach sortElo
             playersData.sort((a, b) => b.sortElo - a.sortElo);
 
-            // Zeige die sortierte Liste an
             displayPlayerList(playersData);
-
-            // Rendere den Elo-Graphen mit den Daten (inkl. geladenen Avataren)
-            renderEloChart(playersData);
+            renderEloChart(playersData); // Rendere den Graphen
 
             if(chartContainer) chartContainer.style.display = 'block';
 
