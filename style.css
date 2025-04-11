@@ -30,32 +30,55 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    /* Add a subtle background gradient or image for better glass effect */
+    background: linear-gradient(135deg, rgba(30,30,36,0.95) 0%, rgba(45,45,55,0.98) 100%),
+                url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80') no-repeat center center fixed; /* Example background image */
+    background-size: cover;
 }
 
 header {
-    background-color: rgba(var(--card-bg-color-rgb), 0.9);
+    background-color: rgba(var(--card-bg-color-rgb), 0.85); /* Slightly reduced opacity */
     padding: 1rem 2rem;
     text-align: center;
     border-bottom: 1px solid var(--border-color);
-    backdrop-filter: blur(var(--glass-blur)); /* Leichter Glass-Effekt auch im Header */
+    backdrop-filter: blur(var(--glass-blur));
+    position: sticky; /* Make header sticky */
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2); /* Add shadow to sticky header */
 }
 
 header h1 { color: var(--text-primary); margin: 0; font-weight: 500; }
-header h1 span { color: var(--accent-orange); font-weight: 700;} /* Highlight */
+/* Making the whole title use the accent color */
+/* header h1 span { color: var(--accent-orange); font-weight: 700;} */
+header h1 { color: var(--accent-orange); font-weight: 700; }
+
 
 main {
     padding: 2rem 1rem; /* Weniger seitliches Padding auf Mobile */
     max-width: 1200px;
-    margin: 0 auto;
+    margin: 1rem auto 0 auto; /* Add margin-top to account for sticky header */
     flex-grow: 1;
     width: 100%;
     box-sizing: border-box;
 }
 
-#loading-indicator, #error-message { text-align: center; font-size: 1.1rem; padding: 2rem; color: var(--text-secondary); }
+#loading-indicator, #error-message {
+    text-align: center;
+    font-size: 1.1rem;
+    padding: 1.5rem; /* Adjusted padding */
+    color: var(--text-secondary);
+    background-color: var(--card-bg-color);
+    backdrop-filter: blur(var(--glass-blur));
+    border-radius: var(--border-radius);
+    margin: 1rem auto; /* Center and add margin */
+    max-width: 450px; /* Limit width */
+    border: 1px solid var(--glass-border-color);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
 #error-message { color: var(--bar-color-bad); font-weight: bold; }
 
-/* --- NEU: Layout für Hauptbereich --- */
+/* --- Layout für Hauptbereich --- */
 #main-content-area {
     display: flex;
     justify-content: center; /* Standard: Liste zentriert */
@@ -74,11 +97,11 @@ main {
     max-width: 450px; /* Maximale Breite der Liste */
     transition: max-width 0.5s ease, width 0.5s ease; /* Übergang */
     flex-shrink: 0; /* Verhindert, dass Liste schrumpft, wenn Karte erscheint */
+    /* Glass effect moved to the list itself */
 }
 
 #main-content-area.detail-visible #player-list-container {
-    /* Breite anpassen, wenn Karte sichtbar ist */
-    /* max-width: 350px; */
+    /* No change needed here for now */
 }
 
 
@@ -103,25 +126,33 @@ main {
     margin-bottom: 1.5rem;
     font-weight: 500;
     font-size: 1.5rem;
+    /* Optional: Add glass effect to the title */
+    /* background: rgba(var(--card-bg-color-rgb), 0.6);
+    backdrop-filter: blur(5px);
+    padding: 0.5rem;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--glass-border-color); */
 }
 
 /* --- Styles für die sortierte Liste --- */
 .player-list-sorted {
     list-style: none; /* Keine Standardnummerierung */
-    padding: 0;
-    /* max-width entfällt, steuert der Container */
-    /* margin: 1rem auto; */
-    border: 1px solid var(--border-color);
+    padding: 0; /* Remove padding, apply to items */
+    border: 1px solid var(--glass-border-color); /* Use glass border */
     border-radius: var(--border-radius);
     overflow: hidden;
     counter-reset: player-rank-counter; /* Zähler für Ranking */
+    /* Glassmorphism effect for the list */
+    background-color: var(--card-bg-color);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
 }
 
 .player-list-sorted li {
-    background-color: transparent; /* Liste selbst ist transparent */
+    background-color: transparent; /* List items transparent for glass effect */
     margin-bottom: 0;
-    border-bottom: 1px solid var(--border-color);
-    padding: 0.7rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08); /* Slightly softer border */
+    padding: 0.8rem 1rem; /* Adjust padding */
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -132,7 +163,7 @@ main {
 .player-list-sorted li:last-child { border-bottom: none; }
 
 .player-list-sorted li:hover {
-    background-color: rgba(var(--card-bg-color-rgb), 0.5); /* Leichter Hover */
+    background-color: rgba(255, 255, 255, 0.08); /* Slightly lighter hover */
 }
 
 .player-list-sorted li::before {
@@ -146,23 +177,30 @@ main {
 }
 
 .player-list-sorted .player-info {
-    display: flex; align-items: center; gap: 0.8rem; flex-grow: 1;
+    display: flex; align-items: center; gap: 1rem; /* Increased gap */ flex-grow: 1;
 }
+/* --- Updated Avatar Size --- */
 .player-list-sorted img.avatar {
-    width: 30px; height: 30px; border-radius: 50%; object-fit: cover; background-color: #444;
+    width: 40px; /* Increased size */
+    height: 40px; /* Increased size */
+    border-radius: 4px; /* Match card avatar style (slightly rounded corners) */
+    object-fit: cover;
+    background-color: #444;
+    border: 1px solid var(--glass-border-color); /* Add subtle border */
+    flex-shrink: 0; /* Prevent avatar from shrinking */
 }
 .player-list-sorted .player-name {
-    font-size: 1rem; font-weight: 500; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;
+    font-size: 1rem; font-weight: 500; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; /* Allow slightly more space */
 }
 .player-list-sorted .player-name:hover { color: var(--accent-orange); }
 .player-list-sorted .player-elo {
     font-size: 1rem; font-weight: 700; color: var(--accent-orange); min-width: 45px; text-align: right; flex-shrink: 0;
 }
-.player-list-sorted li.error-item { /* unverändert */
-    justify-content: flex-start; background-color: rgba(244, 67, 54, 0.1); color: #ef5350; font-style: italic; cursor: default;
+.player-list-sorted li.error-item {
+    justify-content: flex-start; background-color: rgba(239, 83, 80, 0.1); color: var(--bar-color-bad); font-style: italic; cursor: default;
 }
-.player-list-sorted li.error-item:hover { background-color: rgba(244, 67, 54, 0.15); }
-.player-list-sorted li.error-item::before { color: #ef5350; }
+.player-list-sorted li.error-item:hover { background-color: rgba(239, 83, 80, 0.15); }
+.player-list-sorted li.error-item::before { color: var(--bar-color-bad); }
 
 
 /* --- Styles für die Detail-Karte (HLTV/Glassmorphism) --- */
@@ -173,7 +211,6 @@ main {
     border: 1px solid var(--glass-border-color); /* Leichter Rand */
     padding: 1.5rem;
     box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-    /* border-top: 3px solid var(--accent-orange); // Entfernt, stattdessen Rand */
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
@@ -182,10 +219,10 @@ main {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;
 }
 .player-card-hltv .card-header .player-info { display: flex; align-items: center; gap: 1rem; }
-.player-card-hltv .card-header img.avatar { width: 45px; height: 45px; border-radius: 4px; /* Eckiger */ object-fit: cover; background-color: #444; border: 1px solid var(--glass-border-color); }
+.player-card-hltv .card-header img.avatar { width: 45px; height: 45px; border-radius: 4px; /* Eckiger */ object-fit: cover; background-color: #444; border: 1px solid var(--glass-border-color); flex-shrink: 0; }
 .player-card-hltv .card-header .player-name { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); text-decoration: none; }
 .player-card-hltv .card-header .player-name:hover { color: var(--accent-orange); }
-.player-card-hltv .card-header .stats-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; } /* Angepasst */
+.player-card-hltv .card-header .stats-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
 
 .player-card-hltv .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem 1rem; }
 .player-card-hltv .stat-item { text-align: center; }
@@ -195,11 +232,7 @@ main {
 
 .player-card-hltv .indicator-bar { height: 5px; background-color: var(--bar-background); border-radius: 3px; overflow: hidden; position: relative; margin-top: 0.25rem; }
 .player-card-hltv .indicator-bar .bar-fill { height: 100%; width: 50%; /* Standardbreite */ background-color: var(--bar-color-okay); border-radius: 3px; position: absolute; left: 0; top: 0; transition: width 0.5s ease, background-color 0.5s ease; }
-/* Klassen für Balkenfarben (könnten durch JS basierend auf Werten gesetzt werden) */
-/* Beispiel:
-.player-card-hltv .indicator-bar.rating-good .bar-fill { background-color: var(--bar-color-good); width: 70%; }
-.player-card-hltv .indicator-bar.kd-bad .bar-fill { background-color: var(--bar-color-bad); width: 30%; }
-*/
+
 
 .player-card-hltv.error-card { /* Fehleranzeige auf Karte */
     justify-content: center; align-items: center; min-height: 150px; border-color: var(--bar-color-bad);
@@ -208,27 +241,29 @@ main {
 .player-card-hltv.error-card .error-message { color: #ffabab; font-style: italic; }
 
 
-footer { /* unverändert */
-    text-align: center; padding: 1.5rem; margin-top: 2rem; font-size: 0.9rem; color: var(--text-secondary); background-color: rgba(var(--card-bg-color-rgb), 0.9); border-top: 1px solid var(--border-color); backdrop-filter: blur(var(--glass-blur));
+footer {
+    text-align: center; padding: 1.5rem; margin-top: 2rem; font-size: 0.9rem; color: var(--text-secondary); background-color: rgba(var(--card-bg-color-rgb), 0.85); border-top: 1px solid var(--border-color); backdrop-filter: blur(var(--glass-blur));
 }
 
 /* Responsive Anpassungen für kleiner Bildschirme */
 @media (max-width: 768px) {
+    main {
+        padding: 1.5rem 0.5rem; /* Adjust padding for mobile */
+    }
     #main-content-area {
         flex-direction: column; /* Untereinander anordnen */
         align-items: center; /* Zentrieren auf kleineren Screens */
+        gap: 1.5rem; /* Reduce gap */
     }
     #main-content-area.detail-visible #player-list-container {
-        /* Liste behält ihre Breite oder wird etwas schmaler */
-        max-width: 400px;
+        max-width: 95%; /* Allow list to be wider on mobile */
         width: 100%;
     }
     #main-content-area.detail-visible #player-detail-card-container {
-        /* Karte nimmt volle Breite ein */
-        max-width: 450px; /* Oder eine passende Breite */
+        max-width: 95%; /* Allow card to be wider */
         width: 100%;
-        margin-top: 1.5rem; /* Abstand zur Liste */
-        opacity: 1; /* Sicherstellen, dass sie sichtbar ist */
+        margin-top: 0; /* Remove top margin when stacked */
+        opacity: 1;
     }
 
     .player-card-hltv .stats-grid {
@@ -238,4 +273,27 @@ footer { /* unverändert */
     .player-card-hltv .stat-item .value {
         font-size: 1.4rem; /* Etwas kleinere Schrift */
     }
+    .player-list-sorted .player-name {
+        max-width: 120px; /* Reduce max width on smaller screens */
+    }
 }
+
+/* Adjustments for player grid (currently unused) */
+#player-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* Example grid layout */
+    gap: 1rem;
+    padding: 1rem;
+    /* Apply glassmorphism if needed */
+    /* background-color: var(--card-bg-color);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border-color);
+    border-radius: var(--border-radius); */
+}
+
+/* Style for individual items within the grid if needed */
+.player-grid-item {
+    /* Styles for grid items */
+    /* Example: background, padding, border-radius */
+}
+
