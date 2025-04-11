@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // More specific error messages
                 if (response.status === 404) displayError = `Spieler "${nickname}" nicht gefunden.`;
                 else if (displayError.includes("API Key missing")) displayError = "Server-Konfigurationsfehler (API Key).";
-                else if (displayError.includes("Database connection failed")) displayError = "Server-Konfigurationsfehler (DB)."
+                else if (displayError.includes("Database connection failed")) displayError = "Server-Konfigurationsfehler (DB).";
                 else if (response.status === 500) displayError = "Interner Serverfehler.";
 
                 throw new Error(displayError);
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Display Detail Card --- (Unchanged)
+    // --- Display Detail Card ---
     function displayDetailCard(player) {
         if (!detailCardContainer || !mainContentArea) return;
         detailCardContainer.innerHTML = '';
@@ -93,11 +93,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? player.faceitUrl
                 : `https://www.faceit.com/en/players/${player.nickname}`; // Construct URL if needed
             const lastUpdatedText = player.lastUpdated
-                ? `Stats vom ${new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}).format(new Date(player.lastUpdated))} Uhr`
+                ? `Stats vom ${new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'} ).format(new Date(player.lastUpdated))} Uhr`
                 : 'Stats werden aktualisiert...';
             const matchesConsideredText = player.matchesConsidered ? `Last ~${player.matchesConsidered} M` : 'Recent Stats';
 
-            // Simplified stat display, add indicators later if needed
             cardElement.innerHTML = `
                 <div class="card-header">
                      <div class="player-info">
@@ -115,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="stat-item"> <div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div> <div class="value ${!player.adr || player.adr === 'N/A' || player.adr === 'Pending' ? 'na' : ''}">${player.adr || '...'}</div></div>
                     <div class="stat-item"> <div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div> <div class="value ${!player.winRate || player.winRate === 'N/A' || player.winRate === 'Pending' ? 'na' : ''}">${player.winRate !== undefined ? player.winRate + '%' : '...'}</div></div>
                     <div class="stat-item"> <div class="label" title="Headshot % (Letzte Matches)">HS %</div> <div class="value ${!player.hsPercent || player.hsPercent === 'N/A' || player.hsPercent === 'Pending' ? 'na' : ''}">${player.hsPercent !== undefined ? player.hsPercent + '%' : '...'}</div></div>
-                    <div class="stat-item"> <div class="label">Level</div> <div class="value ${!player.level || player.level === 'N/A' ? 'na' : ''}"><img src="https://cdn-frontend.faceit-cdn.net/web-assets/images/skill-icons/skill_level_${player.level || 0}_svg.svg" alt="Level ${player.level || 'N/A'}" style="height: 24px; width: 24px; vertical-align: middle;"></div></div>
+                    <div class="stat-item"> <div class="label">Elo</div> <div class="value ${!player.elo || player.elo === 'N/A' ? 'na' : ''}">${player.elo}</div></div>
                 </div>`;
         }
 
