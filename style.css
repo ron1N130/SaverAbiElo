@@ -1,9 +1,8 @@
 :root {
-    --background-color: #1f1f23; /* Dunkler Hintergrund */
-    --card-background: #2a2a2e; /* Kartenhintergrund / Listen Item Hintergrund */
-    --text-color: #efeff1;       /* Heller Text */
-    --primary-color: #ff5500;    /* Faceit Orange als Akzent */
-    /* --level10-color: #e41a1c; */ /* Nicht mehr verwendet */
+    --background-color: #1f1f23;
+    --card-background: #2a2a2e;
+    --text-color: #efeff1;
+    --primary-color: #ff5500;
     --font-family: 'Roboto', sans-serif;
     --border-radius: 8px;
 }
@@ -26,10 +25,7 @@ header {
     border-bottom: 2px solid var(--primary-color);
 }
 
-header h1 {
-    color: var(--primary-color);
-    margin: 0;
-}
+header h1 { color: var(--primary-color); margin: 0; }
 
 main {
     padding: 2rem;
@@ -40,55 +36,29 @@ main {
     box-sizing: border-box;
 }
 
-/* Styling für Überschriften innerhalb von main */
-main h2 {
+main h2 { /* Überschrift für Ranking Liste */
     text-align: center;
     color: var(--primary-color);
-    margin-top: 2rem;
+    margin-top: 1rem; /* Weniger Abstand oben */
     margin-bottom: 1.5rem;
 }
-main h2:first-of-type { /* Kein oberer Margin für die erste Überschrift */
-    margin-top: 0;
-}
-
 
 #loading-indicator, #error-message {
-    text-align: center;
-    font-size: 1.2rem;
-    padding: 2rem;
+    text-align: center; font-size: 1.2rem; padding: 2rem;
 }
 
-/* --- NEU: Styles für den Chart Container --- */
-#chart-container {
-    width: 100%;
-    max-width: 900px; /* Maximale Breite des Graphen */
-    margin: 0 auto 2rem auto; /* Zentrieren und Abstand nach unten */
-    padding: 1.5rem;
-    background-color: var(--card-background);
-    border-radius: var(--border-radius);
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-}
+/* --- Chart Styles (ENTFERNT) --- */
+/* #chart-container { ... } */
+/* #chart-container h2 { ... } */
+/* #eloChart { ... } */
 
-#chart-container h2 { /* Styling für die Graphen-Überschrift */
-    margin-top: 0;
-    margin-bottom: 1.5rem;
-    text-align: center;
-    color: var(--primary-color);
-}
-
-/* Canvas selbst soll responsive sein */
-#eloChart {
-    max-height: 450px; /* Maximale Höhe, um zu große Graphen zu vermeiden */
-}
-
-
-/* --- Styles für die kompakte Liste (wie zuvor) --- */
+/* --- Styles für die kompakte Liste (Angepasst für mehr Stats) --- */
 .player-list-compact {
     list-style: decimal;
     list-style-position: inside;
     padding: 0;
-    max-width: 600px;
-    margin: 0 auto; /* Zentriert die Liste unterhalb des Graphen (falls vorhanden) */
+    max-width: 850px; /* Etwas breiter für mehr Stats */
+    margin: 1rem auto;
     border: 1px solid var(--card-background);
     border-radius: var(--border-radius);
     overflow: hidden;
@@ -102,63 +72,52 @@ main h2:first-of-type { /* Kein oberer Margin für die erste Überschrift */
     display: flex;
     align-items: center;
     justify-content: space-between;
-    counter-increment: player-rank-counter;
+    gap: 1rem;
 }
-.player-list-compact li:last-child {
-    border-bottom: none;
-}
+.player-list-compact li:last-child { border-bottom: none; }
 
 .player-list-compact .player-info {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    flex-grow: 1;
-    margin-left: 0.5rem;
+    gap: 0.8rem;
+    min-width: 160px; /* Etwas mehr Platz für Name + Avatar */
+    flex-shrink: 0; /* Verhindert Schrumpfen */
 }
 
 .player-list-compact img.avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    background-color: #444;
+    width: 35px; height: 35px; border-radius: 50%; object-fit: cover; background-color: #444;
 }
 
 .player-list-compact .player-name {
-    font-size: 1.1rem;
-    font-weight: bold;
-    color: var(--text-color);
-    text-decoration: none;
+    font-size: 1rem; font-weight: bold; color: var(--text-color); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; /* Angepasst */
 }
-.player-list-compact .player-name:hover {
-    color: var(--primary-color);
+.player-list-compact .player-name:hover { color: var(--primary-color); }
+
+.player-list-compact .player-stats {
+    display: flex;
+    gap: 1.5rem; /* Mehr Abstand zwischen Stats */
+    justify-content: center;
+    flex-grow: 1; /* Nimmt mittleren Platz ein */
+    font-size: 0.9rem;
+    color: #ccc;
+    text-align: center;
+    white-space: nowrap; /* Verhindert Umbruch der Stats */
 }
+.player-list-compact .stat-item {
+    min-width: 75px; /* Etwas weniger Breite pro Stat */
+    text-align: center;
+}
+.player-list-compact .impact-score { cursor: help; }
 
 .player-list-compact .player-elo {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--primary-color);
-    min-width: 50px;
-    text-align: right;
-    margin-left: 1rem;
+    font-size: 1.1rem; font-weight: 700; color: var(--primary-color); min-width: 50px; text-align: right; flex-shrink: 0; /* Verhindert Schrumpfen */
 }
 
 .player-list-compact li.error-item {
-    justify-content: flex-start;
-    background-color: #3f2a2e;
-    color: #ffabab;
-    font-style: italic;
+    justify-content: flex-start; background-color: #3f2a2e; color: #ffabab; font-style: italic;
 }
-.player-list-compact li.error-item::marker {
-    color: #ff8a8a;
-}
+.player-list-compact li.error-item::marker { color: #ff8a8a; }
 
 footer {
-    text-align: center;
-    padding: 1.5rem;
-    margin-top: 2rem;
-    font-size: 0.9rem;
-    color: #aaa;
-    background-color: var(--card-background);
-    border-top: 1px solid #333;
+    text-align: center; padding: 1.5rem; margin-top: 2rem; font-size: 0.9rem; color: #aaa; background-color: var(--card-background); border-top: 1px solid #333;
 }

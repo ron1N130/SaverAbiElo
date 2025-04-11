@@ -1,70 +1,75 @@
-// Lade Umgebungsvariablen (relevant für lokal, Vercel nutzt eigene)
-require('dotenv').config();
-
-const express = require('express');
-const fetch = require('node-fetch'); // node-fetch@2
-const cors = require('cors');
-
-const app = express();
-app.use(cors());
+// Kein KV mehr nötig
+// import { kv } from '@vercel/kv';
+import fetch from 'node-fetch'; // node-fetch@3 uses ESM import
+// Kein fs/path mehr nötig, da players.json nicht mehr vom Cron gelesen wird
+// import fs from 'fs';
+// import path from 'path';
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const API_BASE_URL = 'https://open.faceit.com/data/v4';
-const HISTORY_LIMIT = 50;
+// Keine History-Konstanten mehr
+// const HISTORY_LIMIT = 50;
+// const MAX_HISTORY_POINTS = 200;
 
-app.get('/api/faceit-data', async (req, res) => {
-    const nickname = req.query.nickname;
-    console.log(`[API Function] Handler started for nickname: ${nickname}`);
+// Cron-Job-Logik komplett entfernt
 
-    if (!nickname) { return res.status(400).json({ error: 'Nickname query parameter is required' }); }
-    if (!FACEIT_API_KEY) { console.error("FEHLER: FACEIT_API_KEY fehlt!"); return res.status(500).json({ error: 'Server configuration error: API Key missing' }); }
+// Die Hauptfunktion, die jetzt nur noch vom Frontend aufgerufen wird
+export default async function handler(req, res) {
+    // CORS Header
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Anpassen für Produktion!
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { return res.status(200).end(); }
 
+    if (!FACEIT_API_KEY) { console.error("FATAL: FACEIT_API_KEY fehlt!"); return res.status(500).json({ error: 'Server configuration error: API Key missing' }); }
     const headers = { 'Authorization': `Bearer ${FACEIT_API_KEY}` };
+
+    const nickname = req.query.nickname;
+    if (!nickname) { return res.status(400).json({ error: 'Nickname query parameter is required' }); }
+    console.log(`[API] Request for nickname: ${nickname}`);
 
     try {
         // === Schritt 1: Spielerdetails holen ===
-        console.log(`[API Function] Fetching player details for: ${nickname}`);
+        console.log(`[API] Fetching player details for: ${nickname}`);
         const playerDetailsResponse = await fetch(`${API_BASE_URL}/players?nickname=${nickname}`, { headers });
-        console.log(`[API Function] Player Details Response Status for ${nickname}: ${playerDetailsResponse.status}`);
-
-        if (!playerDetailsResponse.ok) { /* ... Fehlerbehandlung wie zuvor ... */
-            if (playerDetailsResponse.status === 404) { return res.status(404).json({ error: `Spieler "${nickname}" nicht gefunden.` }); }
-            else { throw new Error(`Faceit API error (Player Details): ${playerDetailsResponse.status}`); }
-        }
+        console.log(`[API] Player Details Status: ${playerDetailsResponse.status}`);
+        if (!playerDetailsResponse.ok) {
+             if (playerDetailsResponse.status === 404) { return res.status(404).json({ error: `Spieler "${nickname}" nicht gefunden.` }); }
+             else { throw new Error(`Faceit API error (Details): ${playerDetailsResponse.status}`); }
+         }
         const playerData = await playerDetailsResponse.json();
         const playerId = playerData.player_id;
-        console.log(`[API Function] Found Player ID: ${playerId} for ${nickname}`);
+        console.log(`[API] Found Player ID: ${playerId}`);
 
-        // === Schritt 2: Match-Historie holen ===
-        let eloHistory = [];
+        // === Schritt 2: Lifetime Stats holen ===
+        let simplifiedImpact = 'N/A', lifetimeKD = 'N/A', lifetimeWinRate = 'N/A';
         try {
-            console.log(`[API Function] Fetching match history for: ${playerId} (Game: cs2, Limit: ${HISTORY_LIMIT})`);
-            const historyResponse = await fetch(`${API_BASE_URL}/players/${playerId}/history?game=cs2&limit=${HISTORY_LIMIT}`, { headers });
-            console.log(`[API Function] Match History Response Status for ${nickname}: ${historyResponse.status}`);
+             console.log(`[API] Fetching stats for: ${playerId} (Game: cs2)`);
+             const statsResponse = await fetch(`${API_BASE_URL}/players/${playerId}/stats/cs2`, { headers });
+             console.log(`[API] Stats Response Status: ${statsResponse.status}`);
+             if (statsResponse.ok) {
+                 const statsData = await statsResponse.json();
+                 const lifetime = statsData?.lifetime;
+                 if (lifetime) {
+                     const kills = parseFloat(lifetime['Total Kills with extended stats'] || lifetime['Kills'] || 0);
+                     const deaths = parseFloat(lifetime['Deaths'] || 1);
+                     const assists = parseFloat(lifetime['Assists'] || 0);
+                     const rounds = parseInt(lifetime['Total Rounds with extended stats'] || lifetime['Rounds'] || 1);
+                     const winRate = parseFloat(lifetime['Win Rate %'] || 'N/A');
+                     const avgKD = parseFloat(lifetime['Average K/D Ratio'] || 'N/A');
 
-            if (historyResponse.ok) {
-                const historyData = await historyResponse.json();
-                // NEU: Logge die rohe History-Antwort, um die Struktur zu sehen
-                console.log('[API Function] Raw History Data for ' + nickname + ':', JSON.stringify(historyData, null, 2));
+                     const KPR = rounds > 0 ? kills / rounds : 0;
+                     const APR = rounds > 0 ? assists / rounds : 0;
+                     const impactCalc = 2.13 * KPR + 0.42 * APR - 0.41;
+                     simplifiedImpact = !isNaN(impactCalc) ? impactCalc.toFixed(2) : 'N/A';
+                     lifetimeKD = !isNaN(avgKD) ? avgKD.toFixed(2) : (deaths > 0 && !isNaN(kills/deaths)) ? (kills/deaths).toFixed(2) : 'N/A';
+                     lifetimeWinRate = !isNaN(winRate) ? winRate.toFixed(0) : 'N/A';
+                     console.log(`[API] Calculated Stats for ${nickname}: Impact=${simplifiedImpact}, K/D=${lifetimeKD}, WR%=${lifetimeWinRate}`);
+                 } else { console.warn(`[API] Lifetime stats object missing for ${nickname}`); }
+             } else { console.warn(`[API] Could not fetch stats for ${nickname}, Status: ${statsResponse.status}`); }
+        } catch(statsError) { console.error(`[API] Error fetching/processing stats for ${nickname}:`, statsError); }
 
-                if (historyData && Array.isArray(historyData.items)) {
-                    // Extrahiere Elo-Werte (wir bleiben bei der Annahme 'match.elo', passen es ggf. nach Log-Analyse an)
-                    eloHistory = historyData.items
-                        .map(match => parseInt(match.elo, 10))
-                        .filter(elo => !isNaN(elo));
-                    eloHistory.reverse(); // Alt -> Neu
-                    console.log(`[API Function] Found ${eloHistory.length} valid Elo entries in history for ${nickname}`);
-                } else {
-                    console.warn(`[API Function] Match history items not found or not an array for ${nickname}`);
-                }
-            } else {
-                console.error(`[API Function] Faceit API error (Match History): ${historyResponse.status} for ${playerId}`);
-            }
-        } catch(historyError) {
-            console.error(`[API Function] CATCH BLOCK Error fetching/processing match history for ${nickname}:`, historyError);
-        }
-
-        // === Schritt 3: Daten kombinieren ===
+        // === Schritt 3: Daten kombinieren (OHNE HISTORY) ===
         const gameId = 'cs2';
         const gameData = playerData.games && playerData.games[gameId] ? playerData.games[gameId] : null;
         const responseData = {
@@ -72,18 +77,21 @@ app.get('/api/faceit-data', async (req, res) => {
             avatar: playerData.avatar || 'default_avatar.png',
             faceitUrl: playerData.faceit_url ? playerData.faceit_url.replace('{lang}', 'en') : '#',
             elo: gameData?.faceit_elo || 'N/A',
-            level: gameData?.skill_level || 'N/A',
+            level: gameData?.skill_level || 'N/A', // Kann drin bleiben, falls doch mal nützlich
             sortElo: parseInt(gameData?.faceit_elo, 10) || 0,
-            eloHistory: eloHistory
+            // Stats für die Liste
+            simplifiedImpact: simplifiedImpact,
+            lifetimeKD: lifetimeKD,
+            lifetimeWinRate: lifetimeWinRate
+            // eloTimeHistory wird nicht mehr gesendet
         };
-        console.log(`[API Function] Sending responseData for ${nickname}:`, JSON.stringify(responseData, null, 0));
-        res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
-        res.json(responseData);
+
+        console.log(`[API] Sending responseData for ${nickname}`);
+        res.setHeader('Cache-Control', 's-maxage=180, stale-while-revalidate'); // 3 Min Cache
+        return res.status(200).json(responseData);
 
     } catch (error) {
-        console.error(`[API Function] CATCH BLOCK (MAIN) Error processing request for ${nickname}:`, error);
-        res.status(500).json({ error: error.message || 'Internal server error fetching Faceit data' });
+        console.error(`[API] CATCH BLOCK Error processing request for ${nickname}:`, error);
+        return res.status(500).json({ error: error.message || 'Internal server error' });
     }
-});
-
-module.exports = app;
+}

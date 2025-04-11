@@ -8,29 +8,22 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-</head>
+    </head>
 <body>
-<header>
-    <h1>Faceit Elo Tracker</h1>
-</header>
-<main>
-    <div id="loading-indicator">Lade Spielerdaten...</div>
-    <div id="error-message" style="color: red; display: none;"></div>
+    <header>
+        <h1>Faceit Elo Tracker</h1>
+    </header>
+    <main>
+        <div id="loading-indicator">Lade Spielerdaten...</div>
+        <div id="error-message" style="color: red; display: none;"></div>
 
-    <div id="chart-container">
-        <h2>Elo-Verlauf (Letzte 50 Spiele)</h2>
-        <canvas id="eloChart"></canvas>
-    </div>
-
-    <h2>Aktuelles Ranking</h2>
-    <ol id="player-list" class="player-list-compact">
-    </ol>
-</main>
-<footer>
-    <p>Daten von Faceit API</p>
-    <p>&copy; 2025 Dein Name/Projekt. Alle Rechte vorbehalten.</p>
-</footer>
-<script src="script.js"></script>
+        <h2>Spieler Ranking & Stats</h2>
+        <ol id="player-list" class="player-list-compact">
+            </ol>
+    </main>
+    <footer>
+        <p>Daten von Faceit API</p> <p>&copy; 2025 Dein Name/Projekt. Alle Rechte vorbehalten.</p>
+    </footer>
+    <script src="script.js"></script>
 </body>
 </html>
