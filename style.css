@@ -1,30 +1,28 @@
 :root {
+    /* Farbpalette HLTV-Style */
     --bg-color: #1e1e24;
-    --card-bg-color-rgb: 38, 38, 46;
-    --card-bg-color: rgba(var(--card-bg-color-rgb), 0.75);
-    --glass-blur: 8px;
+    --card-bg-color-rgb: 42, 42, 46; /* Etwas heller für besseren Kontrast */
+    --card-bg-color: rgba(var(--card-bg-color-rgb), 0.8); /* Angepasste Transparenz */
+    --glass-blur: 10px;
     --glass-border-color: rgba(255, 255, 255, 0.1);
     --text-primary: #f0f0f5;
     --text-secondary: #a0a0b0;
     --accent-orange: #ff5500;
     --accent-blue: #4a90e2;
     --border-color: #353540;
+    /* Balkenfarben */
     --bar-color-good: #66bb6a;
     --bar-color-okay: #ffee58;
     --bar-color-bad: #ef5350;
-    --bar-background: #404050;
+    --bar-background: #444;
     --font-family: 'Roboto', sans-serif;
     --border-radius: 8px;
-    --header-height: 65px; /* Höhe des Headers definieren */
-    --footer-height: 85px; /* Höhe des Footers definieren */
+    --header-height: 60px; /* Höhe angepasst */
+    --footer-height: 60px; /* Höhe angepasst */
 }
 
-html {
-    box-sizing: border-box;
-}
-*, *:before, *:after {
-    box-sizing: inherit;
-}
+html { box-sizing: border-box; }
+*, *:before, *:after { box-sizing: inherit; }
 
 body {
     font-family: var(--font-family);
@@ -34,139 +32,206 @@ body {
     line-height: 1.6;
     display: flex;
     flex-direction: column;
-    height: 100vh; /* Wichtig: Volle Höhe */
-    overflow: hidden; /* Verhindert Scrollen des Body */
+    height: 100vh;
+    overflow: hidden;
 }
 
 header {
     background-color: rgba(var(--card-bg-color-rgb), 0.9);
-    padding: 1rem 2rem;
+    padding: 0 2rem; /* Padding angepasst für Höhe */
     text-align: center;
     border-bottom: 1px solid var(--border-color);
     backdrop-filter: blur(var(--glass-blur));
-    height: var(--header-height); /* Feste Höhe */
-    flex-shrink: 0; /* Verhindert Schrumpfen */
+    height: var(--header-height);
+    flex-shrink: 0;
     z-index: 10;
+    display: flex; /* Zentriert Titel vertikal */
+    align-items: center;
+    justify-content: center;
 }
-header h1 { color: var(--text-primary); margin: 0; font-weight: 500; line-height: calc(var(--header-height) - 2rem); /* Vertikal zentrieren */}
+header h1 { color: var(--text-primary); margin: 0; font-weight: 500; font-size: 1.5rem; }
 header h1 span { color: var(--accent-orange); font-weight: 700;}
 
 main {
-    flex-grow: 1; /* Nimmt allen verfügbaren Platz ein */
-    padding: 1.5rem; /* Etwas weniger Padding */
-    overflow: hidden; /* Verhindert, dass Main selbst scrollt */
-    display: flex; /* Richtet #main-content-area aus */
+    flex-grow: 1;
+    padding: 1.5rem;
+    overflow: hidden; /* Wichtig: Main scrollt nicht */
+    display: flex;
 }
 
-#loading-indicator, #error-message { /* Unverändert */
-    text-align: center; font-size: 1.1rem; padding: 2rem; color: var(--text-secondary);
-}
+#loading-indicator, #error-message { text-align: center; font-size: 1.1rem; padding: 2rem; color: var(--text-secondary); width: 100%; }
 #error-message { color: var(--bar-color-bad); font-weight: bold; }
 
 /* --- Haupt-Layout Container --- */
 #main-content-area {
     display: flex;
     width: 100%;
-    height: 100%; /* Füllt 'main' aus */
+    height: 100%;
     gap: 1.5rem;
-    align-items: stretch; /* Kinder sollen volle Höhe einnehmen */
+    align-items: stretch;
     justify-content: center; /* Initial zentriert */
-    transition: justify-content 0.5s cubic-bezier(0.25, 0.8, 0.25, 1); /* Smooth Transition */
+    transition: justify-content 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
-
-/* Zustand, wenn Detailkarte sichtbar */
-#main-content-area.detail-visible {
-    justify-content: flex-start; /* Schiebt Liste nach links */
-}
+#main-content-area.detail-visible { justify-content: flex-start; }
 
 /* --- Linker Bereich: Spielerliste --- */
 #player-list-container {
     width: 100%;
-    max-width: 420px; /* Max Breite, wenn zentriert */
+    max-width: 420px;
     height: 100%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     flex-shrink: 0;
-    transition: max-width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1), width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
-    /* Glassmorphism optional auch für Liste */
-    /* background-color: var(--card-bg-color); */
-    /* backdrop-filter: blur(var(--glass-blur)); */
-    /* border: 1px solid var(--glass-border-color); */
-    /* border-radius: var(--border-radius); */
-    /* padding: 1rem; */
+    transition: max-width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1), width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1), flex-basis 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+    flex-basis: 100%; /* Nimmt anfangs volle Breite ein */
 }
 #main-content-area.detail-visible #player-list-container {
-    max-width: 380px; /* Schmaler, wenn Karte da ist */
-    width: 40%; /* Nimmt z.B. 40% der Breite ein */
+    max-width: 380px;
+    width: auto; /* Breite automatisch anpassen */
+    flex-basis: 380px; /* Feste Breite, wenn Karte sichtbar */
 }
 
-#player-list-container h2 { /* Ranking Titel */
-    flex-shrink: 0; /* Titel soll nicht scrollen */
-    text-align: center; color: var(--text-primary); margin-bottom: 1rem; font-weight: 500; font-size: 1.3rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color);
+#player-list-container h2 {
+    flex-shrink: 0; text-align: center; color: var(--text-primary); margin-bottom: 1rem; font-weight: 500; font-size: 1.3rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); margin-top: 0;
 }
 
 #player-list { /* Die <ol> Liste */
-    flex-grow: 1; /* Nimmt restlichen Platz im Container ein */
-    overflow-y: auto; /* Macht die Liste scrollbar! */
-    list-style: none; /* Keine Standardnummerierung */
-    padding: 0 0.5rem 0 0; /* Rechts Platz für Scrollbar */
-    margin: 0;
-    counter-reset: player-rank-counter;
+    flex-grow: 1; overflow-y: auto; list-style: none; padding: 0 0.5rem 0 0; margin: 0; counter-reset: player-rank-counter;
 }
-/* Scrollbar Styling (optional, Webkit-Browser) */
 #player-list::-webkit-scrollbar { width: 6px; }
 #player-list::-webkit-scrollbar-track { background: transparent; }
 #player-list::-webkit-scrollbar-thumb { background-color: #555; border-radius: 3px; }
 #player-list::-webkit-scrollbar-thumb:hover { background-color: #777; }
 
-
-.player-list-sorted li { /* Styling für Listenelemente */
-    background-color: transparent; margin-bottom: 0; border-bottom: 1px solid var(--border-color); padding: 0.7rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; transition: background-color 0.2s ease;
-    position: relative; /* Für Pseudo-Element */
-}
+.player-list-sorted li { background-color: transparent; margin-bottom: 0; border-bottom: 1px solid var(--border-color); padding: 0.7rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; transition: background-color 0.2s ease; position: relative; }
 .player-list-sorted li:last-child { border-bottom: none; }
 .player-list-sorted li:hover { background-color: rgba(var(--card-bg-color-rgb), 0.3); }
-
-.player-list-sorted li::before { /* Ranking Nummer */
-    content: counter(player-rank-counter); counter-increment: player-rank-counter; font-weight: bold; color: var(--text-secondary); min-width: 20px; text-align: right; margin-right: 0.5rem;
-}
-.player-list-sorted .player-info { display: flex; align-items: center; gap: 0.8rem; flex-grow: 1; overflow: hidden; } /* Wichtig: overflow hidden */
+.player-list-sorted li::before { content: counter(player-rank-counter); counter-increment: player-rank-counter; font-weight: bold; color: var(--text-secondary); min-width: 20px; text-align: right; margin-right: 0.5rem; }
+.player-list-sorted .player-info { display: flex; align-items: center; gap: 0.8rem; flex-grow: 1; overflow: hidden; margin-right: 1rem; } /* Wichtig: Margin-right */
 .player-list-sorted img.avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; background-color: #444; flex-shrink: 0; }
-.player-list-sorted .player-name { font-size: 1rem; font-weight: 500; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* max-width entfernt, flexbox regelt das */
+.player-list-sorted .player-name { font-size: 1rem; font-weight: 500; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-list-sorted .player-name:hover { color: var(--accent-orange); }
-.player-list-sorted .player-stats { display: flex; gap: 1rem; justify-content: flex-end; /* Rechtsbündig */ flex-shrink: 0; font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; margin-left: 1rem;}
-.player-list-sorted .stat-item { min-width: 65px; text-align: right; }
-.player-list-sorted .impact-score { cursor: help; }
-.player-list-sorted .player-elo { font-size: 1rem; font-weight: 700; color: var(--accent-orange); min-width: 45px; text-align: right; flex-shrink: 0; margin-left: 1rem; }
-.player-list-sorted li.error-item { justify-content: flex-start; background-color: rgba(244, 67, 54, 0.1); color: #ef5350; font-style: italic; cursor: default; }
-.player-list-sorted li.error-item:hover { background-color: rgba(244, 67, 54, 0.15); }
-.player-list-sorted li.error-item::before { color: #ef5350; }
+/* Stats in der Liste entfernt, da sie jetzt in der Karte sind */
+/* .player-list-sorted .player-stats { ... } */
+/* .player-list-sorted .stat-item { ... } */
+.player-list-sorted .player-elo { font-size: 1rem; font-weight: 700; color: var(--accent-orange); min-width: 45px; text-align: right; flex-shrink: 0; }
+.player-list-sorted li.error-item { /* unverändert */ }
+.player-list-sorted li.error-item:hover { /* unverändert */ }
+.player-list-sorted li.error-item::before { /* unverändert */ }
 
 
-/* --- Rechter Bereich: Detailkarte --- */
+/* --- Rechter Bereich: Detailkarte Container --- */
 #player-detail-card-container {
-    height: 100%; /* Füllt verfügbare Höhe */
+    height: 100%;
     flex-grow: 1; /* Nimmt Restbreite */
-    max-width: 0; /* Initial versteckt */
+    flex-basis: 0; /* Startet mit 0 Breite */
+    min-width: 0; /* Wichtig für Flexbox-Schrumpfen */
+    max-width: 0; /* Initial versteckt/keine Breite */
     opacity: 0;
-    overflow-y: auto; /* Macht Karte scrollbar falls nötig */
-    overflow-x: hidden; /* Verhindert horizontales Scrollen */
-    transition: max-width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.4s ease-in-out 0.1s;
-    padding-right: 5px; /* Platz für Scrollbar */
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: max-width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.4s ease-in-out 0.1s, flex-basis 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+    padding-right: 5px;
 }
 #main-content-area.detail-visible #player-detail-card-container {
-    max-width: 600px; /* Max Breite der Karte */
+    max-width: 600px;
     opacity: 1;
+    flex-basis: 600px; /* Zielbreite */
 }
-/* Scrollbar Styling (optional, Webkit-Browser) */
 #player-detail-card-container::-webkit-scrollbar { width: 6px; }
 #player-detail-card-container::-webkit-scrollbar-track { background: transparent; }
 #player-detail-card-container::-webkit-scrollbar-thumb { background-color: #555; border-radius: 3px; }
 #player-detail-card-container::-webkit-scrollbar-thumb:hover { background-color: #777; }
 
 
-/* Styles für die HLTV-Karte (Glassmorphism) */
+/* --- Styles für die HLTV-Karte --- */
 .player-card-hltv {
-    background-color: var(--card-bg-color); backdrop-filter: blur(var(--glass-blur)); border-radius: var(--border-radius); border: 1px solid var(--glass-border-color); padding: 1.5rem; box-shadow: 0 6px
+    background-color: var(--card-bg-color); backdrop-filter: blur(var(--glass-blur)); border-radius: var(--border-radius); border: 1px solid var(--glass-border-color); padding: 1.5rem; box-shadow: 0 6px 20px rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 1.5rem;
+    width: 100%; /* Füllt den Container aus */
+    min-height: 280px; /* Mindesthöhe sicherstellen */
+}
+.player-card-hltv .card-header { /* Header innerhalb der Karte */
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; flex-shrink: 0;
+}
+.player-card-hltv .card-header .player-info { display: flex; align-items: center; gap: 1rem; }
+.player-card-hltv .card-header img.avatar { width: 45px; height: 45px; border-radius: 4px; object-fit: cover; background-color: #444; border: 1px solid var(--glass-border-color); }
+.player-card-hltv .card-header .player-name { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); text-decoration: none; }
+.player-card-hltv .card-header .player-name:hover { color: var(--accent-orange); }
+.player-card-hltv .card-header .stats-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+
+.player-card-hltv .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem 1rem; width: 100%; } /* Wichtig: width: 100% */
+.player-card-hltv .stat-item { text-align: center; }
+.player-card-hltv .stat-item .label { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.player-card-hltv .stat-item .value { font-size: 1.6rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; word-break: break-all;} /* Erlaube Umbruch bei Bedarf */
+.player-card-hltv .stat-item .value.na { font-size: 1.2rem; color: var(--text-secondary); }
+
+.player-card-hltv .indicator-bar { height: 5px; background-color: var(--bar-background); border-radius: 3px; overflow: hidden; position: relative; margin-top: 0.25rem; }
+.player-card-hltv .indicator-bar .bar-fill { height: 100%; width: 50%; background-color: var(--bar-color-okay); border-radius: 3px; position: absolute; left: 0; top: 0; transition: width 0.5s ease, background-color 0.5s ease; }
+.player-card-hltv .indicator-bar.good .bar-fill { background-color: var(--bar-color-good); width: 75%; }
+.player-card-hltv .indicator-bar.okay .bar-fill { background-color: var(--bar-color-okay); width: 50%; }
+.player-card-hltv .indicator-bar.bad .bar-fill { background-color: var(--bar-color-bad); width: 25%; }
+
+.player-card-hltv.error-card { /* Fehleranzeige */
+    justify-content: center; align-items: center; min-height: 150px; border-color: var(--bar-color-bad);
+}
+.player-card-hltv.error-card .card-header, .player-card-hltv.error-card .stats-grid { display: none; }
+.player-card-hltv.error-card .error-message { color: #ffabab; font-style: italic; }
+
+
+footer { /* Angepasst */
+    text-align: center; padding: 0.75rem; /* Kompakter */ margin-top: 0; /* Kein Margin mehr, da main nicht scrollt */ font-size: 0.8rem; color: var(--text-secondary); background-color: rgba(var(--card-bg-color-rgb), 0.9); border-top: 1px solid var(--border-color); backdrop-filter: blur(var(--glass-blur)); height: var(--footer-height); flex-shrink: 0; display: flex; flex-direction: column; justify-content: center;
+}
+footer p { margin: 0.1rem 0;}
+
+
+/* Responsive Anpassungen */
+@media (max-width: 768px) {
+    main { padding: 1rem; }
+    #main-content-area {
+        flex-direction: column; /* Untereinander */
+        height: auto; /* Höhe automatisch */
+        overflow: visible; /* Erlaube Scrollen innerhalb von Main auf Mobile */
+    }
+    body { overflow: auto; } /* Body darf auf Mobile scrollen */
+    main { overflow: visible; }
+
+    #player-list-container {
+        max-width: 100%; /* Volle Breite */
+        width: 100%;
+        height: auto; /* Höhe automatisch */
+        flex-basis: auto;
+        margin-bottom: 1.5rem; /* Abstand zur Karte */
+        max-height: 50vh; /* Begrenze Höhe der Liste */
+        overflow-y: auto; /* Mache Liste scrollbar */
+    }
+    #player-list { overflow-y: visible; } /* Liste selbst scrollt nicht mehr, der Container tut es */
+
+
+    #main-content-area.detail-visible #player-list-container {
+        max-width: 100%; width: 100%; flex-basis: auto;
+    }
+
+    #player-detail-card-container {
+        max-width: 100%; /* Volle Breite */
+        width: 100%;
+        height: auto; /* Höhe automatisch */
+        opacity: 0; /* Start versteckt */
+        max-height: none; /* Keine Höhenbegrenzung mehr */
+        overflow-y: visible; /* Karte scrollt nicht mehr intern */
+        transition: opacity 0.4s ease-in-out; /* Nur noch Opacity animieren */
+        padding-right: 0; /* Kein Scrollbar-Padding */
+    }
+    #main-content-area.detail-visible #player-detail-card-container {
+        opacity: 1;
+        max-width: 100%; /* Stelle sicher, dass es volle Breite nimmt */
+        flex-basis: auto;
+    }
+
+    .player-card-hltv .stats-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 Spalten auf Mobile */
+        gap: 1rem 0.5rem;
+    }
+    .player-card-hltv .stat-item .value { font-size: 1.4rem; }
+    .player-card-hltv .card-header .player-name { font-size: 1.2rem; }
 }
