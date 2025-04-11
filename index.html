@@ -3,30 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Faceit Elo & Perf Tracker</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Faceit Elo & Stats Tracker</title> <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 <header>
-    <h1>Faceit Elo & Perf Tracker</h1>
+    <h1>Faceit Elo & Stats Tracker</h1>
 </header>
 <main>
     <div id="loading-indicator">Lade Spielerdaten...</div>
     <div id="error-message" style="color: red; display: none;"></div>
 
-    <div id="player-grid" class="player-preview-grid">
-    </div>
+    <div id="main-content-area" class="layout-list-centered">
+        <div id="player-list-container">
+            <h2>Ranking</h2>
+            <ol id="player-list" class="player-list-sorted">
+            </ol>
+        </div>
 
-    <div id="player-detail-card-container" style="display: none;">
+        <div id="player-detail-card-container">
+        </div>
     </div>
 
 </main>
 <footer>
-    <p>Daten von Faceit API & faceitperf.pro</p>
-    <p>&copy; 2025 Dein Name/Projekt. Alle Rechte vorbehalten.</p>
+    <p>Daten von Faceit API &amp; Vercel KV</p> <p>&copy; 2025 Dein Name/Projekt. Alle Rechte vorbehalten.</p>
 </footer>
 <script src="script.js"></script>
 </body>
