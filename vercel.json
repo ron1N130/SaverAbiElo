@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/update-stats?source=cron", // NEUER Endpunkt für den Cron
+      "schedule": "0 * * * *" // Jede Stunde zur Minute 0
+    }
+  ]
+}

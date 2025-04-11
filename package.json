@@ -18,6 +18,8 @@
   },
   "homepage": "https://github.com/ronin1221/ron1n1221.github.io#readme",
   "dependencies": {
+    "@vercel/kv": "^3.0.0",
+    "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
