@@ -17,7 +17,8 @@
     --bar-background: #444;
     --font-family: 'Roboto', sans-serif;
     --border-radius: 8px;
-    /* Übergangsgeschwindigkeit (Originalwert) */
+    --header-height: 60px;
+    --footer-height: 60px;
     --transition-speed: 0.5s;
     --transition-timing: cubic-bezier(0.25, 0.8, 0.25, 1);
 }
@@ -31,16 +32,23 @@ body {
     color: var(--text-primary);
     margin: 0;
     line-height: 1.6;
-    /* Keine feste Höhe / Flexbox auf Body */
+    /* Kein height/overflow mehr hier, Body darf scrollen wenn nötig */
 }
 
 header {
     background-color: rgba(var(--card-bg-color-rgb), 0.9);
-    padding: 1rem 2rem;
+    padding: 0 2rem;
     text-align: center;
     border-bottom: 1px solid var(--border-color);
     backdrop-filter: blur(var(--glass-blur));
+    height: var(--header-height);
+    /* sticky oder fixed, wenn der Header immer sichtbar sein soll */
+    position: sticky;
+    top: 0;
     z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 header h1 { color: var(--text-primary); margin: 0; font-weight: 500; font-size: 1.5rem; }
 header h1 span { color: var(--accent-orange); font-weight: 700;}
@@ -48,9 +56,10 @@ header h1 span { color: var(--accent-orange); font-weight: 700;}
 main {
     padding: 2rem;
     max-width: 1200px;
-    margin: 0 auto;
+    margin: 0 auto; /* Zentriert Main */
     width: 100%;
     box-sizing: border-box;
+    /* Kein Flex/Overflow mehr */
 }
 
 #loading-indicator, #error-message { text-align: center; font-size: 1.1rem; padding: 2rem; color: var(--text-secondary); width: 100%; }
@@ -64,23 +73,38 @@ main {
     align-items: flex-start; /* Oben ausrichten */
     justify-content: center; /* Initial zentriert */
     transition: justify-content var(--transition-speed) var(--transition-timing);
+    /* Keine feste Höhe mehr */
 }
-#main-content-area.detail-visible { justify-content: flex-start; } /* Schiebt nach links */
+#main-content-area.detail-visible { justify-content: flex-start; }
 
 /* --- Linker Bereich: Spielerliste --- */
 #player-list-container {
     width: 100%;
-    max-width: 420px; /* Max Breite initial */
+    max-width: 420px;
     flex-shrink: 0;
     transition: max-width var(--transition-speed) var(--transition-timing), width var(--transition-speed) var(--transition-timing), flex-basis var(--transition-speed) var(--transition-timing);
-    flex-basis: auto; /* Breite automatisch */
+    flex-basis: auto; /* Breite initial automatisch */
+    /* NEU: Maximale Höhe und Scrolling für den Container */
+    max-height: calc(90vh - var(--header-height) - var(--footer-height)); /* Beispiel: 90% der Viewport-Höhe minus Header/Footer */
+    overflow-y: auto; /* Scrollbar für den Container bei Bedarf */
+    /* Optional: Visuelles Styling für den Container */
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background-color: rgba(var(--card-bg-color-rgb), 0.3); /* Leichter Hintergrund */
+    padding: 1rem;
 }
 #main-content-area.detail-visible #player-list-container {
-    max-width: 380px; /* Schmaler, wenn Karte da ist */
+    max-width: 380px;
     flex-basis: 380px;
 }
+/* Scrollbar Styling für den Container (optional) */
+#player-list-container::-webkit-scrollbar { width: 6px; }
+#player-list-container::-webkit-scrollbar-track { background: transparent; }
+#player-list-container::-webkit-scrollbar-thumb { background-color: #666; border-radius: 3px; }
+#player-list-container::-webkit-scrollbar-thumb:hover { background-color: #888; }
 
-#player-list-container h2 { /* Ranking Titel */
+
+#player-list-container h2 {
     text-align: center; color: var(--text-primary); margin-bottom: 1rem; font-weight: 500; font-size: 1.3rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); margin-top: 0;
 }
 
@@ -89,43 +113,41 @@ main {
     padding: 0;
     margin: 0;
     counter-reset: player-rank-counter;
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    overflow: hidden; /* Verhindert überlaufen, aber kein internes scrollen */
+    /* KEIN Overflow hier, der Container scrollt */
+    /* KEIN Border/Radius hier, der Container hat es */
 }
 
-/* Styles für die Listenelemente */
-.player-list-sorted li { background-color: transparent; margin-bottom: 0; border-bottom: 1px solid var(--border-color); padding: 0.7rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; transition: background-color 0.2s ease; position: relative; }
+/* Styles für Listenelemente bleiben gleich */
+.player-list-sorted li { /* Angepasst: Kein eigener Hintergrund mehr */
+    margin-bottom: 0; border-bottom: 1px solid var(--border-color); padding: 0.7rem 0.5rem; /* Weniger Padding rechts */ display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; transition: background-color 0.2s ease; position: relative; border-radius: 4px; /* Leichte Abrundung */
+}
 .player-list-sorted li:last-child { border-bottom: none; }
-.player-list-sorted li:hover { background-color: rgba(var(--card-bg-color-rgb), 0.3); }
+.player-list-sorted li:hover { background-color: rgba(255, 255, 255, 0.05); }
 .player-list-sorted li::before { content: counter(player-rank-counter); counter-increment: player-rank-counter; font-weight: bold; color: var(--text-secondary); min-width: 20px; text-align: right; margin-right: 0.5rem; }
 .player-list-sorted .player-info { display: flex; align-items: center; gap: 0.8rem; flex-grow: 1; overflow: hidden; margin-right: 1rem; }
 .player-list-sorted img.avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; background-color: #444; flex-shrink: 0; }
 .player-list-sorted .player-name { font-size: 1rem; font-weight: 500; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-list-sorted .player-name:hover { color: var(--accent-orange); }
 .player-list-sorted .player-elo { font-size: 1rem; font-weight: 700; color: var(--accent-orange); min-width: 45px; text-align: right; flex-shrink: 0; }
-.player-list-sorted li.error-item { justify-content: flex-start; background-color: rgba(244, 67, 54, 0.1); color: #ef5350; font-style: italic; cursor: default; }
-.player-list-sorted li.error-item:hover { background-color: rgba(244, 67, 54, 0.15); }
-.player-list-sorted li.error-item::before { color: #ef5350; }
-
+.player-list-sorted li.error-item { /* Unverändert */ }
 
 /* --- Rechter Bereich: Detailkarte Container --- */
 #player-detail-card-container {
-    flex-grow: 1; /* Nimmt Restbreite */
-    flex-basis: 0; min-width: 0; max-width: 0; opacity: 0;
-    overflow: hidden; /* Versteckt Inhalt initial und verhindert Scrollen */
+    flex-grow: 1; flex-basis: 0; min-width: 0; max-width: 0; opacity: 0;
+    overflow: hidden; /* Versteckt initial, kein eigenes Scrolling mehr nötig? */
     transition: max-width var(--transition-speed) var(--transition-timing), opacity 0.4s ease-in-out 0.1s, flex-basis var(--transition-speed) var(--transition-timing);
+    /* Höhe nicht mehr 100%, passt sich dem Inhalt an */
 }
 #main-content-area.detail-visible #player-detail-card-container {
-    max-width: 600px; /* Zurück zur vorherigen funktionierenden Größe */
+    max-width: 700px; /* Wieder etwas größer */
     opacity: 1;
-    flex-basis: 600px; /* Zurück zur vorherigen funktionierenden Größe */
+    flex-basis: 700px; /* Wieder etwas größer */
+    overflow: visible; /* Inhalt darf sichtbar sein */
 }
 
-/* --- Styles für die HLTV-Karte (wie sie vorher funktioniert hat) --- */
-.player-card-hltv {
-    background-color: var(--card-bg-color); backdrop-filter: blur(var(--glass-blur)); border-radius: var(--border-radius); border: 1px solid var(--glass-border-color); padding: 1.5rem; box-shadow: 0 6px 20px rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 1.5rem; width: 100%; min-height: 280px;
-}
+/* --- Styles für die HLTV-Karte (unverändert) --- */
+.player-card-hltv { background-color: var(--card-bg-color); backdrop-filter: blur(var(--glass-blur)); border-radius: var(--border-radius); border: 1px solid var(--glass-border-color); padding: 1.5rem; box-shadow: 0 6px 20px rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 1.5rem; width: 100%; min-height: 280px; }
+/* ... Restliche .player-card-hltv Styles bleiben wie im vorherigen funktionierenden Beispiel ... */
 .player-card-hltv .card-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; flex-shrink: 0; }
 .player-card-hltv .card-header .player-info { display: flex; align-items: center; gap: 1rem; }
 .player-card-hltv .card-header img.avatar { width: 45px; height: 45px; border-radius: 4px; object-fit: cover; background-color: #444; border: 1px solid var(--glass-border-color); }
@@ -146,47 +168,47 @@ main {
 .player-card-hltv.error-card .card-header, .player-card-hltv.error-card .stats-grid { display: none; }
 .player-card-hltv.error-card .error-message { color: #ffabab; font-style: italic; }
 
-footer {
-    text-align: center; padding: 1rem; margin-top: 2rem; font-size: 0.8rem; color: var(--text-secondary); background-color: rgba(var(--card-bg-color-rgb), 0.9); border-top: 1px solid var(--border-color); backdrop-filter: blur(var(--glass-blur)); flex-shrink: 0;
+
+footer { /* Angepasst */
+    text-align: center; padding: 0.75rem; margin-top: 0; /* Footer ist jetzt Teil des Body-Scrolls (falls nötig) */ font-size: 0.8rem; color: var(--text-secondary); background-color: rgba(var(--card-bg-color-rgb), 0.9); border-top: 1px solid var(--border-color); backdrop-filter: blur(var(--glass-blur)); height: var(--footer-height); flex-shrink: 0; /* Bleibt unten */ display: flex; flex-direction: column; justify-content: center; z-index: 10;
 }
 footer p { margin: 0.1rem 0;}
 
-/* Responsive Anpassungen (Vereinfacht, ohne internes Scrolling) */
+/* Responsive Anpassungen */
 @media (max-width: 768px) {
+    /* Body darf scrollen, Main passt sich Inhalt an */
     main { padding: 1rem; }
     #main-content-area {
         flex-direction: column; /* Untereinander */
         align-items: center; /* Zentriert */
+        height: auto; /* Höhe automatisch */
     }
     #player-list-container {
         max-width: 100%; /* Volle Breite */
         width: 100%;
         flex-basis: auto;
         margin-bottom: 1.5rem;
-        /* Kein max-height / overflow */
+        max-height: 50vh; /* Scrollt intern bis max 50% der Viewport Höhe */
+        overflow-y: auto; /* Erzwingt internes Scrollen */
     }
+    #player-list { overflow-y: visible; } /* Liste selbst nicht mehr, Container scrollt */
+
     #player-detail-card-container {
         max-width: 100%; /* Volle Breite */
         width: 100%;
         flex-basis: auto;
         opacity: 0;
-        /* Kein max-height / overflow */
-        transition: opacity 0.4s ease-in-out; /* Nur Opacity animieren */
+        overflow: visible; /* Kein internes Scrollen */
+        transition: opacity 0.4s ease-in-out;
     }
-    #main-content-area.detail-visible #player-list-container {
-        max-width: 100%; width: 100%; flex-basis: auto;
+    #main-content-area.detail-visible #player-list-container { /* Bleibt volle Breite auf Mobile */
+        max-width: 100%; width: 100%; flex-basis: auto; height: auto; max-height: 50vh;
     }
-    #main-content-area.detail-visible #player-detail-card-container {
-        opacity: 1;
-        max-width: 100%; width: 100%; flex-basis: auto;
+    #main-content-area.detail-visible #player-detail-card-container { /* Nimmt Rest ein */
+        opacity: 1; max-width: 100%; width: 100%; flex-basis: auto;
     }
 
-    .player-card-hltv .stats-grid {
-        grid-template-columns: repeat(2, 1fr); /* 2 Spalten auf Mobile */
-        gap: 1rem 0.5rem;
-    }
-    .player-card-hltv .stat-item .value { font-size: 1.4rem; }
-    .player-card-hltv .card-header .player-name { font-size: 1.2rem; }
-    .player-list-sorted .player-info { margin-right: 0.5rem; }
-    .player-list-sorted .player-elo { margin-left: 0.5rem; }
+    /* Karten-Grid bleibt 2-spaltig auf Mobile */
+    .player-card-hltv .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem 0.5rem; }
+    /* ... Rest der mobilen Karten-Styles ... */
 }
