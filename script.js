@@ -1,9 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const playerListContainer = document.getElementById('player-list');
+    const playerGridContainer = document.getElementById('player-grid'); // Container für Vorschau-Grid
+    const detailCardContainer = document.getElementById('player-detail-card-container'); // Container für Detailkarte
     const loadingIndicator = document.getElementById('loading-indicator');
     const errorMessageElement = document.getElementById('error-message');
 
-    // Funktion zum Abrufen von Spielerdaten (erwartet jetzt berechnete Stats vom Backend)
+    let allPlayersData = []; // Globale Variable zum Speichern aller Spielerdaten
+
+    // Funktion zum Abrufen von Spielerdaten (unverändert vom letzten Stand)
     async function getPlayerData(nickname) {
         try {
             const apiUrl = `/api/faceit-data?nickname=${encodeURIComponent(nickname)}`;
@@ -14,106 +17,127 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response.status === 404) { displayError = `Spieler "${nickname}" nicht gefunden.`; }
                 else if (response.status === 500) { displayError = "Server-Konfigurationsfehler."; }
                 else if (response.status === 403) { displayError = "Zugriff verweigert."; }
-                // Versuche, eine Fehlermeldung aus dem Body zu lesen, falls vorhanden
                 displayError = errorData.error || displayError;
                 throw new Error(displayError);
             }
             const playerData = await response.json();
-            // Sort Elo für die Liste
             playerData.sortElo = parseInt(playerData.elo, 10) || 0;
             return playerData;
         } catch (error) {
             console.error(`Fehler Daten ${nickname}:`, error);
-            // Sende Basis-Objekt bei Fehler
             return { nickname: nickname, error: error.message, sortElo: 0 };
         }
     }
 
-    // Angepasste Funktion zum Anzeigen der Spielerkarten MIT berechneten Stats
-    function displayPlayerCards(players) {
-        playerListContainer.innerHTML = '';
-        playerListContainer.className = 'player-card-grid';
-
+    // NEU: Funktion zum Anzeigen des Vorschau-Grids
+    function displayPlayerGrid(players) {
+        playerGridContainer.innerHTML = ''; // Grid leeren
         players.forEach((player) => {
-            const cardElement = document.createElement('div');
-            cardElement.classList.add('player-card-hltv'); // Klasse für die Karte
+            const previewItem = document.createElement('div');
+            previewItem.classList.add('player-preview-item');
+            // Speichere den Nickname im data-Attribut für den Klick-Handler
+            previewItem.setAttribute('data-nickname', player.nickname);
 
             if (player.error) {
-                cardElement.classList.add('error-card');
-                cardElement.innerHTML = `<span class="error-message">${player.nickname} - Fehler: ${player.error}</span>`;
+                previewItem.classList.add('error-item');
+                previewItem.innerHTML = `
+                    <span class="player-name">${player.nickname}</span>
+                    <span style="font-size: 0.8em;">Fehler</span>
+                `;
             } else {
                 const avatarUrl = player.avatar || 'default_avatar.png';
-                const faceitProfileUrl = player.faceitUrl && player.faceitUrl.startsWith('http')
-                    ? player.faceitUrl
-                    : `https://${player.faceitUrl}`;
-
-                // Zeitstempel der letzten Aktualisierung formatieren (falls vorhanden)
-                let lastUpdatedText = '';
-                if (player.lastUpdated) {
-                    try {
-                        // Nutze Intl.DateTimeFormat für lokale Zeitdarstellung
-                        const date = new Date(player.lastUpdated);
-                        const formatter = new Intl.DateTimeFormat('de-DE', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit'
-                        });
-                        lastUpdatedText = `Stats vom ${formatter.format(date)} Uhr`;
-                    } catch(e) { console.error("Error formatting date:", e); }
-                }
-
-                // Baue das HTML für die Karte - Zeige berechnete Stats an
-                // Wir brauchen 6 Felder: Rating, K/D, ADR, Win Rate, HS%, Aktuelle Elo
-                cardElement.innerHTML = `
-                    <div class="card-header">
-                        <div class="player-info">
-                            <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil öffnen">
-                                <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
-                            </a>
-                            <a href="${faceitProfileUrl}" target="_blank" class="player-name">
-                                ${player.nickname}
-                            </a>
-                        </div>
-                        <div class="stats-label" title="${lastUpdatedText}">Recent Stats (Last ~${player.matchesConsidered || 0} M)</div>
-                    </div>
-                    <div class="stats-grid">
-                        <div class="stat-item">
-                            <div class="label" title="Berechnetes Perf. Rating (Basierend auf K/D, ADR, KPR, APR der letzten ~${player.matchesConsidered || 0} Matches)">Rating ≈</div>
-                            <div class="value ${player.calculatedRating === 'N/A' || player.calculatedRating === 'Pending' ? 'na' : ''}">${player.calculatedRating || '...'}</div>
-                            </div>
-                        <div class="stat-item">
-                            <div class="label" title="K/D Ratio (Letzte ~${player.matchesConsidered || 0} Matches)">K/D</div>
-                            <div class="value ${player.kd === 'N/A' || player.kd === 'Pending' ? 'na' : ''}">${player.kd || '...'}</div>
-                            </div>
-                         <div class="stat-item">
-                            <div class="label" title="Average Damage per Round (Letzte ~${player.matchesConsidered || 0} Matches)">ADR</div>
-                            <div class="value ${player.adr === 'N/A' || player.adr === 'Pending' ? 'na' : ''}">${player.adr || '...'}</div>
-                            </div>
-                        <div class="stat-item">
-                            <div class="label" title="Win Rate % (Letzte ~${player.matchesConsidered || 0} Matches)">Win Rate</div>
-                            <div class="value ${player.winRate === 'N/A' || player.winRate === 'Pending' ? 'na' : ''}">${player.winRate || '...'}%</div>
-                            </div>
-                         <div class="stat-item">
-                            <div class="label" title="Headshot % (Letzte ~${player.matchesConsidered || 0} Matches)">HS %</div>
-                            <div class="value ${player.hsPercent === 'N/A' || player.hsPercent === 'Pending' ? 'na' : ''}">${player.hsPercent || '...'}%</div>
-                            </div>
-                        <div class="stat-item">
-                            <div class="label">Aktuelle Elo</div>
-                            <div class="value ${player.elo === 'N/A' ? 'na' : ''}">${player.elo}</div>
-                            </div>
-                    </div>
+                previewItem.innerHTML = `
+                     <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
+                     <span class="player-name">${player.nickname}</span>
                  `;
-                // Indikatorbalken vorerst weggelassen, da Benchmarks fehlen
             }
-            playerListContainer.appendChild(cardElement);
+            playerGridContainer.appendChild(previewItem);
         });
     }
+
+    // NEU: Funktion zum Anzeigen der Detail-Karte für EINEN Spieler
+    function displayDetailCard(player) {
+        if (!player || player.error) {
+            // Zeige nichts oder eine Fehlermeldung im Detailbereich an
+            detailCardContainer.innerHTML = `<div class="player-card-hltv error-card"><span class="error-message">Spielerdaten nicht verfügbar.</span></div>`;
+            detailCardContainer.style.display = 'block'; // Sicherstellen, dass Container sichtbar ist
+            return;
+        }
+
+        const cardElement = document.createElement('div');
+        cardElement.classList.add('player-card-hltv'); // Klasse für die Karte
+
+        const avatarUrl = player.avatar || 'default_avatar.png';
+        const faceitProfileUrl = player.faceitUrl && player.faceitUrl.startsWith('http')
+            ? player.faceitUrl
+            : `https://${player.faceitUrl}`;
+        const lastUpdatedText = player.lastUpdated
+            ? `Stats vom ${new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}).format(new Date(player.lastUpdated))} Uhr`
+            : 'Stats werden aktualisiert...';
+        const matchesConsideredText = `Last ~${player.matchesConsidered || 0} M`;
+
+
+        // Baue das HTML für die Detail-Karte
+        cardElement.innerHTML = `
+            <div class="card-header">
+                <div class="player-info">
+                    <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil öffnen">
+                        <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
+                    </a>
+                    <a href="${faceitProfileUrl}" target="_blank" class="player-name">
+                        ${player.nickname}
+                    </a>
+                     <span style="font-size: 0.9em; color: #aaa;" title="Aktuelle Elo">(${player.elo || 'N/A'})</span>
+                </div>
+                <div class="stats-label" title="${lastUpdatedText}">${matchesConsideredText}</div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="label" title="Berechnetes Perf. Rating (Basierend auf K/D, ADR, KPR, APR der letzten Matches)">Rating ≈</div>
+                    <div class="value ${player.calculatedRating === 'N/A' || player.calculatedRating === 'Pending' ? 'na' : ''}">${player.calculatedRating || '...'}</div>
+                    <div class="indicator-bar okay"><div class="bar-fill"></div></div> </div>
+                <div class="stat-item">
+                    <div class="label" title="K/D Ratio (Letzte Matches)">K/D</div>
+                    <div class="value ${player.kd === 'N/A' || player.kd === 'Pending' ? 'na' : ''}">${player.kd || '...'}</div>
+                     <div class="indicator-bar good"><div class="bar-fill"></div></div> </div>
+                 <div class="stat-item">
+                    <div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div>
+                    <div class="value ${player.adr === 'N/A' || player.adr === 'Pending' ? 'na' : ''}">${player.adr || '...'}</div>
+                     <div class="indicator-bar okay"><div class="bar-fill"></div></div> </div>
+                <div class="stat-item">
+                    <div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div>
+                    <div class="value ${player.winRate === 'N/A' || player.winRate === 'Pending' ? 'na' : ''}">${player.winRate || '...'}%</div>
+                     <div class="indicator-bar okay"><div class="bar-fill"></div></div> </div>
+                 <div class="stat-item">
+                    <div class="label" title="Headshot % (Letzte Matches)">HS %</div>
+                    <div class="value ${player.hsPercent === 'N/A' || player.hsPercent === 'Pending' ? 'na' : ''}">${player.hsPercent || '...'}%</div>
+                     <div class="indicator-bar good"><div class="bar-fill"></div></div> </div>
+                <div class="stat-item">
+                     <div class="label" title="Aktuelle Faceit Elo">Akt. Elo</div>
+                     <div class="value ${player.elo === 'N/A' ? 'na' : ''}">${player.elo}</div>
+                     <div class="indicator-bar good"><div class="bar-fill"></div></div> </div>
+            </div>
+         `;
+
+        detailCardContainer.innerHTML = ''; // Alten Inhalt leeren
+        detailCardContainer.appendChild(cardElement);
+        detailCardContainer.style.display = 'block'; // Container anzeigen
+        // Optional: Zum Detailbereich scrollen
+        detailCardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Alte Funktion zum direkten Anzeigen aller Karten ist nicht mehr nötig
+    /* function displayPlayerCards(players) { ... } */
+
 
     // Hauptfunktion zum Laden aller Spieler
     async function loadAllPlayers() {
         loadingIndicator.style.display = 'block';
         errorMessageElement.style.display = 'none';
         errorMessageElement.textContent = '';
-        playerListContainer.innerHTML = '';
+        playerGridContainer.innerHTML = ''; // Grid leeren
+        detailCardContainer.style.display = 'none'; // Detailkarte verstecken
+        detailCardContainer.innerHTML = ''; // Detailkarte leeren
 
         let playerNicknames = [];
         try {
@@ -123,13 +147,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!Array.isArray(playerNicknames) || playerNicknames.length === 0) { throw new Error("players.json leer/falsches Format."); }
 
             const playerPromises = playerNicknames.map(nickname => getPlayerData(nickname));
-            let playersData = await Promise.all(playerPromises);
+            // Speichere die Rohdaten global, nachdem alle Promises aufgelöst sind
+            allPlayersData = await Promise.all(playerPromises);
 
-            // Sortiere nach Elo für die interne Reihenfolge oder Anzeige falls gewünscht
-            playersData.sort((a, b) => b.sortElo - a.sortElo);
+            // Sortiere für die Grid-Reihenfolge (optional, Grid sortiert nicht visuell)
+            // allPlayersData.sort((a, b) => b.sortElo - a.sortElo);
 
-            // Zeige die Karten an
-            displayPlayerCards(playersData);
+            // Zeige das Vorschau-Grid an
+            displayPlayerGrid(allPlayersData);
 
         } catch (error) {
             console.error("Fehler Laden Spieler:", error);
@@ -140,5 +165,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // NEU: Event Listener für Klicks auf das Grid
+    playerGridContainer.addEventListener('click', (event) => {
+        // Finde das geklickte Vorschau-Item (oder ein Elternelement davon)
+        const clickedItem = event.target.closest('.player-preview-item');
+
+        if (clickedItem) {
+            const nickname = clickedItem.dataset.nickname; // Hole Nickname aus data-Attribut
+            if (nickname) {
+                // Finde die Daten für den geklickten Spieler in unserem gespeicherten Array
+                const playerData = allPlayersData.find(p => p.nickname === nickname);
+                if (playerData) {
+                    // Zeige die Detailkarte für diesen Spieler an
+                    displayDetailCard(playerData);
+                } else {
+                    console.error("Konnte Spielerdaten für Klick nicht finden:", nickname);
+                    // Zeige ggf. eine Fehlermeldung im Detailbereich an
+                    displayDetailCard({ error: "Daten nicht gefunden." });
+                }
+            }
+        }
+    });
+
+    // Lade die Spielerdaten initial, um das Grid zu füllen
     loadAllPlayers();
 });

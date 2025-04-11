@@ -3,27 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Faceit Elo Tracker</title>
+    <title>Faceit Elo & Perf Tracker</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-    </head>
+</head>
 <body>
-    <header>
-        <h1>Faceit Elo Tracker</h1>
-    </header>
-    <main>
-        <div id="loading-indicator">Lade Spielerdaten...</div>
-        <div id="error-message" style="color: red; display: none;"></div>
+<header>
+    <h1>Faceit Elo & Perf Tracker</h1>
+</header>
+<main>
+    <div id="loading-indicator">Lade Spielerdaten...</div>
+    <div id="error-message" style="color: red; display: none;"></div>
 
-        <h2>Spieler Ranking & Stats</h2>
-        <ol id="player-list" class="player-list-compact">
-            </ol>
-    </main>
-    <footer>
-        <p>Daten von Faceit API</p> <p>&copy; 2025 Dein Name/Projekt. Alle Rechte vorbehalten.</p>
-    </footer>
-    <script src="script.js"></script>
+    <div id="player-grid" class="player-preview-grid">
+    </div>
+
+    <div id="player-detail-card-container" style="display: none;">
+    </div>
+
+</main>
+<footer>
+    <p>Daten von Faceit API & faceitperf.pro</p>
+    <p>&copy; 2025 Dein Name/Projekt. Alle Rechte vorbehalten.</p>
+</footer>
+<script src="script.js"></script>
 </body>
 </html>

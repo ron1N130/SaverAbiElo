@@ -3,121 +3,134 @@
     --card-background: #2a2a2e;
     --text-color: #efeff1;
     --primary-color: #ff5500;
+    --text-secondary-color: #aaa;
     --font-family: 'Roboto', sans-serif;
-    --border-radius: 8px;
+    --border-radius: 6px;
+    /* Farben für Indikatorbalken */
+    --bar-color-good: #4CAF50;
+    --bar-color-okay: #FFC107;
+    --bar-color-bad: #F44336;
+    --bar-background: #444;
 }
 
-body {
-    font-family: var(--font-family);
-    background-color: var(--background-color);
-    color: var(--text-color);
-    margin: 0;
-    line-height: 1.6;
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
+body { /* unverändert */
+    font-family: var(--font-family); background-color: var(--background-color); color: var(--text-color); margin: 0; line-height: 1.6; display: flex; flex-direction: column; min-height: 100vh;
 }
-
-header {
-    background-color: var(--card-background);
-    padding: 1rem 2rem;
-    text-align: center;
-    border-bottom: 2px solid var(--primary-color);
+header { /* unverändert */
+    background-color: var(--card-background); padding: 1rem 2rem; text-align: center; border-bottom: 2px solid var(--primary-color);
 }
-
 header h1 { color: var(--primary-color); margin: 0; }
-
-main {
-    padding: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-    flex-grow: 1;
-    width: 100%;
-    box-sizing: border-box;
+main { /* unverändert */
+    padding: 2rem; max-width: 1200px; margin: 0 auto; flex-grow: 1; width: 100%; box-sizing: border-box;
 }
-
-main h2 { /* Überschrift für Ranking Liste */
-    text-align: center;
-    color: var(--primary-color);
-    margin-top: 1rem; /* Weniger Abstand oben */
-    margin-bottom: 1.5rem;
-}
-
-#loading-indicator, #error-message {
+main h2 { /* nicht mehr direkt verwendet */ }
+#loading-indicator, #error-message { /* unverändert */
     text-align: center; font-size: 1.2rem; padding: 2rem;
 }
 
-/* --- Chart Styles (ENTFERNT) --- */
-/* #chart-container { ... } */
-/* #chart-container h2 { ... } */
-/* #eloChart { ... } */
+/* --- Alte Listen-Styles (Entfernen/Auskommentieren) --- */
+/* .player-list-compact { ... } */
+/* .player-list-compact li { ... } */
+/* ... etc ... */
 
-/* --- Styles für die kompakte Liste (Angepasst für mehr Stats) --- */
-.player-list-compact {
-    list-style: decimal;
-    list-style-position: inside;
-    padding: 0;
-    max-width: 850px; /* Etwas breiter für mehr Stats */
-    margin: 1rem auto;
-    border: 1px solid var(--card-background);
-    border-radius: var(--border-radius);
-    overflow: hidden;
+/* --- NEU: Grid für die Spieler-VORSCHAU --- */
+.player-preview-grid {
+    display: grid;
+    /* Kleinere Kacheln für die Vorschau */
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+    margin-bottom: 3rem; /* Abstand zum Detail-Bereich */
 }
 
-.player-list-compact li {
+.player-preview-item {
     background-color: var(--card-background);
-    margin-bottom: 0;
-    border-bottom: 1px solid #333;
-    padding: 0.8rem 1.5rem;
+    border-radius: var(--border-radius);
+    padding: 1rem;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-}
-.player-list-compact li:last-child { border-bottom: none; }
-
-.player-list-compact .player-info {
-    display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 0.8rem;
-    min-width: 160px; /* Etwas mehr Platz für Name + Avatar */
-    flex-shrink: 0; /* Verhindert Schrumpfen */
+    text-align: center;
+    cursor: pointer; /* Zeigt Klickbarkeit an */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: 1px solid transparent; /* Platz für Hover-Effekt */
 }
 
-.player-list-compact img.avatar {
-    width: 35px; height: 35px; border-radius: 50%; object-fit: cover; background-color: #444;
+.player-preview-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+    border-color: var(--primary-color);
 }
 
-.player-list-compact .player-name {
-    font-size: 1rem; font-weight: bold; color: var(--text-color); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; /* Angepasst */
+.player-preview-item img.avatar {
+    width: 60px; /* Größerer Avatar in der Vorschau */
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    background-color: #444;
+    margin-bottom: 0.5rem;
 }
-.player-list-compact .player-name:hover { color: var(--primary-color); }
 
-.player-list-compact .player-stats {
+.player-preview-item .player-name {
+    font-size: 1rem;
+    font-weight: bold;
+    color: var(--text-color);
+    text-decoration: none; /* Falls wir später Link nutzen */
+    word-break: break-all; /* Namen umbrechen */
+}
+
+/* --- Styles für die Detail-Karte (bleiben größtenteils wie zuvor) --- */
+#player-detail-card-container {
+    margin-top: 2rem; /* Abstand zum Grid */
+    max-width: 800px; /* Breite der Detailkarte begrenzen */
+    margin-left: auto;
+    margin-right: auto; /* Zentrieren */
+}
+
+.player-card-hltv { /* Gilt jetzt für das Element in #player-detail-card-container */
+    background-color: var(--card-background);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    border-top: 3px solid var(--primary-color);
     display: flex;
-    gap: 1.5rem; /* Mehr Abstand zwischen Stats */
-    justify-content: center;
-    flex-grow: 1; /* Nimmt mittleren Platz ein */
-    font-size: 0.9rem;
-    color: #ccc;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 2rem; /* Abstand nach unten */
+}
+.player-card-hltv .card-header { /* unverändert */
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #444; padding-bottom: 1rem;
+}
+.player-card-hltv .card-header .player-info { display: flex; align-items: center; gap: 1rem; }
+.player-card-hltv .card-header img.avatar { width: 45px; height: 45px; border-radius: var(--border-radius); object-fit: cover; background-color: #444; }
+.player-card-hltv .card-header .player-name { font-size: 1.4rem; font-weight: 700; color: var(--text-color); text-decoration: none; }
+.player-card-hltv .card-header .player-name:hover { color: var(--primary-color); }
+.player-card-hltv .card-header .stats-label { font-size: 0.8rem; color: var(--text-secondary-color); text-transform: uppercase; letter-spacing: 1px; }
+.player-card-hltv .stats-grid { /* unverändert */
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem 1rem;
+}
+.player-card-hltv .stat-item { /* unverändert */
     text-align: center;
-    white-space: nowrap; /* Verhindert Umbruch der Stats */
 }
-.player-list-compact .stat-item {
-    min-width: 75px; /* Etwas weniger Breite pro Stat */
-    text-align: center;
+.player-card-hltv .stat-item .label { font-size: 0.8rem; color: var(--text-secondary-color); margin-bottom: 0.25rem; text-transform: uppercase; }
+.player-card-hltv .stat-item .value { font-size: 1.8rem; font-weight: 700; color: var(--text-color); margin-bottom: 0.5rem; }
+.player-card-hltv .stat-item .value.na { font-size: 1.4rem; color: var(--text-secondary-color); }
+.player-card-hltv .indicator-bar { /* unverändert (Styling) */
+    height: 6px; background-color: var(--bar-background); border-radius: 3px; overflow: hidden; position: relative;
 }
-.player-list-compact .impact-score { cursor: help; }
+.player-card-hltv .indicator-bar .bar-fill { height: 100%; width: 50%; background-color: var(--bar-color-okay); border-radius: 3px; position: absolute; left: 0; top: 0; }
+.player-card-hltv .indicator-bar.good .bar-fill { background-color: var(--bar-color-good); width: 75%; }
+.player-card-hltv .indicator-bar.okay .bar-fill { background-color: var(--bar-color-okay); width: 50%; }
+/* Fehlerdarstellung (jetzt für Vorschau und Detail) */
+.player-preview-item.error-item,
+.player-card-hltv.error-card {
+    justify-content: center; align-items: center; border-color: #F44336; background-color: #3f2a2e; color: #ffabab; font-style: italic; cursor: default;
+}
+.player-preview-item.error-item:hover { transform: none; box-shadow: none; }
+.player-card-hltv.error-card .card-header, .player-card-hltv.error-card .stats-grid { display: none; }
+.player-card-hltv.error-card .error-message { color: #ffabab; font-style: italic; }
 
-.player-list-compact .player-elo {
-    font-size: 1.1rem; font-weight: 700; color: var(--primary-color); min-width: 50px; text-align: right; flex-shrink: 0; /* Verhindert Schrumpfen */
-}
-
-.player-list-compact li.error-item {
-    justify-content: flex-start; background-color: #3f2a2e; color: #ffabab; font-style: italic;
-}
-.player-list-compact li.error-item::marker { color: #ff8a8a; }
-
-footer {
+footer { /* unverändert */
     text-align: center; padding: 1.5rem; margin-top: 2rem; font-size: 0.9rem; color: #aaa; background-color: var(--card-background); border-top: 1px solid #333;
 }
