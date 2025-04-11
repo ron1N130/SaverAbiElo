@@ -1,16 +1,62 @@
-import { kv } from '@vercel/kv';
+import Redis from 'ioredis';
 import fetch from 'node-fetch'; // node-fetch@3 ESM
 import fs from 'fs';
 import path from 'path';
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const API_BASE_URL = 'https://open.faceit.com/data/v4';
+const REDIS_URL = process.env.REDIS_URL; // Get Redis URL from env
 const MATCH_COUNT = 20; // Anzahl der letzten Matches für die Berechnung
 const API_DELAY = 600; // Millisekunden Pause zwischen Faceit API Calls (wichtig!)
 
+// Input validation for REDIS_URL
+if (!REDIS_URL) {
+    console.error("FATAL: REDIS_URL environment variable is not set!");
+    // Decide if the function can proceed without Redis
+    // For a stats update job, Redis might be critical
+    // throw new Error("REDIS_URL environment variable is not set!");
+}
+
+// Initialize Redis client only if REDIS_URL is available
+let redis = null;
+if (REDIS_URL) {
+    try {
+        redis = new Redis(REDIS_URL, {
+            connectTimeout: 10000,
+            maxRetriesPerRequest: 3,
+            // Add TLS options if necessary for Vercel Redis
+            // tls: { rejectUnauthorized: false }
+        });
+
+        redis.on('error', (err) => {
+            console.error('[Redis Client Error]', err);
+        });
+
+        redis.on('connect', () => {
+            console.log('[Redis Client] Connected successfully.');
+        });
+
+    } catch (error) {
+        console.error('[Redis Client] Failed to initialize:', error);
+        redis = null;
+    }
+} else {
+    console.warn('[Redis Client] Skipping initialization because REDIS_URL is not set.');
+}
+
 // --- Helper ---
 function getPlayerNicknames() {
-    try { const jsonPath = path.resolve(process.cwd(), 'players.json'); if (fs.existsSync(jsonPath)) { const rawData = fs.readFileSync(jsonPath); return JSON.parse(rawData.toString()); } return []; } catch (error) { console.error("Fehler Lesen players.json:", error); return []; }
+    try {
+        const jsonPath = path.resolve(process.cwd(), 'players.json');
+        if (fs.existsSync(jsonPath)) {
+            const rawData = fs.readFileSync(jsonPath);
+            return JSON.parse(rawData.toString());
+        }
+        return [];
+    } catch (error) {
+        console.error("Fehler Lesen players.json:", error);
+        return [];
+    }
 }
 // Kurze Pause Funktion
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -21,7 +67,16 @@ export default async function handler(req, res) {
     if (req.query.source !== 'cron') {
         return res.status(403).json({ error: 'Forbidden: Access denied.' });
     }
-    if (!FACEIT_API_KEY) { console.error("[CRON UPDATE] FATAL: FACEIT_API_KEY fehlt!"); return res.status(500).json({ error: 'Server config error: API Key missing' }); }
+    if (!FACEIT_API_KEY) {
+        console.error("[CRON UPDATE] FATAL: FACEIT_API_KEY fehlt!");
+        return res.status(500).json({ error: 'Server config error: API Key missing' });
+    }
+    // Crucially, check if Redis is available before starting the loop
+    if (!redis) {
+        console.error("[CRON UPDATE] FATAL: Redis client not available. Cannot update stats.");
+        return res.status(500).json({ error: 'Server configuration error: Database connection failed' });
+    }
+
     const faceitHeaders = { 'Authorization': `Bearer ${FACEIT_API_KEY}` };
 
     console.log('[CRON UPDATE] Starting scheduled stats update...');
@@ -82,17 +137,14 @@ export default async function handler(req, res) {
                             const stats = playerStatsInMatch.player_stats;
                             const k = parseInt(stats.Kills || 0, 10);
                             const d = parseInt(stats.Deaths || 0, 10);
-                            const a = parseInt(stats.Assists || 0, 10);
                             const r = parseInt(stats.Rounds || 0, 10);
                             const hs = parseInt(stats.Headshots || 0, 10);
                             const dmg = parseInt(stats.Damage || 0, 10);
-                            const mvps = parseInt(stats.MVPs || 0, 10); // Beispielhaft MVP holen
                             const win = stats.Result === "1"; // Annahme: Result "1" bedeutet Sieg
 
                             if (r > 0) { // Nur Matches mit Runden zählen
                                 recentMatchesData.kills += k;
                                 recentMatchesData.deaths += d; // Fange bei 1 an, damit K/D nie unendlich wird
-                                recentMatchesData.assists += a;
                                 recentMatchesData.rounds += r;
                                 recentMatchesData.adrSum += (dmg / r); // ADR für dieses Match zur Summe addieren
                                 recentMatchesData.hsCount += hs;
@@ -100,11 +152,10 @@ export default async function handler(req, res) {
 
                                 // Berechne einfachen PerfScore für dieses Match
                                 const matchKpr = k / r;
-                                const matchApr = a / r;
                                 const matchAdrNorm = (dmg / r) / 100; // ADR normalisiert
                                 const matchKD = k / Math.max(1, d);
                                 // Einfache Beispiel-Formel (Gewichtung anpassen!)
-                                const matchPerfScore = (matchKD * 0.5) + (matchAdrNorm * 0.3) + (matchKpr * 0.1) + (matchApr * 0.1);
+                                const matchPerfScore = (matchKD * 0.5) + (matchAdrNorm * 0.3) + (matchKpr * 0.1);
                                 recentMatchesData.perfScoreSum += matchPerfScore;
 
                                 recentMatchesData.matchesProcessed++;
@@ -139,10 +190,13 @@ export default async function handler(req, res) {
                 };
                 console.log(`[CRON UPDATE] Calculated stats for ${nickname}:`, calculatedStats);
 
-                // 5. Speichere berechnete Stats in Vercel KV
-                const kvKey = `player_stats:${playerId}`;
-                await kv.set(kvKey, JSON.stringify(calculatedStats));
-                console.log(`[CRON UPDATE] Stored calculated stats in KV for ${nickname}`);
+                // 5. Speichere berechnete Stats in Redis
+                const redisKey = `player_stats:${playerId}`;
+                // Use Redis SET command. Set an expiration time (e.g., 1 week in seconds)
+                // Expiration prevents stale data if updates fail later
+                const expirationSeconds = 7 * 24 * 60 * 60; // 1 week
+                await redis.set(redisKey, JSON.stringify(calculatedStats), 'EX', expirationSeconds);
+                console.log(`[CRON UPDATE] Stored calculated stats in Redis for ${nickname} (Key: ${redisKey})`);
                 successCount++;
 
             } else if (!calculationError) {
@@ -150,6 +204,7 @@ export default async function handler(req, res) {
                 errorCount++;
             } else {
                 // Fehler trat schon vorher auf (z.B. History nicht gefunden)
+                console.warn(`[CRON UPDATE] Skipping stats calculation due to earlier error for ${nickname}.`);
                 errorCount++;
             }
 
