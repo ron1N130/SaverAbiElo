@@ -1,22 +1,21 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Removed: const playerGridContainer = document.getElementById('player-grid');
-    const playerList = document.getElementById('player-list'); // Container for the sorted list items (ol)
-    const detailCardContainer = document.getElementById('player-detail-card-container'); // Div containing the card
-    const mainContentArea = document.getElementById('main-content-area'); // Main flex container
+    const playerList = document.getElementById('player-list');
+    const detailCardContainer = document.getElementById('player-detail-card-container');
+    const mainContentArea = document.getElementById('main-content-area');
     const loadingIndicator = document.getElementById('loading-indicator');
     const errorMessageElement = document.getElementById('error-message');
-    const playerListContainerEl = document.getElementById('player-list'); // Reference to the <ol> element (used correctly elsewhere)
+    const playerListContainerEl = document.getElementById('player-list'); // The <ol> element
 
     let allPlayersData = [];
     let currentlyDisplayedNickname = null;
 
     // --- Error Handling & Basic Checks ---
     if (!playerList || !detailCardContainer || !mainContentArea || !loadingIndicator || !errorMessageElement || !playerListContainerEl) {
-        console.error("FEHLER: Wichtige HTML-Elemente (Liste, Detail-Container, Layout, Ladeanzeige, Fehlermeldung oder Listen-OL) fehlen!");
+        console.error("FEHLER: Wichtige HTML-Elemente fehlen!");
         errorMessageElement.textContent = "Fehler beim Initialisieren: Wichtige Seitenelemente nicht gefunden.";
         errorMessageElement.style.display = 'block';
-        if(loadingIndicator) loadingIndicator.style.display = 'none';
-        return; // Stop execution if essential elements are missing
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
+        return;
     }
 
     // --- API Call Function ---
@@ -27,22 +26,81 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ error: `Server error: ${response.status}` }));
                 let displayError = errorData.error || `Server error: ${response.status}`;
-                // More specific error messages
                 if (response.status === 404) displayError = `Spieler "${nickname}" nicht gefunden.`;
                 else if (displayError.includes("API Key missing")) displayError = "Server-Konfigurationsfehler (API Key).";
                 else if (displayError.includes("Database connection failed")) displayError = "Server-Konfigurationsfehler (DB).";
                 else if (response.status === 500) displayError = "Interner Serverfehler.";
-
                 throw new Error(displayError);
             }
             const playerData = await response.json();
+            // Ensure numeric types
             playerData.sortElo = parseInt(playerData.elo, 10) || 0;
+            // Store level also numerically if available
+            playerData.level = parseInt(playerData.level, 10) || 0; // Added level parsing
+            playerData.calculatedRating = parseFloat(playerData.calculatedRating) || null;
+            playerData.kd = parseFloat(playerData.kd) || null;
+            playerData.adr = parseFloat(playerData.adr) || null;
+            playerData.winRate = parseFloat(playerData.winRate) || null;
+            playerData.hsPercent = parseFloat(playerData.hsPercent) || null;
             return playerData;
         } catch (error) {
             console.error(`Fehler Daten ${nickname}:`, error);
-            // Return error object compatible with list display
-            return { nickname: nickname, error: error.message, sortElo: -1 }; // Errors sort last
+            return {nickname: nickname, error: error.message, sortElo: -1, level: 0}; // Include level default
         }
+    }
+
+    // --- Elo Progress Bar Logic for List (Helper) ---
+    function updateEloProgressBarForList(container) {
+        const elo = parseInt(container.dataset.elo || 0, 10);
+        const level = parseInt(container.dataset.level || 0, 10);
+        const bar = container.querySelector('.elo-progress-bar');
+        if (!bar || level === 0) return;
+
+        // Simplified Elo ranges per level (adjust if needed)
+        const eloRanges = {
+            1: [1, 800], 2: [801, 950], 3: [951, 1100], 4: [1101, 1250],
+            5: [1251, 1400], 6: [1401, 1550], 7: [1551, 1700], 8: [1701, 1850],
+            9: [1851, 2000], 10: [2001, 5000] // Define a practical max for level 10 scaling if needed
+        };
+        // Faceit Level Colors (ensure these match CSS variables)
+        const levelColors = {
+            1: '#808080', 2: '#808080', 3: '#FFC107', 4: '#FFC107', 5: '#FFC107',
+            6: '#FFC107', 7: '#FFC107', 8: '#ff5e00', 9: '#ff5e00', 10: '#d60e00'
+        };
+
+        let progressPercent = 0;
+        let barColor = levelColors[1]; // Default grey
+
+        if (level >= 1 && level <= 9) {
+            const [minElo, maxElo] = eloRanges[level]; // Not really used here, next level matters
+            const nextLevelMinElo = eloRanges[level + 1] ? eloRanges[level + 1][0] : eloRanges[level][1]; // Find start of next level
+            const currentLevelMinElo = eloRanges[level][0];
+            const rangeSize = nextLevelMinElo - currentLevelMinElo;
+            if (rangeSize > 0) {
+                const eloInLevel = Math.max(0, elo - currentLevelMinElo);
+                progressPercent = Math.min(100, (eloInLevel / rangeSize) * 100);
+            } else {
+                progressPercent = 100; // Handle potential division by zero or invalid range
+            }
+            barColor = levelColors[level] || levelColors[1];
+        } else if (level === 10) {
+            // Option 1: Always 100% for Level 10
+            // progressPercent = 100;
+            // Option 2: Scale within Level 10 (e.g., 2001 to 3000 represents 0-100%)
+            const minElo10 = eloRanges[10][0];
+            const scaleMaxElo10 = 3000; // Example: Scale up to 3000 Elo
+            const rangeSize10 = scaleMaxElo10 - minElo10;
+            if (rangeSize10 > 0) {
+                const eloInLevel10 = Math.max(0, elo - minElo10);
+                progressPercent = Math.min(100, (eloInLevel10 / rangeSize10) * 100);
+            } else {
+                progressPercent = 100;
+            }
+            barColor = levelColors[10];
+        }
+
+        bar.style.width = `${progressPercent}%`;
+        bar.style.backgroundColor = barColor; // Directly set color
     }
 
     // --- Display Sorted Player List ---
@@ -50,127 +108,143 @@ document.addEventListener('DOMContentLoaded', () => {
         playerListContainerEl.innerHTML = ''; // Clear the list <ol>
         players.forEach((player) => {
             const listItem = document.createElement('li');
-            // WICHTIG: data-nickname Attribut hinzufügen!
             listItem.setAttribute('data-nickname', player.nickname);
 
             if (player.error) {
                 listItem.classList.add('error-item');
                 listItem.innerHTML = `<span class="player-info" style="justify-content: flex-start;">${player.nickname} - Fehler: ${player.error}</span>`;
             } else {
-                const avatarUrl = player.avatar || 'default_avatar.png'; // Use default if none
-                // Original innerHTML without progress bar for now
+                const avatarUrl = player.avatar || 'default_avatar.png';
+                // --- RE-ADDED Elo Progress Bar HTML ---
                 listItem.innerHTML = `
-                     <span class="player-info">
-                         <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
-                         <span class="player-name">${player.nickname}</span>
-                     </span>
-                     <div class="player-list-right">
-                           <span class="player-elo">${player.elo || 'N/A'}</span>
+                    <span class="player-info">
+                        <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
+                        <span class="player-name">${player.nickname}</span>
+                    </span>
+                    <div class="player-list-right">
+                          <span class="player-elo">${player.elo || 'N/A'}</span>
                            <div class="elo-progress-container" data-elo="${player.sortElo || 0}" data-level="${player.level || 0}">
                                 <div class="elo-progress-bar"></div>
                            </div>
-                      </div>
-                 `;
-                // Update progress bar after adding to DOM (if needed, or directly set width)
+                     </div>
+                `;
+                // --- Update the list progress bar ---
                 const progressBarContainer = listItem.querySelector('.elo-progress-container');
                 if (progressBarContainer) {
-                    updateEloProgressBar(progressBarContainer); // Call function to calculate and set width/color
+                    updateEloProgressBarForList(progressBarContainer);
                 }
             }
-            playerListContainerEl.appendChild(listItem); // Add the <li> to the <ol>
+            playerListContainerEl.appendChild(listItem);
         });
     }
 
-    // --- Elo Progress Bar Logic (Helper) ---
-    function updateEloProgressBar(container) {
-        const elo = parseInt(container.dataset.elo || 0, 10);
-        const level = parseInt(container.dataset.level || 0, 10);
-        const bar = container.querySelector('.elo-progress-bar');
-        if (!bar || level === 0) return; // Exit if no bar or level 0
+    // --- Helper Function to Update Stat Progress Bars in Detail Card ---
+    function updateStatProgressBars(cardElement, player) {
+        const statItems = cardElement.querySelectorAll('.stat-item[data-stat]'); // Select only items with data-stat
 
-        // Simplified Elo ranges per level (adjust these based on Faceit's actual ranges if needed)
-        const eloRanges = {
-            1: [1, 800],
-            2: [801, 950],
-            3: [951, 1100],
-            4: [1101, 1250],
-            5: [1251, 1400],
-            6: [1401, 1550],
-            7: [1551, 1700],
-            8: [1701, 1850],
-            9: [1851, 2000],
-            10: [2001, Infinity] // Or a practical upper limit like 5000
+        // Define thresholds and ranges (adjust these values!)
+        // Added Elo thresholds - based on common skill levels maybe?
+        const thresholds = {
+            calculatedRating: {bad: 0.85, okay: 1.05, good: 1.25, max: 1.8},
+            kd: {bad: 0.8, okay: 1.0, good: 1.2, max: 2.0},
+            adr: {bad: 65, okay: 80, good: 95, max: 120},
+            winRate: {bad: 40, okay: 50, good: 60, max: 100},
+            hsPercent: {bad: 30, okay: 40, good: 50, max: 70},
+            elo: {bad: 1100, okay: 1700, good: 2200, max: 3500} // Elo thresholds - Adjust!
         };
 
-        // Level colors (from CSS variables, but needed here for logic)
-        const levelColors = {
-            1: 'var(--faceit-lvl-1-2-color)', // Grey
-            2: 'var(--faceit-lvl-1-2-color)', // Grey
-            3: 'var(--faceit-lvl-3-7-color)', // Yellow
-            4: 'var(--faceit-lvl-3-7-color)',
-            5: 'var(--faceit-lvl-3-7-color)',
-            6: 'var(--faceit-lvl-3-7-color)',
-            7: 'var(--faceit-lvl-3-7-color)',
-            8: 'var(--faceit-lvl-8-9-color)', // Orange
-            9: 'var(--faceit-lvl-8-9-color)', // Orange
-            10: 'var(--faceit-lvl-10-color)'  // Red
-        };
+        statItems.forEach(item => {
+            const statName = item.dataset.stat;
+            const valueElement = item.querySelector('.value');
+            const barElement = item.querySelector('.stat-progress-bar');
+            const labelElement = item.querySelector('.stat-indicator-label');
 
-        let progressPercent = 0;
-        let barColor = levelColors[1]; // Default to grey
+            // Ensure all elements exist AND the stat is in our thresholds config
+            if (!statName || !thresholds[statName] || !barElement || !labelElement || !valueElement) {
+                // console.warn(`Skipping progress bar update for item, missing elements or config:`, item);
+                return;
+            }
 
-        if (level >= 1 && level <= 9) {
-            const [minElo, maxElo] = eloRanges[level];
-            const nextLevelMinElo = eloRanges[level + 1][0];
-            const rangeSize = nextLevelMinElo - minElo;
-            const eloInLevel = Math.max(0, elo - minElo);
-            progressPercent = Math.min(100, (eloInLevel / rangeSize) * 100);
-            barColor = levelColors[level] || levelColors[1];
-        } else if (level === 10) {
-            // For level 10, show 100% progress or scale differently if desired
-            progressPercent = 100;
-            barColor = levelColors[10];
-        }
+            // Use the potentially parsed numeric value from getPlayerData
+            const value = (statName === 'elo') ? player.sortElo : player[statName];
+            const config = thresholds[statName];
 
-        // Apply style
-        bar.style.width = `${progressPercent}%`;
-        bar.style.backgroundColor = barColor;
+            let percentage = 0;
+            let barColor = 'var(--bar-color-bad)';
+            let indicatorText = '---';
+
+            // Use valueElement.classList.contains('na') or check if value is null/undefined
+            if (value !== null && value !== undefined && !valueElement.classList.contains('na')) {
+                // Check if value is numeric after confirming it's not null/undefined
+                if (!isNaN(value)) {
+                    percentage = Math.min(100, Math.max(0, (value / config.max) * 100));
+
+                    if (value >= config.good) {
+                        barColor = 'var(--bar-color-good)';
+                        indicatorText = 'GOOD';
+                    } else if (value >= config.okay) {
+                        barColor = 'var(--bar-color-okay)';
+                        indicatorText = 'OKAY';
+                    } else {
+                        barColor = 'var(--bar-color-bad)';
+                        indicatorText = 'BAD';
+                        // Optional stricter bad check
+                        // indicatorText = (value < config.bad) ? 'BAD' : 'POOR'; // Example
+                    }
+                } else {
+                    // Value exists but is not a number (e.g., "Pending")
+                    indicatorText = valueElement.textContent; // Show "Pending" or similar
+                    barColor = 'var(--bar-background)';
+                }
+
+            } else {
+                // Handle N/A states explicitly marked with 'na' class or null value
+                percentage = 0;
+                barColor = 'var(--bar-background)';
+                indicatorText = 'N/A';
+                if (valueElement.textContent === '...') indicatorText = '...';
+            }
+
+
+            barElement.style.width = `${percentage}%`;
+            barElement.style.backgroundColor = barColor;
+            labelElement.textContent = indicatorText;
+        });
     }
+
 
     // --- Display Detail Card ---
     function displayDetailCard(player) {
         if (!detailCardContainer || !mainContentArea) return;
 
-        // Create the card element
         const cardElement = document.createElement('div');
         cardElement.classList.add('player-card-hltv');
 
-        // Ensure container is visible BEFORE adding card and triggering animation
-        detailCardContainer.style.display = 'block'; // Set display BEFORE adding content
+        detailCardContainer.style.display = 'block';
         detailCardContainer.innerHTML = ''; // Clear previous card
 
-        if (!player) {
-            console.error("Keine Spielerdaten zum Anzeigen übergeben.");
-            detailCardContainer.style.display = 'none';
-            mainContentArea.classList.remove('detail-visible');
-            currentlyDisplayedNickname = null;
-            return;
-        }
-
-        if (player.error) {
+        if (!player || player.error) {
             cardElement.classList.add('error-card');
-            cardElement.innerHTML = `<span class="error-message">${player.nickname} - Fehler: ${player.error}</span>`;
+            const errorMessage = player ? player.error : "Spielerdaten konnten nicht geladen werden.";
+            const nickname = player ? player.nickname : "Unbekannt";
+            cardElement.innerHTML = `<span class="error-message">${nickname} - Fehler: ${errorMessage}</span>`;
         } else {
             const avatarUrl = player.avatar || 'default_avatar.png';
             const faceitProfileUrl = player.faceitUrl && player.faceitUrl.startsWith('http')
                 ? player.faceitUrl
-                : `https://www.faceit.com/en/players/${player.nickname}`; // Construct URL if needed
+                : `https://www.faceit.com/en/players/${player.nickname}`;
             const lastUpdatedText = player.lastUpdated
-                ? `Stats vom ${new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'} ).format(new Date(player.lastUpdated))} Uhr`
+                ? `Stats vom ${new Intl.DateTimeFormat('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }).format(new Date(player.lastUpdated))} Uhr`
                 : 'Stats werden aktualisiert...';
-            const matchesConsideredText = player.matchesConsidered ? `Letzte ~${player.matchesConsidered} Matches` : 'Aktuelle Stats'; // Changed text slightly
+            const matchesConsideredText = player.matchesConsidered ? `Letzte ~${player.matchesConsidered} Matches` : 'Aktuelle Stats';
 
-            // Original card structure
+            // --- Updated HTML including Elo progress bar container ---
             cardElement.innerHTML = `
                 <div class="card-header">
                      <div class="player-info">
@@ -178,41 +252,83 @@ document.addEventListener('DOMContentLoaded', () => {
                              <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
                          </a>
                          <a href="${faceitProfileUrl}" target="_blank" class="player-name"> ${player.nickname} </a>
-                         <span style="font-size: 0.9em; color: #aaa;" title="Aktuelle Elo">(${player.elo || 'N/A'})</span>
-                     </div>
+                         </div>
                      <div class="stats-label" title="${lastUpdatedText}">${matchesConsideredText}</div>
                  </div>
                 <div class="stats-grid">
-                    <div class="stat-item"> <div class="label" title="Berechnetes Perf. Rating (Letzte Matches)">Rating 2.0</div> <div class="value ${!player.calculatedRating || player.calculatedRating === 'N/A' || player.calculatedRating === 'Pending' ? 'na' : ''}">${player.calculatedRating || '...'}</div></div>
-                    <div class="stat-item"> <div class="label" title="K/D Ratio (Letzte Matches)">K/D</div> <div class="value ${!player.kd || player.kd === 'N/A' || player.kd === 'Pending' ? 'na' : ''}">${player.kd || '...'}</div></div>
-                    <div class="stat-item"> <div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div> <div class="value ${!player.adr || player.adr === 'N/A' || player.adr === 'Pending' ? 'na' : ''}">${player.adr || '...'}</div></div>
-                    <div class="stat-item"> <div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div> <div class="value ${!player.winRate || player.winRate === 'N/A' || player.winRate === 'Pending' ? 'na' : ''}">${player.winRate !== undefined && player.winRate !== null ? player.winRate + '%' : '...'}</div></div>
-                    <div class="stat-item"> <div class="label" title="Headshot % (Letzte Matches)">HS %</div> <div class="value ${!player.hsPercent || player.hsPercent === 'N/A' || player.hsPercent === 'Pending' ? 'na' : ''}">${player.hsPercent !== undefined && player.hsPercent !== null ? player.hsPercent + '%' : '...'}</div></div>
-                    <div class="stat-item"> <div class="label">Elo</div> <div class="value ${!player.elo || player.elo === 'N/A' ? 'na' : ''}">${player.elo || 'N/A'}</div></div>
+                    <div class="stat-item" data-stat="calculatedRating">
+                        <div class="stat-header">
+                            <div class="label" title="Berechnetes Perf. Rating (Letzte Matches)">Rating 2.0</div>
+                            <div class="value ${player.calculatedRating === null ? 'na' : ''}">${player.calculatedRating !== null ? player.calculatedRating.toFixed(2) : '...'}</div>
+                        </div>
+                        <div class="stat-progress-container">
+                             <div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                     <div class="stat-item" data-stat="kd">
+                        <div class="stat-header">
+                            <div class="label" title="K/D Ratio (Letzte Matches)">K/D</div>
+                            <div class="value ${player.kd === null ? 'na' : ''}">${player.kd !== null ? player.kd.toFixed(2) : '...'}</div>
+                        </div>
+                        <div class="stat-progress-container">
+                             <div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                     <div class="stat-item" data-stat="adr">
+                        <div class="stat-header">
+                             <div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div>
+                            <div class="value ${player.adr === null ? 'na' : ''}">${player.adr !== null ? player.adr.toFixed(1) : '...'}</div>
+                        </div>
+                        <div class="stat-progress-container">
+                             <div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                    <div class="stat-item" data-stat="winRate">
+                        <div class="stat-header">
+                            <div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div>
+                            <div class="value ${player.winRate === null ? 'na' : ''}">${player.winRate !== null ? player.winRate.toFixed(0) + '%' : '...'}</div>
+                        </div>
+                        <div class="stat-progress-container">
+                             <div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                    <div class="stat-item" data-stat="hsPercent">
+                         <div class="stat-header">
+                             <div class="label" title="Headshot % (Letzte Matches)">HS %</div>
+                             <div class="value ${player.hsPercent === null ? 'na' : ''}">${player.hsPercent !== null ? player.hsPercent.toFixed(0) + '%' : '...'}</div>
+                         </div>
+                         <div class="stat-progress-container">
+                             <div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                    <div class="stat-item" data-stat="elo">
+                         <div class="stat-header">
+                            <div class="label">Elo</div>
+                            <div class="value ${!player.sortElo || player.sortElo === 0 ? 'na' : ''}">${player.sortElo || 'N/A'}</div>
+                         </div>
+                          <div class="stat-progress-container">
+                             <div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
                 </div>`;
-            // Note: Progress bars for detail stats will be added in the next step
+
+            updateStatProgressBars(cardElement, player);
         }
 
         detailCardContainer.appendChild(cardElement);
-        // Remove hiding class in case it was left over from a quick hide/show sequence
         cardElement.classList.remove('is-hiding');
 
-        mainContentArea.classList.add('detail-visible'); // Trigger layout shift/transition
+        mainContentArea.classList.add('detail-visible'); // This class now triggers the list's transform via CSS
         currentlyDisplayedNickname = player?.nickname;
 
-        // Animation/Scroll logic
         requestAnimationFrame(() => {
-            // Trigger the transition defined in CSS by changing opacity/transform
             cardElement.style.opacity = '1';
             cardElement.style.transform = 'translateX(0)';
-
-            // Scroll into view after a short delay
             setTimeout(() => {
-                // Check if the card still belongs to the currently displayed player before scrolling
-                if (player.nickname === currentlyDisplayedNickname) {
+                if (player && player.nickname === currentlyDisplayedNickname) {
                     cardElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
-            }, 100); // Adjust delay if needed
+            }, 100);
         });
     }
 
@@ -220,62 +336,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Hide Detail Card ---
     function hideDetailCard() {
         if (!detailCardContainer || !mainContentArea) return;
-
         const cardElement = detailCardContainer.querySelector('.player-card-hltv');
 
-        if (cardElement && mainContentArea.classList.contains('detail-visible')) { // Only hide if visible
-            console.log("Hiding card for:", currentlyDisplayedNickname);
-            // 1. Start hiding transition on the card itself by changing styles
+        if (cardElement && mainContentArea.classList.contains('detail-visible')) {
             cardElement.style.opacity = '0';
             cardElement.style.transform = 'translateX(20px)';
-            cardElement.classList.add('is-hiding'); // Add class mainly as a status indicator
+            cardElement.classList.add('is-hiding');
 
-            // 2. Remove class from main area to trigger layout shift (list expands)
-            mainContentArea.classList.remove('detail-visible');
-            const hidingNickname = currentlyDisplayedNickname; // Store nickname before resetting
-            currentlyDisplayedNickname = null; // Reset nickname immediately
+            mainContentArea.classList.remove('detail-visible'); // Triggers list transform back to center
+            const hidingNickname = currentlyDisplayedNickname;
+            currentlyDisplayedNickname = null;
 
-            // 3. Wait for the card's transition to end, then hide the container
-            const transitionDuration = 500; // Match CSS transition duration in ms
+            const transitionDuration = 500;
             const transitionEndHandler = () => {
-                // Check if we are still supposed to be hiding this specific card
-                // (i.e., no other card was opened in the meantime)
                 if (currentlyDisplayedNickname === null && detailCardContainer.querySelector('.is-hiding')) {
-                    console.log("Transition ended, hiding container for:", hidingNickname);
-                    detailCardContainer.style.display = 'none'; // Hide container AFTER transition
-                    if(cardElement) {
-                        cardElement.classList.remove('is-hiding'); // Clean up class
-                        // Optional: Clear content only if necessary
-                        // detailCardContainer.innerHTML = '';
-                    }
+                    detailCardContainer.style.display = 'none';
+                    if (cardElement) cardElement.classList.remove('is-hiding');
                 } else {
-                    console.log("Transition ended, but state changed, not hiding container.");
                     if(cardElement) cardElement.classList.remove('is-hiding');
                 }
             };
-
-            // Use setTimeout as the primary mechanism for reliability
             setTimeout(transitionEndHandler, transitionDuration);
-
-            // Optional: Add transitionend listener as a secondary check (less reliable than timeout)
-            /*
-            cardElement.addEventListener('transitionend', (event) => {
-                // Ensure it's the opacity or transform transition ending
-                if (event.propertyName === 'opacity' || event.propertyName === 'transform') {
-                     console.log("TransitionEnd event fired for:", event.propertyName);
-                     transitionEndHandler();
-                }
-            }, { once: true });
-            */
-
         } else if (!mainContentArea.classList.contains('detail-visible')) {
-            // If already hidden, just ensure state is clean
             detailCardContainer.style.display = 'none';
             if(cardElement) cardElement.classList.remove('is-hiding');
             currentlyDisplayedNickname = null;
         }
     }
 
+
+    // --- Load All Player Data ---
+    // Keep loadAllPlayers function as is from the previous step
+
+
+    // --- Event Listener for Player List Clicks ---
+    // Keep event listener function as is from the previous step
+
+
+    // --- Initial Load ---
+    // loadAllPlayers(); // Call loadAllPlayers as before
 
     // --- Load All Player Data ---
     async function loadAllPlayers() {
@@ -298,36 +397,33 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const playerPromises = playerNicknames.map(nickname => getPlayerData(nickname));
-            const results = await Promise.allSettled(playerPromises); // Use allSettled
+            const results = await Promise.allSettled(playerPromises);
 
             allPlayersData = results.map(result => {
                 if (result.status === 'fulfilled') {
                     return result.value;
                 } else {
-                    // Extract nickname from error if possible, or handle differently
                     console.error("Promise rejected:", result.reason);
-                    // Attempt to return a basic error object if the reason contains info
-                    // This part might need adjustment based on how getPlayerData throws errors
                     const errorMessage = result.reason?.message || 'Unbekannter Fehler';
-                    // Try to find nickname in the error message (simple approach)
                     const match = errorMessage.match(/Spieler "([^"]+)" nicht gefunden/);
                     const nickname = match ? match[1] : 'Unbekannt';
-                    return { nickname: nickname, error: errorMessage, sortElo: -1 };
+                    // Ensure level is set for error objects too if needed elsewhere
+                    return {nickname: nickname, error: errorMessage, sortElo: -1, level: 0};
                 }
             });
 
-
-            // Sort players by ELO (descending), errors last
             allPlayersData.sort((a, b) => {
                 const aHasError = !!a.error;
                 const bHasError = !!b.error;
-                if (aHasError && !bHasError) return 1; // a has error, b doesn't -> a comes after b
-                if (!aHasError && bHasError) return -1; // a doesn't have error, b does -> a comes before b
-                if (aHasError && bHasError) return 0; // Both have errors, keep order or sort by name?
-                return (b.sortElo || 0) - (a.sortElo || 0); // Both valid, sort by ELO
+                if (aHasError && !bHasError) return 1;
+                if (!aHasError && bHasError) return -1;
+                if (aHasError && bHasError) { // Sort errors alphabetically by name
+                    return a.nickname.localeCompare(b.nickname);
+                }
+                // Both valid, sort by ELO descending
+                return (b.sortElo || 0) - (a.sortElo || 0);
             });
 
-            // Display the sorted list
             displayPlayerList(allPlayersData);
 
         } catch (error) {
@@ -341,40 +437,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listener for Player List Clicks ---
     playerListContainerEl.addEventListener('click', (event) => {
-        const clickedItem = event.target.closest('li'); // Find the clicked list item
+        const clickedItem = event.target.closest('li');
         if (clickedItem && !clickedItem.classList.contains('error-item')) {
             const nickname = clickedItem.dataset.nickname;
-            console.log("Clicked list item for:", nickname);
             if (nickname) {
                 if (nickname === currentlyDisplayedNickname) {
-                    console.log("Clicked same player, hiding card.");
-                    hideDetailCard(); // Clicked the same player, hide the card
+                    hideDetailCard();
                 } else {
-                    console.log("Clicked new player, showing card for:", nickname);
-                    // Find the player data in the already fetched array
                     const playerData = allPlayersData.find(p => p.nickname === nickname);
                     if (playerData) {
-                        displayDetailCard(playerData); // Display the new player's card
+                        displayDetailCard(playerData);
                     } else {
                         console.error("Daten nicht gefunden für:", nickname);
-                        hideDetailCard(); // Hide card if data is somehow missing
+                        hideDetailCard();
                     }
                 }
             }
-        } else if (clickedItem) {
-            console.log("Clicked on an error item, doing nothing.");
         }
     });
 
     // --- Initial Load ---
     loadAllPlayers();
 
+
     // Refresh functionality (if button exists)
     const refreshButton = document.getElementById('refresh-button');
     if (refreshButton) {
         refreshButton.addEventListener('click', () => {
             console.log("Daten werden manuell neu geladen...");
-            loadAllPlayers(); // Reload all player data
+            loadAllPlayers();
         });
     }
 });
