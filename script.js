@@ -9,6 +9,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let allPlayersData = [];
     let currentlyDisplayedNickname = null;
 
+    // --- Thresholds Definition (centralized) ---
+    // Define thresholds for coloring values and progress bars
+    // Max values are used for scaling progress bars linearly. Adjust as needed!
+    const thresholds = {
+        calculatedRating: {bad: 0.85, okay: 1.05, good: 1.25, max: 1.8},
+        kd: {bad: 0.8, okay: 1.0, good: 1.2, max: 2.0},
+        adr: {bad: 65, okay: 80, good: 95, max: 120},
+        winRate: {bad: 40, okay: 50, good: 60, max: 100},
+        hsPercent: {bad: 30, okay: 40, good: 50, max: 70},
+        elo: {bad: 1100, okay: 1700, good: 2200, max: 3500} // Elo thresholds - Adjust!
+    };
+
+
     // --- Error Handling & Basic Checks ---
     if (!playerList || !detailCardContainer || !mainContentArea || !loadingIndicator || !errorMessageElement || !playerListContainerEl) {
         console.error("FEHLER: Wichtige HTML-Elemente fehlen!");
@@ -19,7 +32,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- API Call Function ---
-    // (Keep API call function as is from previous step)
     async function getPlayerData(nickname) {
         try {
             const apiUrl = `/api/faceit-data?nickname=${encodeURIComponent(nickname)}`;
@@ -50,71 +62,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- Elo Progress Bar Logic for List (Helper) ---
-    // (Keep this function as is from previous step)
+    // --- Elo Progress Bar Logic for List (Helper) - UPDATED ---
     function updateEloProgressBarForList(container) {
         const elo = parseInt(container.dataset.elo || 0, 10);
-        const level = parseInt(container.dataset.level || 0, 10);
+        // We don't use level for color anymore, but might need it for other logic later
+        // const level = parseInt(container.dataset.level || 0, 10);
         const bar = container.querySelector('.elo-progress-bar');
-        if (!bar || level === 0) return;
-        const eloRanges = {
-            1: [1, 800],
-            2: [801, 950],
-            3: [951, 1100],
-            4: [1101, 1250],
-            5: [1251, 1400],
-            6: [1401, 1550],
-            7: [1551, 1700],
-            8: [1701, 1850],
-            9: [1851, 2000],
-            10: [2001, 5000]
-        };
-        const levelColors = {
-            1: '#808080',
-            2: '#808080',
-            3: '#FFC107',
-            4: '#FFC107',
-            5: '#FFC107',
-            6: '#FFC107',
-            7: '#FFC107',
-            8: '#ff5e00',
-            9: '#ff5e00',
-            10: '#d60e00'
-        };
-        let progressPercent = 0;
-        let barColor = levelColors[1];
-        if (level >= 1 && level <= 9) {
-            const nextLevelMinElo = eloRanges[level + 1] ? eloRanges[level + 1][0] : eloRanges[level][1];
-            const currentLevelMinElo = eloRanges[level][0];
-            const rangeSize = nextLevelMinElo - currentLevelMinElo;
-            if (rangeSize > 0) {
-                const eloInLevel = Math.max(0, elo - currentLevelMinElo);
-                progressPercent = Math.min(100, (eloInLevel / rangeSize) * 100);
+        if (!bar) return;
+
+        const config = thresholds.elo; // Use the centralized Elo thresholds
+        let percentage = 0;
+        let barColor = 'var(--bar-color-bad)'; // Default to bad color
+
+        if (elo !== null && !isNaN(elo) && elo > 0) {
+            // Scale progress up to the defined max Elo threshold
+            percentage = Math.min(100, Math.max(0, (elo / config.max) * 100));
+
+            // Determine color based on thresholds
+            if (elo >= config.good) {
+                barColor = 'var(--bar-color-good)';
+            } else if (elo >= config.okay) {
+                barColor = 'var(--bar-color-okay)';
             } else {
-                progressPercent = 100;
+                barColor = 'var(--bar-color-bad)';
             }
-            barColor = levelColors[level] || levelColors[1];
-        } else if (level === 10) {
-            const minElo10 = eloRanges[10][0];
-            const scaleMaxElo10 = 3000;
-            const rangeSize10 = scaleMaxElo10 - minElo10;
-            if (rangeSize10 > 0) {
-                const eloInLevel10 = Math.max(0, elo - minElo10);
-                progressPercent = Math.min(100, (eloInLevel10 / rangeSize10) * 100);
-            } else {
-                progressPercent = 100;
-            }
-            barColor = levelColors[10];
+        } else {
+            // Handle cases like 0 Elo or N/A
+            percentage = 0;
+            barColor = 'var(--bar-background)'; // Use background color for empty bar
         }
-        bar.style.width = `${progressPercent}%`;
-        bar.style.backgroundColor = barColor;
+
+        bar.style.width = `${percentage}%`;
+        bar.style.backgroundColor = barColor; // Set color based on thresholds
     }
 
 
     // --- Display Sorted Player List ---
-    // (Keep this function as is from previous step, calling updateEloProgressBarForList)
     function displayPlayerList(players) {
-        playerListContainerEl.innerHTML = ''; // Clear the list <ol>
+        playerListContainerEl.innerHTML = '';
         players.forEach((player) => {
             const listItem = document.createElement('li');
             listItem.setAttribute('data-nickname', player.nickname);
@@ -130,13 +115,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     </span>
                     <div class="player-list-right">
                           <span class="player-elo">${player.elo || 'N/A'}</span>
-                           <div class="elo-progress-container" data-elo="${player.sortElo || 0}" data-level="${player.level || 0}">
+                           <div class="elo-progress-container" data-elo="${player.sortElo || 0}">
                                 <div class="elo-progress-bar"></div>
                            </div>
                      </div>
                 `;
                 const progressBarContainer = listItem.querySelector('.elo-progress-container');
                 if (progressBarContainer) {
+                    // Call updated function to set width/color based on Elo thresholds
                     updateEloProgressBarForList(progressBarContainer);
                 }
             }
@@ -146,18 +132,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Helper Function to Update Stat Progress Bars AND Value Colors ---
+    // (Uses centralized thresholds object now)
     function updateStatProgressBars(cardElement, player) {
         const statItems = cardElement.querySelectorAll('.stat-item[data-stat]');
-
-        // Define thresholds (same as before)
-        const thresholds = {
-            calculatedRating: {bad: 0.85, okay: 1.05, good: 1.25, max: 1.8},
-            kd: {bad: 0.8, okay: 1.0, good: 1.2, max: 2.0},
-            adr: {bad: 65, okay: 80, good: 95, max: 120},
-            winRate: {bad: 40, okay: 50, good: 60, max: 100},
-            hsPercent: {bad: 30, okay: 40, good: 50, max: 70},
-            elo: {bad: 1100, okay: 1700, good: 2200, max: 3500}
-        };
 
         statItems.forEach(item => {
             const statName = item.dataset.stat;
@@ -165,55 +142,43 @@ document.addEventListener('DOMContentLoaded', () => {
             const barElement = item.querySelector('.stat-progress-bar');
             const labelElement = item.querySelector('.stat-indicator-label');
 
-            if (!statName || !thresholds[statName] || !valueElement) { // Bar/Label might not exist for all stats if we hide them
-                // console.warn(`Skipping progress bar update for item, missing elements or config:`, item);
-                return;
-            }
-            // Ensure bar and label elements exist if we intend to update them
-            if (!barElement || !labelElement) return;
-
+            if (!statName || !thresholds[statName] || !valueElement) return;
+            if (!barElement || !labelElement) return; // Ensure bar elements exist
 
             const value = (statName === 'elo') ? player.sortElo : player[statName];
-            const config = thresholds[statName];
+            const config = thresholds[statName]; // Get config for the current stat
 
             let percentage = 0;
             let barColor = 'var(--bar-color-bad)';
             let indicatorText = '---';
-            let valueClass = 'bad'; // Default class for value color
+            let valueClass = 'bad';
 
-            // --- Reset classes first ---
-            valueElement.classList.remove('good', 'okay', 'bad', 'na');
+            valueElement.classList.remove('good', 'okay', 'bad', 'na'); // Reset classes
 
             if (value !== null && value !== undefined && !isNaN(value)) {
-                // Value is valid and numeric
                 percentage = Math.min(100, Math.max(0, (value / config.max) * 100));
-
                 if (value >= config.good) {
                     barColor = 'var(--bar-color-good)';
                     indicatorText = 'GOOD';
-                    valueClass = 'good'; // Set class for value color
+                    valueClass = 'good';
                 } else if (value >= config.okay) {
                     barColor = 'var(--bar-color-okay)';
                     indicatorText = 'OKAY';
-                    valueClass = 'okay'; // Set class for value color
+                    valueClass = 'okay';
                 } else {
                     barColor = 'var(--bar-color-bad)';
                     indicatorText = 'BAD';
-                    valueClass = 'bad'; // Set class for value color
+                    valueClass = 'bad';
                 }
-                valueElement.classList.add(valueClass); // Add the determined class
-
+                valueElement.classList.add(valueClass);
             } else {
-                // Handle N/A or Pending states
                 percentage = 0;
                 barColor = 'var(--bar-background)';
                 indicatorText = 'N/A';
                 if (valueElement.textContent === '...') indicatorText = '...';
-                valueElement.classList.add('na'); // Add 'na' class for styling
+                valueElement.classList.add('na');
             }
 
-
-            // Apply styles and text
             barElement.style.width = `${percentage}%`;
             barElement.style.backgroundColor = barColor;
             labelElement.textContent = indicatorText;
@@ -222,16 +187,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Display Detail Card ---
-    // (Keep structure mostly the same, ensure updateStatProgressBars is called)
+    // (Keep the structure and call to updateStatProgressBars as is from previous step)
     function displayDetailCard(player) {
         if (!detailCardContainer || !mainContentArea) return;
-
         const cardElement = document.createElement('div');
         cardElement.classList.add('player-card-hltv');
-
         detailCardContainer.style.display = 'block';
         detailCardContainer.innerHTML = '';
-
         if (!player || player.error) {
             cardElement.classList.add('error-card');
             const errorMessage = player ? player.error : "Spielerdaten konnten nicht geladen werden.";
@@ -248,59 +210,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 minute: '2-digit'
             }).format(new Date(player.lastUpdated))} Uhr` : 'Stats werden aktualisiert...';
             const matchesConsideredText = player.matchesConsidered ? `Letzte ~${player.matchesConsidered} Matches` : 'Aktuelle Stats';
-
             cardElement.innerHTML = `
-                <div class="card-header">
-                     <div class="player-info">
-                         <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil öffnen">
-                             <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
-                         </a>
-                         <a href="${faceitProfileUrl}" target="_blank" class="player-name"> ${player.nickname} </a>
-                     </div>
-                     <div class="stats-label" title="${lastUpdatedText}">${matchesConsideredText}</div>
-                 </div>
+                <div class="card-header"><div class="player-info"><a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil öffnen"><img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';"></a><a href="${faceitProfileUrl}" target="_blank" class="player-name"> ${player.nickname} </a></div><div class="stats-label" title="${lastUpdatedText}">${matchesConsideredText}</div></div>
                 <div class="stats-grid">
-                    <div class="stat-item" data-stat="calculatedRating">
-                        <div class="stat-header"><div class="label" title="Berechnetes Perf. Rating (Letzte Matches)">Rating 2.0</div><div class="value">${player.calculatedRating !== null ? player.calculatedRating.toFixed(2) : '...'}</div></div>
-                        <div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div>
-                    </div>
-                     <div class="stat-item" data-stat="kd">
-                        <div class="stat-header"><div class="label" title="K/D Ratio (Letzte Matches)">K/D</div><div class="value">${player.kd !== null ? player.kd.toFixed(2) : '...'}</div></div>
-                        <div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div>
-                    </div>
-                     <div class="stat-item" data-stat="adr">
-                        <div class="stat-header"><div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div><div class="value">${player.adr !== null ? player.adr.toFixed(1) : '...'}</div></div>
-                        <div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div>
-                    </div>
-                    <div class="stat-item" data-stat="winRate">
-                        <div class="stat-header"><div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div><div class="value">${player.winRate !== null ? player.winRate.toFixed(0) + '%' : '...'}</div></div>
-                        <div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div>
-                    </div>
-                    <div class="stat-item" data-stat="hsPercent">
-                         <div class="stat-header"><div class="label" title="Headshot % (Letzte Matches)">HS %</div><div class="value">${player.hsPercent !== null ? player.hsPercent.toFixed(0) + '%' : '...'}</div></div>
-                         <div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div>
-                    </div>
-                    <div class="stat-item" data-stat="elo">
-                         <div class="stat-header"><div class="label">Elo</div><div class="value">${player.sortElo || 'N/A'}</div></div>
-                          <div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div>
-                    </div>
+                    <div class="stat-item" data-stat="calculatedRating"><div class="stat-header"><div class="label" title="Berechnetes Perf. Rating (Letzte Matches)">Rating 2.0</div><div class="value">${player.calculatedRating !== null ? player.calculatedRating.toFixed(2) : '...'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
+                    <div class="stat-item" data-stat="kd"><div class="stat-header"><div class="label" title="K/D Ratio (Letzte Matches)">K/D</div><div class="value">${player.kd !== null ? player.kd.toFixed(2) : '...'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
+                    <div class="stat-item" data-stat="adr"><div class="stat-header"><div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div><div class="value">${player.adr !== null ? player.adr.toFixed(1) : '...'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
+                    <div class="stat-item" data-stat="winRate"><div class="stat-header"><div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div><div class="value">${player.winRate !== null ? player.winRate.toFixed(0) + '%' : '...'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
+                    <div class="stat-item" data-stat="hsPercent"><div class="stat-header"><div class="label" title="Headshot % (Letzte Matches)">HS %</div><div class="value">${player.hsPercent !== null ? player.hsPercent.toFixed(0) + '%' : '...'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
+                    <div class="stat-item" data-stat="elo"><div class="stat-header"><div class="label">Elo</div><div class="value">${player.sortElo || 'N/A'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
                 </div>`;
-
-            updateStatProgressBars(cardElement, player); // Call updater
+            updateStatProgressBars(cardElement, player);
         }
-
         detailCardContainer.appendChild(cardElement);
         cardElement.classList.remove('is-hiding');
-
-        mainContentArea.classList.add('detail-visible'); // Trigger layout transforms
+        mainContentArea.classList.add('detail-visible'); // Trigger layout shift (justify-content)
         currentlyDisplayedNickname = player?.nickname;
-
         requestAnimationFrame(() => {
             cardElement.style.opacity = '1';
             cardElement.style.transform = 'translateX(0)';
             setTimeout(() => {
                 if (player && player.nickname === currentlyDisplayedNickname) {
-                    cardElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    cardElement.scrollIntoView({behavior: 'smooth', block: 'nearest'});
                 }
             }, 100);
         });
@@ -316,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cardElement.style.opacity = '0';
             cardElement.style.transform = 'translateX(20px)';
             cardElement.classList.add('is-hiding');
-            mainContentArea.classList.remove('detail-visible'); // Triggers transforms back
+            mainContentArea.classList.remove('detail-visible'); // Trigger layout shift back
             const hidingNickname = currentlyDisplayedNickname;
             currentlyDisplayedNickname = null;
             const transitionDuration = 500;

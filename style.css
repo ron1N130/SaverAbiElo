@@ -17,11 +17,11 @@
     --bar-color-bad: #ef5350; /* Red */
     --bar-background: #404050;
 
-    /* Faceit Level Colors (for List Elo Bar) */
-    --faceit-lvl-1-2-color: #808080;
-    --faceit-lvl-3-7-color: #FFC107;
-    --faceit-lvl-8-9-color: #ff5e00;
-    --faceit-lvl-10-color: #d60e00;
+    /* --- REMOVED Faceit Level Colors --- */
+    /* --faceit-lvl-1-2-color: #808080; */
+    /* --faceit-lvl-3-7-color: #FFC107; */
+    /* --faceit-lvl-8-9-color: #ff5e00; */
+    /* --faceit-lvl-10-color:  #d60e00; */
 
     /* General Styles */
     --font-family: 'Roboto', sans-serif;
@@ -30,7 +30,7 @@
 
     /* Layout Variables */
     --list-max-width: 450px;
-    --card-max-width: 700px; /* Increased card width */
+    --card-max-width: 700px; /* Keep increased width */
     --layout-gap: 2rem; /* 32px */
 }
 
@@ -47,7 +47,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background: linear-gradient(135deg, rgba(30,30,36,0.95) 0%, rgba(45,45,55,0.98) 100%);
+    background: linear-gradient(135deg, rgba(30, 30, 36, 0.95) 0%, rgba(45, 45, 55, 0.98) 100%);
     background-attachment: fixed;
     overflow-x: hidden;
 }
@@ -67,9 +67,10 @@ header h1 {
 }
 
 /* --- Main Content --- */
+/* Increased max-width slightly more to ensure space */
 main {
     flex-grow: 1;
-    max-width: calc(var(--list-max-width) + var(--card-max-width) + var(--layout-gap) + 4rem); /* Max width accommodates both items + gap + padding */
+    max-width: calc(var(--list-max-width) + var(--card-max-width) + var(--layout-gap) + 6rem);
     width: 100%;
     margin: 0 auto;
 }
@@ -93,13 +94,18 @@ main {
 /* --- Haupt-Layout Container --- */
 #main-content-area {
     display: flex;
-    justify-content: center; /* Keep content centered */
+    /* --- Use justify-content for positioning --- */
+    justify-content: center; /* Default: center the list */
     align-items: flex-start;
     gap: var(--layout-gap);
     padding: 0 calc(var(--layout-gap) / 2);
-    /* Needed for children positioning with transform */
-    position: relative;
-    min-height: 600px; /* Ensure container has height for positioning */
+    /* Add transition for justify-content change - might not be smooth visually, but sets state */
+    /* transition: justify-content 0.5s ease-in-out; */ /* Removed as ineffective */
+}
+
+/* --- When card is visible, push list to left --- */
+#main-content-area.detail-visible {
+    justify-content: flex-start; /* Push list to left, card appears next */
 }
 
 /* --- Spielerliste --- */
@@ -116,12 +122,9 @@ main {
     display: flex;
     flex-direction: column;
     max-height: calc(80vh - 4rem);
-    /* --- Transition for smooth sliding --- */
-    transition: transform 0.5s ease-in-out;
-    /* Default centered position (relative to flex center) */
-    transform: translateX(0);
-    /* Add z-index if needed during transition */
-    /* z-index: 10; */
+    /* --- REMOVED Transform Transition/Rules --- */
+    /* transition: transform 0.5s ease-in-out; */
+    /* transform: translateX(0); */
 }
 
 /* --- Spieler Detailkarte --- */
@@ -132,24 +135,14 @@ main {
     position: sticky;
     top: 1rem;
     flex-shrink: 0;
-    /* --- Transition for smooth sliding --- */
-    transition: transform 0.5s ease-in-out;
-    /* Default position (off-center or handled by card opacity/transform) */
-    transform: translateX(0); /* Start at center offset? */
-    /* z-index: 10; */
+    /* --- REMOVED Transform Transition/Rules --- */
+    /* transition: transform 0.5s ease-in-out; */
+    /* transform: translateX(0); */
 }
 
-
-/* --- Sliding Logic using Transform for Centered Pair --- */
-#main-content-area.detail-visible #player-list-container {
-    /* Shift Left */
-    transform: translateX(calc(-1 * (var(--card-max-width) / 2 + var(--layout-gap) / 2)));
-}
-
-#main-content-area.detail-visible #player-detail-card-container {
-    /* Shift Right */
-    transform: translateX(calc(var(--list-max-width) / 2 + var(--layout-gap) / 2));
-}
+/* --- REMOVED Transform Rules for Positioning --- */
+/* #main-content-area.detail-visible #player-list-container { ... } */
+/* #main-content-area.detail-visible #player-detail-card-container { ... } */
 
 
 #player-list-container h2 {
@@ -265,6 +258,7 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
     text-align: right;
 }
 
+/* --- List Elo Progress Bar Styles (Uses GOOD/OKAY/BAD colors now via JS) --- */
 .elo-progress-container {
     width: 60px;
     height: 6px;
@@ -275,8 +269,8 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
 
 .elo-progress-bar {
     height: 100%;
-    width: 0%;
-    background-color: var(--faceit-lvl-1-2-color);
+    width: 0%; /* Default color set by JS */
+    background-color: var(--bar-color-bad);
     border-radius: 3px;
     transition: width 0.5s ease-in-out, background-color 0.5s ease-in-out;
 }
@@ -295,13 +289,11 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
     transform: translateX(20px);
     transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
 }
-
+/* Card fade/slide in */
 #main-content-area.detail-visible .player-card-hltv {
     opacity: 1;
     transform: translateX(0);
 }
-
-/* Card fade/slide in */
 
 .player-card-hltv .card-header {
     display: flex;
@@ -347,7 +339,7 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
 
 .player-card-hltv .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* Adjust min width if card is wider */
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 1.5rem;
 }
 
@@ -376,12 +368,12 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
     margin: 0;
 }
 
-/* --- Stat Value Coloring --- */
+/* Stat Value Coloring */
 .player-card-hltv .stat-item .value {
     font-size: 1.2rem;
     font-weight: bold;
-    color: var(--text-primary); /* Default color */
-    transition: color 0.4s ease; /* Add transition for color change */
+    color: var(--text-primary);
+    transition: color 0.4s ease;
 }
 
 .player-card-hltv .stat-item .value.good {
@@ -399,7 +391,7 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
 .player-card-hltv .stat-item .value.na {
     color: var(--text-secondary);
     font-style: italic;
-    font-size: 1rem;
+    font-size: 1rem; /* Keep specific NA style */
 }
 
 
@@ -469,25 +461,24 @@ footer {
 footer p { margin: 0.1rem 0;}
 
 /* --- Responsive Anpassungen --- */
-/* Adjust breakpoint if card width changes significantly */
-@media (max-width: 1200px) {
-    /* Adjust this breakpoint based on new widths + gap */
+/* Adjust breakpoint if needed based on new layout */
+@media (max-width: 1250px) {
+    /* Adjusted breakpoint */
     #main-content-area {
         flex-direction: column;
         align-items: center;
         gap: 1.5rem;
-        padding: 0 1rem; /* Adjust padding */
+        padding: 0 1rem;
+        /* Ensure justify-content is reset for stacking */
+        justify-content: center !important;
     }
 
-    /* Reset transforms when stacking */
+    /* Reset max-width for stacked view */
     #main-content-area #player-list-container,
-    #main-content-area.detail-visible #player-list-container,
-    #main-content-area #player-detail-card-container,
-    #main-content-area.detail-visible #player-detail-card-container {
-        transform: translateX(0) !important;
-        max-width: 600px; /* Allow list/card to be wider when stacked */
+    #main-content-area #player-detail-card-container {
+        max-width: 650px; /* Allow reasonable width when stacked */
         width: 100%;
-        position: static; /* Reset sticky */
+        position: static;
         transition: none;
     }
 
@@ -495,7 +486,6 @@ footer p { margin: 0.1rem 0;}
         max-height: none;
     }
 
-    /* Remove height limit */
     ol#player-list {
         max-height: none;
         overflow-y: visible;
@@ -521,9 +511,13 @@ footer p { margin: 0.1rem 0;}
 }
 
 @media (max-width: 600px) {
-    /* Adjust second breakpoint if needed */
-    body { padding: 0; }
-    header h1 { font-size: 1.5rem; }
+    body {
+        padding: 0;
+    }
+
+    header h1 {
+        font-size: 1.5rem;
+    }
 
     #player-list-container, #player-detail-card-container {
         max-width: 100%;
@@ -532,8 +526,14 @@ footer p { margin: 0.1rem 0;}
         border-radius: 0;
         box-shadow: none;
     }
-    #player-list-container { padding: 0.5rem 0; }
-    .player-card-hltv { padding: 1rem; }
+
+    #player-list-container {
+        padding: 0.5rem 0;
+    }
+
+    .player-card-hltv {
+        padding: 1rem;
+    }
     .player-list-sorted li { padding: 0.6rem 0.8rem; gap: 0.8rem;}
 
     .player-list-sorted .avatar {
@@ -541,8 +541,14 @@ footer p { margin: 0.1rem 0;}
         height: 35px;
     }
     .player-list-sorted .player-name { font-size: 0.95rem; }
-    .player-list-right { min-width: 50px; }
-    .player-list-sorted .player-elo { font-size: 0.9rem; }
+
+    .player-list-right {
+        min-width: 50px;
+    }
+
+    .player-list-sorted .player-elo {
+        font-size: 0.9rem;
+    }
 
     .elo-progress-container {
         width: 50px;
@@ -554,7 +560,6 @@ footer p { margin: 0.1rem 0;}
         grid-template-columns: 1fr 1fr;
         gap: 0.8rem;
     }
-
 
     .player-card-hltv .stat-item {
         padding: 0.6rem 0.8rem;
