@@ -1,9 +1,14 @@
 :root {
     /* ... Color Palette ... */
     --bg-color: #1e1e24;
-    --card-bg-color-rgb: 38, 38, 46; /* ... */
+    --card-bg-color-rgb: 38, 38, 46;
+    --card-bg-color: rgba(var(--card-bg-color-rgb), 0.75);
+    --glass-blur: 8px;
+    --glass-border-color: rgba(255, 255, 255, 0.1);
     --text-primary: #f0f0f5;
-    /* ... other colors ... */
+    --text-secondary: #a0a0b0;
+    --accent-blue: #4a90e2;
+    --border-color: #353540;
     --bar-color-good: #66bb6a;
     --bar-color-okay: #ffee58;
     --bar-color-bad: #ef5350;
@@ -11,7 +16,8 @@
 
     /* ... General Styles ... */
     --font-family: 'Roboto', sans-serif;
-    --border-radius: 8px; /* ... */
+    --border-radius: 8px;
+    --box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
 
     /* Layout Variables */
     --list-max-width: 450px;
@@ -20,329 +26,128 @@
 }
 
 /* ... html, body, header, main, loading/error styles ... */
-html {
-    box-sizing: border-box;
-}
-
-*, *:before, *:after {
-    box-sizing: inherit;
-}
-
-body { /* ... */
-    overflow-x: hidden;
-}
-
-header { /* ... */
-}
-
-header h1 { /* ... */
-}
-
-main { /* ... */
-}
-
-#loading-indicator, #error-message { /* ... */
-}
-
-#error-message { /* ... */
-}
+html { box-sizing: border-box; } *, *:before, *:after { box-sizing: inherit; }
+body { font-family: var(--font-family); background-color: var(--bg-color); color: var(--text-primary); margin: 0; padding: 0 1rem; line-height: 1.6; display: flex; flex-direction: column; min-height: 100vh; background: linear-gradient(135deg, rgba(30,30,36,0.95) 0%, rgba(45,45,55,0.98) 100%); background-attachment: fixed; overflow-x: hidden; }
+header { text-align: center; margin-bottom: 2rem; padding: 1rem 0; border-bottom: 1px solid var(--border-color); } header h1 { margin: 0; font-weight: 700; color: var(--text-primary); }
+main { flex-grow: 1; max-width: calc(var(--list-max-width) + var(--card-max-width) + var(--layout-gap) + 6rem); width: 100%; margin: 0 auto; }
+#loading-indicator, #error-message { /* ... styles ... */ } #error-message { color: var(--bar-color-bad); font-weight: bold; }
 
 /* --- Haupt-Layout Container --- */
-#main-content-area {
-    display: flex;
-    /* --- Use justify-content for positioning --- */
-    justify-content: center; /* Default: center the list */
-    align-items: flex-start;
-    gap: var(--layout-gap);
-    padding: 0 calc(var(--layout-gap) / 2);
-    /* REMOVED position: relative; min-height */
-    /* REMOVED transition: justify-content */
-}
-
-/* When card is visible, push list to left */
-#main-content-area.detail-visible {
-    justify-content: flex-start;
-}
+#main-content-area { display: flex; justify-content: center; align-items: flex-start; gap: var(--layout-gap); padding: 0 calc(var(--layout-gap) / 2); }
+#main-content-area.detail-visible { justify-content: flex-start; }
 
 /* --- Spielerliste --- */
-#player-list-container {
-    /* ... background, border, padding etc ... */
-    background-color: var(--card-bg-color);
-    backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid var(--glass-border-color);
-    border-radius: var(--border-radius);
-    padding: 1rem 0;
-    box-shadow: var(--box-shadow);
-    width: 100%;
-    max-width: var(--list-max-width); /* Static width */
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    max-height: calc(80vh - 4rem);
-    /* --- REMOVED Transform Transition/Rules --- */
-    /* transition: transform 0.5s ease-in-out; */
-    /* transform: translateX(0); */
-}
-
-/* --- Spieler Detailkarte --- */
-#player-detail-card-container {
-    width: 100%;
-    max-width: var(--card-max-width);
-    display: none; /* Controlled by JS */
-    position: sticky;
-    top: 1rem;
-    flex-shrink: 0;
-    /* --- REMOVED Transform Transition/Rules --- */
-    /* transition: transform 0.5s ease-in-out; */
-    /* transform: translateX(0); */
-}
-
-/* --- REMOVED Transform Rules for Positioning --- */
-/* #main-content-area.detail-visible #player-list-container { ... } */
-/* #main-content-area.detail-visible #player-detail-card-container { ... } */
-
-
-#player-list-container h2 { /* ... */
-}
-
-ol#player-list { /* ... scrollbar styles ... */
-}
-
-/* ... li, .player-info, .avatar, .player-name styles ... */
-.player-list-right { /* ... */
-}
-
-.player-list-sorted .player-elo {
-    font-weight: bold;
-    color: var(--text-primary);
-    font-size: 0.95em;
-    margin-bottom: 2px;
-    text-align: right;
-}
-
-/* Color changed */
+#player-list-container { background-color: var(--card-bg-color); backdrop-filter: blur(var(--glass-blur)); border: 1px solid var(--glass-border-color); border-radius: var(--border-radius); padding: 1rem 0; box-shadow: var(--box-shadow); width: 100%; max-width: var(--list-max-width); flex-shrink: 0; display: flex; flex-direction: column; max-height: calc(80vh - 4rem); }
+#player-list-container h2 { /* ... styles ... */ }
+ol#player-list { /* ... scrollbar styles ... */ list-style: none; padding: 0; margin: 0; counter-reset: player-rank-counter; flex-grow: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border-color) rgba(var(--card-bg-color-rgb), 0.1); }
+ol#player-list::-webkit-scrollbar { width: 8px; } ol#player-list::-webkit-scrollbar-track { background: rgba(var(--card-bg-color-rgb), 0.1); border-radius: 4px; margin: 0 2px; } ol#player-list::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 4px; border: 2px solid transparent; background-clip: content-box; } ol#player-list::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
+.player-list-sorted li { /* ... styles ... */ } .player-list-sorted li:last-child { border-bottom: none; } .player-list-sorted li:hover { background-color: rgba(var(--card-bg-color-rgb), 0.95); } .player-list-sorted li::before { /* ... counter styles ... */ }
+.player-list-sorted .player-info { /* ... styles ... */ } .player-list-sorted .avatar { /* ... styles ... */ } .player-list-sorted .player-name { /* ... styles ... */ }
+.player-list-right { display: flex; flex-direction: column; align-items: flex-end; min-width: 60px; }
+.player-list-sorted .player-elo { font-weight: bold; color: var(--text-primary); font-size: 0.95em; margin-bottom: 2px; text-align: right; }
 
 /* --- Base Styles for Progress Bar Containers (List and Detail) --- */
 .progress-container-base {
-    width: 100%;
-    height: 8px;
+    width: 100%; /* Make containers take full width */
+    height: 8px; /* Standard height */
     background-color: var(--bar-background);
     border-radius: 4px;
     overflow: hidden;
-    position: relative; /* For markers */
+    position: relative; /* Needed for marker pseudo-elements */
 }
-
-.elo-progress-container { /* Specific width/height for list bar */
+/* Specific width for list container */
+.elo-progress-container {
     width: 60px;
-    height: 6px;
+    height: 6px; /* Keep list bar thinner */
 }
-
-.elo-progress-container .progress-container-base::before, /* Adjust marker size/pos for list */
-.elo-progress-container .progress-container-base::after {
-    top: 0px;
-    bottom: 0px;
-    width: 1px;
-    background-color: rgba(255, 255, 255, 0.4);
+/* Adjust height of list indicator label */
+.elo-progress-container + .stat-indicator-label { /* Assuming label follows container */
+    line-height: 6px;
 }
-
 
 /* --- Progress Bar Markers --- */
 .progress-container-base::before,
 .progress-container-base::after {
     content: '';
     position: absolute;
-    top: 1px;
+    top: 1px; /* Offset slightly from top/bottom */
     bottom: 1px;
-    width: 2px;
-    background-color: rgba(30, 30, 36, 0.7); /* Darker marker for contrast */
-    z-index: 1;
+    width: 2px; /* Make marker slightly thicker */
+    background-color: rgba(255, 255, 255, 0.3); /* Semi-transparent white */
+    z-index: 1; /* Above the bar fill */
     border-radius: 1px;
-    opacity: 0; /* Hidden by default */
+    /* Hide markers by default if position is 0 */
+    opacity: 0;
     transition: opacity 0.3s ease;
-    pointer-events: none; /* Prevent markers interfering */
 }
-
-/* Show marker if position is set via JS and not 0 */
-.progress-container-base[style*="--okay-marker-pos"]:not([style*="0%"])::before,
-.progress-container-base[style*="--good-marker-pos"]:not([style*="0%"])::after {
+/* Show marker if position is set via JS */
+.progress-container-base[style*="--okay-marker-pos"]:not([style*="--okay-marker-pos: 0%"])::before,
+.progress-container-base[style*="--good-marker-pos"]:not([style*="--good-marker-pos: 0%"])::after {
     opacity: 1;
 }
 
 .progress-container-base::before {
-    left: var(--okay-marker-pos, 0%);
+    left: var(--okay-marker-pos, 0%); /* Position set by JS */
 }
-
 .progress-container-base::after {
-    left: var(--good-marker-pos, 0%);
+    left: var(--good-marker-pos, 0%); /* Position set by JS */
 }
 
 
-/* List Elo Progress Bar Fill */
-.elo-progress-bar {
-    height: 100%;
-    width: 0%;
-    background-color: var(--bar-color-bad);
-    border-radius: 3px;
-    transition: width 0.5s ease-in-out, background-color 0.5s ease-in-out;
+/* --- List Elo Progress Bar --- */
+.elo-progress-bar { height: 100%; width: 0%; background-color: var(--bar-color-bad); border-radius: 3px; transition: width 0.5s ease-in-out, background-color 0.5s ease-in-out; }
+
+
+/* --- Detail Card --- */
+#player-detail-card-container { width: 100%; max-width: var(--card-max-width); display: none; position: sticky; top: 1rem; flex-shrink: 0; }
+.player-card-hltv { background-color: var(--card-bg-color); backdrop-filter: blur(var(--glass-blur)); border: 1px solid var(--glass-border-color); border-radius: var(--border-radius); padding: 1.5rem; box-shadow: var(--box-shadow); width: 100%; opacity: 0; transform: translateX(20px); transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out; }
+#main-content-area.detail-visible .player-card-hltv { opacity: 1; transform: translateX(0); }
+.player-card-hltv .card-header { /* ... styles ... */ } .player-card-hltv .player-info { /* ... styles ... */ } .player-card-hltv .player-info a { display: contents; } .player-card-hltv .avatar { /* ... styles ... */ } .player-card-hltv .player-name { /* ... styles ... */ } .player-card-hltv .player-name:hover { color: var(--accent-blue); } .player-card-hltv .stats-label { /* ... styles ... */ }
+.player-card-hltv .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1.5rem; }
+.player-card-hltv .stat-item { background-color: rgba(var(--card-bg-color-rgb), 0.5); padding: 0.8rem 1rem; border-radius: 6px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.5rem; min-height: 75px; justify-content: space-between; }
+.player-card-hltv .stat-item .stat-header { display: flex; justify-content: space-between; align-items: baseline; width: 100%; }
+.player-card-hltv .stat-item .label { font-size: 0.85rem; color: var(--text-secondary); margin: 0; }
+.player-card-hltv .stat-item .value { font-size: 1.2rem; font-weight: bold; color: var(--text-primary); transition: color 0.4s ease; }
+.player-card-hltv .stat-item .value.good { color: var(--bar-color-good); } .player-card-hltv .stat-item .value.okay { color: var(--bar-color-okay); } .player-card-hltv .stat-item .value.bad { color: var(--bar-color-bad); }
+.player-card-hltv .stat-item .value.na { color: var(--text-secondary); font-style: italic; font-size: 1rem; }
+
+/* --- Detail Card Progress Bar Container (inherits base styles) --- */
+.stat-progress-container {
+    /* Inherits from .progress-container-base */
 }
+.stat-progress-bar { height: 100%; width: 0%; background-color: var(--bar-color-bad); border-radius: 4px 0 0 4px; transition: width 0.6s ease-in-out, background-color 0.6s ease-in-out; }
+.stat-progress-bar[style*="width: 100%"] { border-radius: 4px; }
+.stat-indicator-label { font-size: 0.65rem; font-weight: bold; color: rgba(0, 0, 0, 0.7); position: absolute; right: 5px; line-height: 8px; text-transform: uppercase; mix-blend-mode: screen; filter: grayscale(1) brightness(1.5); }
 
+/* Error Styles */
+.player-card-hltv.error-card { /* ... styles ... */ } .player-card-hltv .error-message { /* ... styles ... */ }
+.player-list-sorted li.error-item { /* ... styles ... */ } .player-list-sorted li.error-item:hover { background-color: transparent; }
 
-/* --- Detail Card Styles --- */
-/* Card fade/slide in transition */
-.player-card-hltv { /* ... other styles ... */
-    opacity: 0;
-    transform: translateX(20px);
-    transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
-}
+/* Footer Styles */
+footer { /* ... styles ... */ } footer p { margin: 0.1rem 0;}
 
-#main-content-area.detail-visible .player-card-hltv {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.player-card-hltv .card-header { /* ... */
-}
-
-.player-card-hltv .player-info { /* ... */
-}
-
-/* ... avatar, name ... */
-.player-card-hltv .stats-grid { /* ... */
-}
-
-.player-card-hltv .stat-item { /* ... */
-}
-
-.player-card-hltv .stat-item .stat-header { /* ... */
-}
-
-.player-card-hltv .stat-item .label { /* ... */
-}
-
-/* Stat Value Coloring */
-.player-card-hltv .stat-item .value {
-    font-size: 1.2rem;
-    font-weight: bold;
-    color: var(--text-primary);
-    transition: color 0.4s ease;
-}
-
-.player-card-hltv .stat-item .value.good {
-    color: var(--bar-color-good);
-}
-
-.player-card-hltv .stat-item .value.okay {
-    color: var(--bar-color-okay);
-}
-
-.player-card-hltv .stat-item .value.bad {
-    color: var(--bar-color-bad);
-}
-
-.player-card-hltv .stat-item .value.na {
-    color: var(--text-secondary);
-    font-style: italic;
-    font-size: 1rem;
-}
-
-/* Detail Card Progress Bar Container (inherits base styles) */
-.stat-progress-container { /* Inherits from .progress-container-base */
-}
-
-.stat-progress-bar {
-    height: 100%;
-    width: 0%;
-    background-color: var(--bar-color-bad);
-    border-radius: 4px 0 0 4px;
-    transition: width 0.6s ease-in-out, background-color 0.6s ease-in-out;
-}
-
-.stat-progress-bar[style*="width: 100%"] {
-    border-radius: 4px;
-}
-
-.stat-indicator-label {
-    font-size: 0.65rem;
-    font-weight: bold;
-    color: rgba(0, 0, 0, 0.7);
-    position: absolute;
-    right: 5px;
-    line-height: 8px;
-    text-transform: uppercase;
-    mix-blend-mode: screen;
-    filter: grayscale(1) brightness(1.5);
-}
-
-/* ... Error Styles ... */
-/* ... Footer Styles ... */
-/* ... Responsive Styles ... */
-@media (max-width: 1250px) {
-    #main-content-area {
-        flex-direction: column;
-        align-items: center;
-        gap: 1.5rem;
-        padding: 0 1rem;
-        justify-content: center !important;
-    }
+/* Responsive Styles */
+@media (max-width: 1250px) { /* Adjusted breakpoint */
+    #main-content-area { flex-direction: column; align-items: center; gap: 1.5rem; padding: 0 1rem; justify-content: center !important; }
     #main-content-area #player-list-container,
-    #main-content-area #player-detail-card-container {
-        max-width: 650px;
-        width: 100%;
-        position: static;
-        transition: none;
-    }
-
-    #player-list-container {
-        max-height: none;
-    }
-
-    ol#player-list { /* ... */
-    }
-
-    .player-card-hltv {
-        margin-top: 0;
-        animation: none;
-    }
-
-    #main-content-area.detail-visible .player-card-hltv {
-        opacity: 1;
-        transform: translateX(0);
-    }
+    #main-content-area #player-detail-card-container { max-width: 650px; width: 100%; position: static; transition: none; }
+    #player-list-container { max-height: none; }
+    ol#player-list { max-height: none; overflow-y: visible; scrollbar-width: none; &::-webkit-scrollbar { display: none; }}
+    .player-card-hltv { margin-top: 0; animation: none; }
+    #main-content-area.detail-visible .player-card-hltv { opacity: 1; transform: translateX(0); }
     .player-card-hltv .card-header { flex-direction: column; text-align: center; gap: 0.8rem; }
-
-    /* ... other stacked styles ... */
-    .progress-container-base::before, .progress-container-base::after {
-        display: none;
-    }
+    .player-card-hltv .avatar { width: 70px; height: 70px; }
+    .player-card-hltv .player-name { font-size: 1.6rem; }
+    /* Hide markers on smaller viewports if too cluttered */
+    .progress-container-base::before, .progress-container-base::after { display: none; }
 }
 
 @media (max-width: 600px) {
     /* ... other mobile styles ... */
-    main {
-        max-width: 100%;
-    }
-
-    #player-list-container, #player-detail-card-container {
-        max-width: 100%;
-        border-left: none;
-        border-right: none;
-        border-radius: 0;
-        box-shadow: none;
-    }
-
-    .elo-progress-container {
-        width: 50px;
-        height: 5px;
-    }
-
-    /* Adjust list Elo bar */
-    .stat-progress-container {
-        height: 6px;
-    }
-
-    .stat-indicator-label {
-        font-size: 0.6rem;
-        line-height: 6px;
-        right: 3px;
-    }
+    main { max-width: 100%; } /* Allow full width */
+    #player-list-container, #player-detail-card-container { max-width: 100%; border-left: none; border-right: none; border-radius: 0; box-shadow: none; }
+    .elo-progress-container { width: 50px; height: 5px;}
+    .player-card-hltv .stats-grid { grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+    .player-card-hltv .stat-item { padding: 0.6rem 0.8rem; min-height: 65px; }
+    .stat-progress-container { height: 6px; } .stat-indicator-label { font-size: 0.6rem; line-height: 6px; right: 3px;}
 }

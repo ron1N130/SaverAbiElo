@@ -119,7 +119,7 @@ export default async function handler(req, res) {
     const nicknames = getPlayerNicknames();
     if (!nicknames || nicknames.length === 0) {
         console.log('[CRON UPDATE] No players found or error reading players.json. Exiting.');
-        return res.status(200).json({message: 'No players found or error reading list.'});
+        return res.status(200).json({ message: 'No players found or error reading list.' });
     }
 
     let successCount = 0;
@@ -130,16 +130,7 @@ export default async function handler(req, res) {
         const nickname = nicknames[i];
         console.log(`[CRON UPDATE] Processing player ${i + 1}/${totalPlayers}: ${nickname}`);
         let playerId = null;
-        let recentMatchesData = {
-            kills: 0,
-            deaths: 0,
-            rounds: 0,
-            adrSum: 0,
-            hsCount: 0,
-            wins: 0,
-            matchesProcessed: 0,
-            perfScoreSum: 0
-        }; // Start deaths at 0
+        let recentMatchesData = { kills: 0, deaths: 0, rounds: 0, adrSum: 0, hsCount: 0, wins: 0, matchesProcessed: 0, perfScoreSum: 0 }; // Start deaths at 0
         let calculationError = false;
 
         try {
@@ -182,17 +173,13 @@ export default async function handler(req, res) {
 
                         if (playerStatsInMatch?.player_stats) {
                             const stats = playerStatsInMatch.player_stats;
-                            const k = parseInt(stats.Kills || 0, 10);
-                            const d = parseInt(stats.Deaths || 0, 10);
-                            const r = parseInt(stats.Rounds || 0, 10);
+                            const k = parseInt(stats.Kills || 0, 10); const d = parseInt(stats.Deaths || 0, 10); const r = parseInt(stats.Rounds || 0, 10);
                             const hs = parseInt(stats['Headshots %'] || stats.Headshots || 0, 10); // Check both Headshots % and Headshots
                             const dmg = parseInt(stats.Damage || 0, 10); // Not standard, check if available in API response
                             const win = stats.Result === "1";
 
                             if (r > 0) { // Only count matches with rounds
-                                recentMatchesData.kills += k;
-                                recentMatchesData.deaths += d;
-                                recentMatchesData.rounds += r;
+                                recentMatchesData.kills += k; recentMatchesData.deaths += d; recentMatchesData.rounds += r;
                                 // Use Headshots count if available, otherwise calculate from % if needed (more complex)
                                 recentMatchesData.hsCount += parseInt(stats.Headshots || 0, 10); // Prefer direct count
                                 if (win) recentMatchesData.wins++;
@@ -210,12 +197,8 @@ export default async function handler(req, res) {
 
                                 recentMatchesData.matchesProcessed++;
                             }
-                        } else {
-                            console.warn(`[CRON UPDATE ${nickname}] Player stats not found in match ${matchId}.`);
-                        }
-                    } catch (matchError) {
-                        console.error(`[CRON UPDATE ${nickname}] Error fetching/processing stats for match ${matchId}:`, matchError);
-                    }
+                        } else { console.warn(`[CRON UPDATE ${nickname}] Player stats not found in match ${matchId}.`); }
+                    } catch (matchError) { console.error(`[CRON UPDATE ${nickname}] Error fetching/processing stats for match ${matchId}:`, matchError); }
                 } // Ende Match-Loop
             }
 
@@ -254,13 +237,8 @@ export default async function handler(req, res) {
                     }
                 }
 
-            } else if (!calculationError) {
-                console.warn(`[CRON UPDATE ${nickname}] No valid match details processed. Cannot calculate stats.`);
-                errorCount++;
-            } else {
-                console.warn(`[CRON UPDATE ${nickname}] Skipping stats calculation due to history fetch error for ${nickname}.`);
-                errorCount++;
-            }
+            } else if (!calculationError) { console.warn(`[CRON UPDATE ${nickname}] No valid match details processed. Cannot calculate stats.`); errorCount++; }
+            else { console.warn(`[CRON UPDATE ${nickname}] Skipping stats calculation due to history fetch error for ${nickname}.`); errorCount++; }
 
         } catch (error) {
             console.error(`[CRON UPDATE ${nickname}] FAILED processing player:`, error);
