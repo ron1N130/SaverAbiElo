@@ -1,15 +1,24 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Elemente holen
-    const playerListContainerEl = document.getElementById('player-list'); // Das <ol> Element
-    const detailCardContainerEl = document.getElementById('player-detail-card-container');
-    const mainContentAreaEl = document.getElementById('main-content-area');
-    const loadingIndicatorEl = document.getElementById('loading-indicator');
+    // Removed: const playerGridContainer = document.getElementById('player-grid');
+    const playerList = document.getElementById('player-list'); // Container for the sorted list
+    const detailCardContainer = document.getElementById('player-detail-card-container');
+    const mainContentArea = document.getElementById('main-content-area');
+    const loadingIndicator = document.getElementById('loading-indicator');
     const errorMessageElement = document.getElementById('error-message');
 
-    let allPlayersData = []; // Speichert alle Spielerdaten
-    let currentlyDisplayedNickname = null; // Speichert den aktuell angezeigten Spieler
+    let allPlayersData = [];
+    let currentlyDisplayedNickname = null;
 
-    // Funktion zum Abrufen von Spielerdaten (Backend unverändert)
+    // --- Error Handling & Basic Checks ---
+    if (!playerList || !detailCardContainer || !mainContentArea || !loadingIndicator || !errorMessageElement) {
+        console.error("FEHLER: Wichtige HTML-Elemente (Liste, Detail, Layout, Ladeanzeige oder Fehlermeldung) fehlen!");
+        errorMessageElement.textContent = "Fehler beim Initialisieren: Wichtige Seitenelemente nicht gefunden.";
+        errorMessageElement.style.display = 'block';
+        if(loadingIndicator) loadingIndicator.style.display = 'none';
+        return; // Stop execution if essential elements are missing
+    }
+
+    // --- API Call Function ---
     async function getPlayerData(nickname) {
         try {
             const apiUrl = `/api/faceit-data?nickname=${encodeURIComponent(nickname)}`;
@@ -17,10 +26,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ error: `Server error: ${response.status}` }));
                 let displayError = errorData.error || `Server error: ${response.status}`;
-                if (response.status === 404) { displayError = `Spieler "${nickname}" nicht gefunden.`; }
-                else if (response.status === 500 && displayError.includes("KV")) { displayError = "Fehler beim Laden der Stats."; }
-                else if (response.status === 500) { displayError = "Server-Konfigurationsfehler."; }
-                else if (response.status === 403) { displayError = "Zugriff verweigert."; }
+                // More specific error messages
+                if (response.status === 404) displayError = `Spieler "${nickname}" nicht gefunden.`;
+                else if (displayError.includes("API Key missing")) displayError = "Server-Konfigurationsfehler (API Key).";
+                else if (displayError.includes("Database connection failed")) displayError = "Server-Konfigurationsfehler (DB).";
+                else if (response.status === 500) displayError = "Interner Serverfehler.";
+
                 throw new Error(displayError);
             }
             const playerData = await response.json();
@@ -28,14 +39,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return playerData;
         } catch (error) {
             console.error(`Fehler Daten ${nickname}:`, error);
-            return { nickname: nickname, error: error.message, sortElo: 0 };
+            // Return error object compatible with list display
+            return { nickname: nickname, error: error.message, sortElo: -1 }; // Errors sort last
         }
     }
 
-    // Funktion zum Anzeigen der sortierten Spielerliste
+    // --- Display Sorted Player List ---
     function displayPlayerList(players) {
-        if (!playerListContainerEl) return;
-        playerListContainerEl.innerHTML = '';
+        playerList.innerHTML = ''; // Clear previous list
         players.forEach((player) => {
             const listItem = document.createElement('li');
             // WICHTIG: data-nickname Attribut hinzufügen!
@@ -43,118 +54,125 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (player.error) {
                 listItem.classList.add('error-item');
-                // Zeige nur Name und Fehler
-                listItem.innerHTML = `
-                    <div class="player-info" style="flex-grow: 1;">
-                        <span class="player-name">${player.nickname}</span>
-                    </div>
-                    <span class="error-text" style="font-size: 0.85em; text-align: right;">${player.error}</span>
-                `;
+                listItem.innerHTML = `<span class="player-info" style="justify-content: flex-start;">${player.nickname} - Fehler: ${player.error}</span>`;
             } else {
-                const avatarUrl = player.avatar || 'default_avatar.png';
-                const faceitProfileUrl = player.faceitUrl && player.faceitUrl.startsWith('http')
-                    ? player.faceitUrl
-                    : `https://${player.faceitUrl}`;
-                // Zeige nur Avatar, Name und Elo in der Liste
+                const avatarUrl = player.avatar || 'default_avatar.png'; // Use default if none
                 listItem.innerHTML = `
-                    <div class="player-info">
-                       <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil von ${player.nickname} öffnen" tabindex="-1">
-                          <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
-                       </a>
-                       <span class="player-name">
-                           ${player.nickname}
-                       </span>
-                    </div>
-                    <div class="player-elo">${player.elo === 'N/A' ? 'N/A' : player.elo}</div>
-                 `;
+                    <span class="player-info">
+                        <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
+                        <span class="player-name">${player.nickname}</span>
+                    </span>
+                    <span class="player-elo">${player.elo || 'N/A'}</span>
+                `;
             }
             playerListContainerEl.appendChild(listItem);
         });
     }
 
-    // Funktion zum Anzeigen der Detail-Karte (generiert HLTV-Karte)
+    // --- Display Detail Card ---
     function displayDetailCard(player) {
-        if (!detailCardContainerEl || !mainContentAreaEl) return;
-        detailCardContainerEl.innerHTML = ''; // Leeren
+        if (!detailCardContainer || !mainContentArea) return;
+        detailCardContainer.innerHTML = '';
 
-        if (!player || player.error) {
-            // Fehler in der Detailkarte anzeigen (falls nötig)
-            const cardElement = document.createElement('div');
-            cardElement.classList.add('player-card-hltv', 'error-card');
-            cardElement.innerHTML = `<span class="error-message">${player?.nickname || 'Spieler'} - Fehler: ${player?.error || 'Unbekannt'}</span>`;
-            detailCardContainerEl.appendChild(cardElement);
-            detailCardContainerEl.style.display = 'block'; // Sicherstellen, dass Container sichtbar ist
-            mainContentAreaEl.classList.add('detail-visible'); // Layout aktivieren
-            currentlyDisplayedNickname = player?.nickname || null; // Merken, auch bei Fehler
-            requestAnimationFrame(() => { detailCardContainerEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+        if (!player) {
+            console.error("Keine Spielerdaten zum Anzeigen übergeben.");
+            detailCardContainer.style.display = 'none';
+            mainContentArea.classList.remove('detail-visible');
+            currentlyDisplayedNickname = null;
             return;
         }
 
         const cardElement = document.createElement('div');
         cardElement.classList.add('player-card-hltv');
 
-        const avatarUrl = player.avatar || 'default_avatar.png';
-        const faceitProfileUrl = player.faceitUrl && player.faceitUrl.startsWith('http')
-            ? player.faceitUrl
-            : `https://${player.faceitUrl}`;
-        const lastUpdatedText = player.lastUpdated
-            ? `Stats vom ${new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}).format(new Date(player.lastUpdated))} Uhr`
-            : 'Stats werden aktualisiert...';
-        const matchesConsideredText = player.matchesConsidered ? `Last ~${player.matchesConsidered} M` : 'Recent Stats';
+        if (player.error) {
+            cardElement.classList.add('error-card');
+            cardElement.innerHTML = `<span class="error-message">${player.nickname} - Fehler: ${player.error}</span>`;
+        } else {
+            const avatarUrl = player.avatar || 'default_avatar.png';
+            const faceitProfileUrl = player.faceitUrl && player.faceitUrl.startsWith('http')
+                ? player.faceitUrl
+                : `https://www.faceit.com/en/players/${player.nickname}`; // Construct URL if needed
+            const lastUpdatedText = player.lastUpdated
+                ? `Stats vom ${new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'} ).format(new Date(player.lastUpdated))} Uhr`
+                : 'Stats werden aktualisiert...';
+            const matchesConsideredText = player.matchesConsidered ? `Last ~${player.matchesConsidered} M` : 'Recent Stats';
 
-        // Baue das HTML für die Detail-Karte
-        cardElement.innerHTML = `
-            <div class="card-header"> <div class="player-info"> <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil öffnen"> <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';"> </a> <a href="${faceitProfileUrl}" target="_blank" class="player-name"> ${player.nickname} </a> </div> <div class="stats-label" title="${lastUpdatedText}">${matchesConsideredText}</div> </div>
-            <div class="stats-grid">
-                <div class="stat-item"> <div class="label" title="Berechnetes Perf. Rating (Letzte Matches)">Rating ≈</div> <div class="value ${player.calculatedRating === 'N/A' || player.calculatedRating === 'Pending' ? 'na' : ''}">${player.calculatedRating || '...'}</div> <div class="indicator-bar okay"><div class="bar-fill"></div></div> </div>
-                <div class="stat-item"> <div class="label" title="K/D Ratio (Letzte Matches)">K/D</div> <div class="value ${player.kd === 'N/A' || player.kd === 'Pending' ? 'na' : ''}">${player.kd || '...'}</div> <div class="indicator-bar good"><div class="bar-fill"></div></div> </div>
-                <div class="stat-item"> <div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div> <div class="value ${player.adr === 'N/A' || player.adr === 'Pending' ? 'na' : ''}">${player.adr || '...'}</div> <div class="indicator-bar okay"><div class="bar-fill"></div></div> </div>
-                <div class="stat-item"> <div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div> <div class="value ${player.winRate === 'N/A' || player.winRate === 'Pending' ? 'na' : ''}">${player.winRate || '...'}%</div> <div class="indicator-bar okay"><div class="bar-fill"></div></div> </div>
-                <div class="stat-item"> <div class="label" title="Headshot % (Letzte Matches)">HS %</div> <div class="value ${player.hsPercent === 'N/A' || player.hsPercent === 'Pending' ? 'na' : ''}">${player.hsPercent || '...'}%</div> <div class="indicator-bar good"><div class="bar-fill"></div></div> </div>
-                <div class="stat-item"> <div class="label">Aktuelle Elo</div> <div class="value ${player.elo === 'N/A' ? 'na' : ''}">${player.elo}</div> <div class="indicator-bar good"><div class="bar-fill"></div></div> </div>
-            </div>`;
+            cardElement.innerHTML = `
+                <div class="card-header">
+                     <div class="player-info">
+                         <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil öffnen">
+                             <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
+                         </a>
+                         <a href="${faceitProfileUrl}" target="_blank" class="player-name"> ${player.nickname} </a>
+                         <span style="font-size: 0.9em; color: #aaa;" title="Aktuelle Elo">(${player.elo || 'N/A'})</span>
+                     </div>
+                     <div class="stats-label" title="${lastUpdatedText}">${matchesConsideredText}</div>
+                 </div>
+                <div class="stats-grid">
+                    <div class="stat-item"> <div class="label" title="Berechnetes Perf. Rating (Letzte Matches)">Rating 2.0 =</div> <div class="value ${!player.calculatedRating || player.calculatedRating === 'N/A' || player.calculatedRating === 'Pending' ? 'na' : ''}">${player.calculatedRating || '...'}</div></div>
+                    <div class="stat-item"> <div class="label" title="K/D Ratio (Letzte Matches)">K/D</div> <div class="value ${!player.kd || player.kd === 'N/A' || player.kd === 'Pending' ? 'na' : ''}">${player.kd || '...'}</div></div>
+                    <div class="stat-item"> <div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div> <div class="value ${!player.adr || player.adr === 'N/A' || player.adr === 'Pending' ? 'na' : ''}">${player.adr || '...'}</div></div>
+                    <div class="stat-item"> <div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div> <div class="value ${!player.winRate || player.winRate === 'N/A' || player.winRate === 'Pending' ? 'na' : ''}">${player.winRate !== undefined ? player.winRate + '%' : '...'}</div></div>
+                    <div class="stat-item"> <div class="label" title="Headshot % (Letzte Matches)">HS %</div> <div class="value ${!player.hsPercent || player.hsPercent === 'N/A' || player.hsPercent === 'Pending' ? 'na' : ''}">${player.hsPercent !== undefined ? player.hsPercent + '%' : '...'}</div></div>
+                    <div class="stat-item"> <div class="label">Elo</div> <div class="value ${!player.elo || player.elo === 'N/A' ? 'na' : ''}">${player.elo}</div></div>
+                </div>`;
+        }
 
-        detailCardContainerEl.appendChild(cardElement);
-        detailCardContainerEl.style.display = 'block';
-        mainContentAreaEl.classList.add('detail-visible');
-        currentlyDisplayedNickname = player.nickname;
+        detailCardContainer.appendChild(cardElement);
+        detailCardContainer.style.display = 'block'; // Ensure it's block for transition
+        mainContentArea.classList.add('detail-visible'); // Trigger layout shift/transition
+        currentlyDisplayedNickname = player?.nickname;
 
         requestAnimationFrame(() => {
-            detailCardContainerEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            setTimeout(() => { // Small delay to allow transition to start
+                cardElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100); // Adjust delay if needed
         });
     }
 
-    // Funktion zum Schließen/Verstecken der Detailkarte
+    // --- Hide Detail Card ---
     function hideDetailCard() {
-        if (!detailCardContainerEl || !mainContentAreaEl) return;
-        detailCardContainerEl.innerHTML = '';
-        // detailCardContainerEl.style.display = 'none'; // Wird durch Klassenwechsel gesteuert
-        mainContentAreaEl.classList.remove('detail-visible');
+        if (!detailCardContainer || !mainContentArea) return;
+        // detailCardContainer.innerHTML = ''; // Keep content during transition out
+        mainContentArea.classList.remove('detail-visible'); // Trigger transition
         currentlyDisplayedNickname = null;
+
+        // Optional: Clear content after transition ends
+        // detailCardContainer.addEventListener('transitionend', () => {
+        //    detailCardContainer.innerHTML = '';
+        // }, { once: true });
     }
 
-    // Hauptfunktion zum Laden aller Spieler
+    // --- Load All Player Data ---
     async function loadAllPlayers() {
         loadingIndicatorEl.style.display = 'block';
         errorMessageElement.style.display = 'none';
         errorMessageElement.textContent = '';
-        if(playerListContainerEl) playerListContainerEl.innerHTML = '';
-        hideDetailCard(); // Details initial verstecken/zurücksetzen
-
+        playerList.innerHTML = ''; // Clear list initially
+        hideDetailCard();
         let playerNicknames = [];
         try {
             const response = await fetch('/players.json');
-            if (!response.ok) { throw new Error(`Fehler Laden players.json: ${response.status}`); }
+            if (!response.ok) {
+                throw new Error(`Fehler Laden players.json: ${response.status}`);
+            }
             playerNicknames = await response.json();
-            if (!Array.isArray(playerNicknames) || playerNicknames.length === 0) { throw new Error("players.json leer/falsches Format."); }
+            if (!Array.isArray(playerNicknames) || playerNicknames.length === 0) {
+                throw new Error("players.json leer oder im falschen Format.");
+            }
 
             const playerPromises = playerNicknames.map(nickname => getPlayerData(nickname));
             allPlayersData = await Promise.all(playerPromises); // Speichere global
 
-            // Sortiere für die Anzeige in der Liste
-            allPlayersData.sort((a, b) => b.sortElo - a.sortElo);
+            // Sort players by ELO (descending), errors last
+            allPlayersData.sort((a, b) => {
+                if (a.error && !b.error) return 1; // a has error, b doesn't -> a comes after b
+                if (!a.error && b.error) return -1; // a doesn't have error, b does -> a comes before b
+                return b.sortElo - a.sortElo; // Both have/don't have error, sort by ELO
+            });
 
-            // Zeige die sortierte Liste an
+            // Display the sorted list
             displayPlayerList(allPlayersData);
 
         } catch (error) {
@@ -166,37 +184,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Event Listener für Klicks auf die Liste (Container <ol>)
-    if (playerListContainerEl) {
-        playerListContainerEl.addEventListener('click', (event) => {
-            // Finde das geklickte Listenelement <li>
-            const clickedListItem = event.target.closest('li');
-            if (clickedListItem && !clickedListItem.classList.contains('error-item')) {
-                const nickname = clickedListItem.dataset.nickname; // Hole Nickname
-                if (nickname) {
-                    if (nickname === currentlyDisplayedNickname) {
-                        // Derselbe Spieler wurde erneut geklickt -> Karte schließen
-                        hideDetailCard();
+    // --- Event Listener for Player List Clicks ---
+    playerList.addEventListener('click', (event) => {
+        const clickedItem = event.target.closest('li'); // Find the clicked list item
+        if (clickedItem && !clickedItem.classList.contains('error-item')) {
+            const nickname = clickedItem.dataset.nickname;
+            if (nickname) {
+                if (nickname === currentlyDisplayedNickname) {
+                    hideDetailCard(); // Clicked the same player, hide the card
+                } else {
+                    // Find the player data in the already fetched array
+                    const playerData = allPlayersData.find(p => p.nickname === nickname);
+                    if (playerData) {
+                        displayDetailCard(playerData); // Display the new player's card
                     } else {
-                        // Anderer Spieler geklickt -> neue Karte anzeigen
-                        const playerData = allPlayersData.find(p => p.nickname === nickname);
-                        if (playerData) {
-                            displayDetailCard(playerData);
-                        } else {
-                            console.error("Daten nicht gefunden für:", nickname);
-                            hideDetailCard();
-                        }
+                        console.error("Daten nicht gefunden für:", nickname);
+                        hideDetailCard(); // Hide card if data is somehow missing
                     }
                 }
             }
-        });
-    } else {
-        console.error("FEHLER: Element mit ID 'player-list' nicht im HTML gefunden!");
-        errorMessageElement.textContent = "Fehler beim Initialisieren der Seite (Liste nicht gefunden).";
-        errorMessageElement.style.display = 'block';
-        loadingIndicatorEl.style.display = 'none';
-    }
+        }
+    });
 
-    // Lade die Spielerdaten initial
+    // --- Initial Load ---
     loadAllPlayers();
+
+    // Refresh functionality (if button exists)
+    const refreshButton = document.getElementById('refresh-button');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', () => {
+            console.log("Daten werden manuell neu geladen...");
+            loadAllPlayers(); // Reload all player data
+        });
+    }
 });
