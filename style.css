@@ -5,9 +5,9 @@
     --card-bg-color: rgba(var(--card-bg-color-rgb), 0.75);
     --glass-blur: 8px;
     --glass-border-color: rgba(255, 255, 255, 0.1);
-    --text-primary: #f0f0f5;
+    --text-primary: #f0f0f5; /* Default text color (used for list Elo now) */
     --text-secondary: #a0a0b0;
-    --accent-orange: #ff5500;
+    --accent-orange: #ff5500; /* No longer used for list Elo */
     --accent-blue: #4a90e2;
     --border-color: #353540;
 
@@ -17,12 +17,6 @@
     --bar-color-bad: #ef5350; /* Red */
     --bar-background: #404050;
 
-    /* --- REMOVED Faceit Level Colors --- */
-    /* --faceit-lvl-1-2-color: #808080; */
-    /* --faceit-lvl-3-7-color: #FFC107; */
-    /* --faceit-lvl-8-9-color: #ff5e00; */
-    /* --faceit-lvl-10-color:  #d60e00; */
-
     /* General Styles */
     --font-family: 'Roboto', sans-serif;
     --border-radius: 8px;
@@ -30,8 +24,8 @@
 
     /* Layout Variables */
     --list-max-width: 450px;
-    --card-max-width: 700px; /* Keep increased width */
-    --layout-gap: 2rem; /* 32px */
+    --card-max-width: 700px;
+    --layout-gap: 2rem;
 }
 
 html { box-sizing: border-box; }
@@ -67,7 +61,6 @@ header h1 {
 }
 
 /* --- Main Content --- */
-/* Increased max-width slightly more to ensure space */
 main {
     flex-grow: 1;
     max-width: calc(var(--list-max-width) + var(--card-max-width) + var(--layout-gap) + 6rem);
@@ -94,18 +87,15 @@ main {
 /* --- Haupt-Layout Container --- */
 #main-content-area {
     display: flex;
-    /* --- Use justify-content for positioning --- */
-    justify-content: center; /* Default: center the list */
+    justify-content: center; /* Default: center */
     align-items: flex-start;
     gap: var(--layout-gap);
     padding: 0 calc(var(--layout-gap) / 2);
-    /* Add transition for justify-content change - might not be smooth visually, but sets state */
-    /* transition: justify-content 0.5s ease-in-out; */ /* Removed as ineffective */
 }
 
-/* --- When card is visible, push list to left --- */
+/* When card is visible, push list to left using justify-content */
 #main-content-area.detail-visible {
-    justify-content: flex-start; /* Push list to left, card appears next */
+    justify-content: flex-start;
 }
 
 /* --- Spielerliste --- */
@@ -122,9 +112,7 @@ main {
     display: flex;
     flex-direction: column;
     max-height: calc(80vh - 4rem);
-    /* --- REMOVED Transform Transition/Rules --- */
-    /* transition: transform 0.5s ease-in-out; */
-    /* transform: translateX(0); */
+    /* No transform needed for position */
 }
 
 /* --- Spieler Detailkarte --- */
@@ -135,15 +123,8 @@ main {
     position: sticky;
     top: 1rem;
     flex-shrink: 0;
-    /* --- REMOVED Transform Transition/Rules --- */
-    /* transition: transform 0.5s ease-in-out; */
-    /* transform: translateX(0); */
+    /* No transform needed for position */
 }
-
-/* --- REMOVED Transform Rules for Positioning --- */
-/* #main-content-area.detail-visible #player-list-container { ... } */
-/* #main-content-area.detail-visible #player-detail-card-container { ... } */
-
 
 #player-list-container h2 {
     text-align: center;
@@ -250,15 +231,16 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
     min-width: 60px;
 }
 
+/* --- UPDATED List Elo Color --- */
 .player-list-sorted .player-elo {
     font-weight: bold;
-    color: var(--accent-orange);
+    color: var(--text-primary); /* Use default text color */
     font-size: 0.95em;
     margin-bottom: 2px;
     text-align: right;
 }
 
-/* --- List Elo Progress Bar Styles (Uses GOOD/OKAY/BAD colors now via JS) --- */
+/* List Elo Progress Bar Styles (uses GOOD/OKAY/BAD colors now via JS) */
 .elo-progress-container {
     width: 60px;
     height: 6px;
@@ -269,7 +251,7 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
 
 .elo-progress-bar {
     height: 100%;
-    width: 0%; /* Default color set by JS */
+    width: 0%;
     background-color: var(--bar-color-bad);
     border-radius: 3px;
     transition: width 0.5s ease-in-out, background-color 0.5s ease-in-out;
@@ -277,6 +259,7 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
 
 
 /* --- Detail Card Styles --- */
+/* Card fade/slide in transition */
 .player-card-hltv {
     background-color: var(--card-bg-color);
     backdrop-filter: blur(var(--glass-blur));
@@ -289,7 +272,7 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
     transform: translateX(20px);
     transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
 }
-/* Card fade/slide in */
+
 #main-content-area.detail-visible .player-card-hltv {
     opacity: 1;
     transform: translateX(0);
@@ -388,10 +371,11 @@ ol#player-list::-webkit-scrollbar-thumb:hover {
     color: var(--bar-color-bad);
 }
 
+/* Keep specific NA style for 'N/A' text if needed, otherwise color applies */
 .player-card-hltv .stat-item .value.na {
     color: var(--text-secondary);
     font-style: italic;
-    font-size: 1rem; /* Keep specific NA style */
+    font-size: 1rem;
 }
 
 
@@ -461,22 +445,18 @@ footer {
 footer p { margin: 0.1rem 0;}
 
 /* --- Responsive Anpassungen --- */
-/* Adjust breakpoint if needed based on new layout */
 @media (max-width: 1250px) {
-    /* Adjusted breakpoint */
+    /* Keep adjusted breakpoint */
     #main-content-area {
         flex-direction: column;
         align-items: center;
         gap: 1.5rem;
         padding: 0 1rem;
-        /* Ensure justify-content is reset for stacking */
-        justify-content: center !important;
+        justify-content: center !important; /* Ensure centering when stacked */
     }
-
-    /* Reset max-width for stacked view */
     #main-content-area #player-list-container,
     #main-content-area #player-detail-card-container {
-        max-width: 650px; /* Allow reasonable width when stacked */
+        max-width: 650px;
         width: 100%;
         position: static;
         transition: none;
@@ -550,10 +530,13 @@ footer p { margin: 0.1rem 0;}
         font-size: 0.9rem;
     }
 
+    /* Elo text size */
     .elo-progress-container {
         width: 50px;
         height: 5px;
     }
+
+    /* List Elo bar size */
     .player-card-hltv .player-name { font-size: 1.4rem; }
 
     .player-card-hltv .stats-grid {
