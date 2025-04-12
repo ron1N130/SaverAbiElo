@@ -6,3 +6,4 @@ node_modules/
 
 # Optional: macOS Systemdatei, die man oft ignoriert
 .DS_Store
+.idx/dev.nix

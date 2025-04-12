@@ -5,13 +5,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainContentArea = document.getElementById('main-content-area');
     const loadingIndicator = document.getElementById('loading-indicator');
     const errorMessageElement = document.getElementById('error-message');
+    const playerListContainerEl = document.getElementById('player-list'); // Added reference
 
     let allPlayersData = [];
     let currentlyDisplayedNickname = null;
 
     // --- Error Handling & Basic Checks ---
-    if (!playerList || !detailCardContainer || !mainContentArea || !loadingIndicator || !errorMessageElement) {
-        console.error("FEHLER: Wichtige HTML-Elemente (Liste, Detail, Layout, Ladeanzeige oder Fehlermeldung) fehlen!");
+    // Added playerListContainerEl to the check
+    if (!playerList || !detailCardContainer || !mainContentArea || !loadingIndicator || !errorMessageElement || !playerListContainerEl) {
+        console.error("FEHLER: Wichtige HTML-Elemente (Liste, Detail, Layout, Ladeanzeige, Fehlermeldung oder Listencontainer) fehlen!");
         errorMessageElement.textContent = "Fehler beim Initialisieren: Wichtige Seitenelemente nicht gefunden.";
         errorMessageElement.style.display = 'block';
         if(loadingIndicator) loadingIndicator.style.display = 'none';
@@ -46,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Display Sorted Player List ---
     function displayPlayerList(players) {
-        playerList.innerHTML = ''; // Clear previous list
+        playerListContainerEl.innerHTML = ''; // Use the correct container variable
         players.forEach((player) => {
             const listItem = document.createElement('li');
             // WICHTIG: data-nickname Attribut hinzufügen!
@@ -146,10 +148,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Load All Player Data ---
     async function loadAllPlayers() {
-        loadingIndicatorEl.style.display = 'block';
+        loadingIndicator.style.display = 'block'; // Corrected variable name here (was loadingIndicatorEl)
         errorMessageElement.style.display = 'none';
         errorMessageElement.textContent = '';
-        playerList.innerHTML = ''; // Clear list initially
+        playerListContainerEl.innerHTML = ''; // Use the correct container variable
         hideDetailCard();
         let playerNicknames = [];
         try {
@@ -180,12 +182,12 @@ document.addEventListener('DOMContentLoaded', () => {
             errorMessageElement.textContent = `Fehler: ${error.message}`;
             errorMessageElement.style.display = 'block';
         } finally {
-            loadingIndicatorEl.style.display = 'none';
+            loadingIndicator.style.display = 'none'; // Corrected variable name here (was loadingIndicatorEl)
         }
     }
 
     // --- Event Listener for Player List Clicks ---
-    playerList.addEventListener('click', (event) => {
+    playerListContainerEl.addEventListener('click', (event) => { // Use the correct container variable
         const clickedItem = event.target.closest('li'); // Find the clicked list item
         if (clickedItem && !clickedItem.classList.contains('error-item')) {
             const nickname = clickedItem.dataset.nickname;
