@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // ... (Keep variable declarations and error checks as before) ...
     const playerList = document.getElementById('player-list');
     const detailCardContainer = document.getElementById('player-detail-card-container');
     const mainContentArea = document.getElementById('main-content-area');
@@ -10,16 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let allPlayersData = [];
     let currentlyDisplayedNickname = null;
 
+    // --- Centralized Thresholds ---
     const thresholds = {
         calculatedRating: {bad: 0.85, okay: 1.05, good: 1.25, max: 1.8},
         kd: {bad: 0.8, okay: 1.0, good: 1.2, max: 2.0},
         adr: {bad: 65, okay: 80, good: 95, max: 120},
         winRate: {bad: 40, okay: 50, good: 60, max: 100},
         hsPercent: {bad: 30, okay: 40, good: 50, max: 70},
-        elo: {bad: 1100, okay: 1700, good: 2200, max: 3500}
+        elo: {bad: 1100, okay: 1700, good: 2200, max: 3500} // Adjust!
     };
 
-    // --- API Call Function --- (No changes needed)
+    // --- API Call Function ---
     async function getPlayerData(nickname) {
         try {
             const apiUrl = `/api/faceit-data?nickname=${encodeURIComponent(nickname)}`;
@@ -37,15 +37,15 @@ document.addEventListener('DOMContentLoaded', () => {
             playerData.sortElo = parseInt(playerData.elo, 10) || 0;
             playerData.level = parseInt(playerData.level, 10) || 0;
             playerData.calculatedRating = parseFloat(playerData.calculatedRating) || null;
-            playerData.kd = parseFloat(playerData.kd) || null;
-            playerData.adr = parseFloat(playerData.adr) || null;
-            playerData.winRate = parseFloat(playerData.winRate) || null;
-            playerData.hsPercent = parseFloat(playerData.hsPercent) || null;
-            // Handle 'Pending' string specifically if it comes from API/Redis
             if (playerData.calculatedRating === 'Pending') playerData.calculatedRating = null;
+            playerData.kd = parseFloat(playerData.kd) || null;
             if (playerData.kd === 'Pending') playerData.kd = null;
+            playerData.adr = parseFloat(playerData.adr) || null;
             if (playerData.adr === 'Pending') playerData.adr = null;
-            // etc. for other stats if needed
+            playerData.winRate = parseFloat(playerData.winRate) || null;
+            if (playerData.winRate === 'Pending') playerData.winRate = null;
+            playerData.hsPercent = parseFloat(playerData.hsPercent) || null;
+            if (playerData.hsPercent === 'Pending') playerData.hsPercent = null;
             return playerData;
         } catch (error) {
             console.error(`Fehler Daten ${nickname}:`, error);
@@ -53,8 +53,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Set Threshold Markers (Helper) ---
+    function setThresholdMarkers(containerElement, config) {
+        if (!config || !containerElement) return;
+        const okayMarkerPos = Math.min(100, Math.max(0, (config.okay / config.max) * 100));
+        const goodMarkerPos = Math.min(100, Math.max(0, (config.good / config.max) * 100));
+        containerElement.style.setProperty('--okay-marker-pos', `${okayMarkerPos}%`);
+        containerElement.style.setProperty('--good-marker-pos', `${goodMarkerPos}%`);
+    }
 
-    // --- Elo Progress Bar Logic for List (Helper) --- (No changes needed)
+    // --- Elo Progress Bar Logic for List (Helper) ---
     function updateEloProgressBarForList(container) {
         const elo = parseInt(container.dataset.elo || 0, 10);
         const bar = container.querySelector('.elo-progress-bar');
@@ -77,10 +85,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         bar.style.width = `${percentage}%`;
         bar.style.backgroundColor = barColor;
+        setThresholdMarkers(container, config);
     }
 
 
-    // --- Display Sorted Player List --- (No changes needed)
+    // --- Display Sorted Player List ---
     function displayPlayerList(players) {
         playerListContainerEl.innerHTML = '';
         players.forEach((player) => {
@@ -93,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const avatarUrl = player.avatar || 'default_avatar.png';
                 listItem.innerHTML = `
                     <span class="player-info"><img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';"><span class="player-name">${player.nickname}</span></span>
-                    <div class="player-list-right"><span class="player-elo">${player.elo || 'N/A'}</span><div class="elo-progress-container" data-elo="${player.sortElo || 0}"><div class="elo-progress-bar"></div></div></div>`;
+                    <div class="player-list-right"><span class="player-elo">${player.elo || 'N/A'}</span><div class="elo-progress-container progress-container-base" data-elo="${player.sortElo || 0}"><div class="elo-progress-bar"></div></div></div>`;
                 const progressBarContainer = listItem.querySelector('.elo-progress-container');
                 if (progressBarContainer) {
                     updateEloProgressBarForList(progressBarContainer);
@@ -104,31 +113,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- Helper Function to Update Stat Progress Bars AND Value Colors - UPDATED Fallback ---
+    // --- Helper Function to Update Stat Progress Bars AND Value Colors ---
     function updateStatProgressBars(cardElement, player) {
         const statItems = cardElement.querySelectorAll('.stat-item[data-stat]');
-
         statItems.forEach(item => {
             const statName = item.dataset.stat;
             const valueElement = item.querySelector('.value');
+            const barContainer = item.querySelector('.stat-progress-container');
             const barElement = item.querySelector('.stat-progress-bar');
             const labelElement = item.querySelector('.stat-indicator-label');
-
-            if (!statName || !thresholds[statName] || !valueElement) return;
-            if (!barElement || !labelElement) return; // Ensure bar elements exist
-
+            if (!statName || !thresholds[statName] || !valueElement || !barContainer || !barElement || !labelElement) return;
             const value = (statName === 'elo') ? player.sortElo : player[statName];
             const config = thresholds[statName];
-
             let percentage = 0;
             let barColor = 'var(--bar-color-bad)';
             let indicatorText = '---';
             let valueClass = 'bad';
-
             valueElement.classList.remove('good', 'okay', 'bad', 'na');
 
             if (value !== null && value !== undefined && !isNaN(value)) {
-                // Value is valid and numeric
                 percentage = Math.min(100, Math.max(0, (value / config.max) * 100));
                 if (value >= config.good) {
                     barColor = 'var(--bar-color-good)';
@@ -141,27 +144,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     barColor = 'var(--bar-color-bad)';
                     indicatorText = 'BAD';
-                    valueClass = 'bad'; // Changed from POOR to BAD
+                    valueClass = 'bad';
                 }
                 valueElement.classList.add(valueClass);
             } else {
-                // --- Fallback logic for missing/pending stats ---
-                percentage = 5; // Show a small sliver of the bar
-                barColor = 'var(--bar-color-bad)'; // Make the sliver red
-                indicatorText = 'POOR'; // Set indicator text to POOR
-                valueClass = 'bad'; // Color the '0.00' value red
+                percentage = 5;
+                barColor = 'var(--bar-color-bad)';
+                indicatorText = 'POOR';
+                valueClass = 'bad';
                 valueElement.classList.add(valueClass);
-                // Note: The '0.00' text is now set in displayDetailCard's innerHTML
             }
-
             barElement.style.width = `${percentage}%`;
             barElement.style.backgroundColor = barColor;
             labelElement.textContent = indicatorText;
+            setThresholdMarkers(barContainer, config);
         });
     }
 
 
-    // --- Display Detail Card - UPDATED Fallback Values ---
+    // --- Display Detail Card ---
     function displayDetailCard(player) {
         if (!detailCardContainer || !mainContentArea) return;
         const cardElement = document.createElement('div');
@@ -184,38 +185,103 @@ document.addEventListener('DOMContentLoaded', () => {
                 hour: '2-digit',
                 minute: '2-digit'
             }).format(new Date(player.lastUpdated))} Uhr` : 'Stats werden aktualisiert...';
+            // --- KORRIGIERTE Zeile für matchesConsideredText ---
             const matchesConsideredText = player.matchesConsidered ? `Letzte ~${player.matchesConsidered} Matches` : 'Aktuelle Stats';
 
-            // --- Updated innerHTML to show '0.00'/'0.0'/'0%' as fallback ---
             cardElement.innerHTML = `
-                <div class="card-header"><div class="player-info"><a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil öffnen"><img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';"></a><a href="${faceitProfileUrl}" target="_blank" class="player-name"> ${player.nickname} </a></div><div class="stats-label" title="${lastUpdatedText}">${matchesConsideredText}</div></div>
+                <div class="card-header">
+                    <div class="player-info">
+                        <a href="${faceitProfileUrl}" target="_blank" title="Faceit Profil öffnen">
+                            <img src="${avatarUrl}" alt="${player.nickname} Avatar" class="avatar" onerror="this.onerror=null; this.src='default_avatar.png';">
+                        </a>
+                        <a href="${faceitProfileUrl}" target="_blank" class="player-name"> ${player.nickname} </a>
+                    </div>
+                    <div class="stats-label" title="${lastUpdatedText}">${matchesConsideredText}</div>
+                </div>
                 <div class="stats-grid">
-                    <div class="stat-item" data-stat="calculatedRating"><div class="stat-header"><div class="label" title="Berechnetes Perf. Rating (Letzte Matches)">Rating 2.0</div><div class="value">${player.calculatedRating !== null ? player.calculatedRating.toFixed(2) : '0.00'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
-                    <div class="stat-item" data-stat="kd"><div class="stat-header"><div class="label" title="K/D Ratio (Letzte Matches)">K/D</div><div class="value">${player.kd !== null ? player.kd.toFixed(2) : '0.00'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
-                    <div class="stat-item" data-stat="adr"><div class="stat-header"><div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div><div class="value">${player.adr !== null ? player.adr.toFixed(1) : '0.0'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
-                    <div class="stat-item" data-stat="winRate"><div class="stat-header"><div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div><div class="value">${player.winRate !== null ? player.winRate.toFixed(0) + '%' : '0%'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
-                    <div class="stat-item" data-stat="hsPercent"><div class="stat-header"><div class="label" title="Headshot % (Letzte Matches)">HS %</div><div class="value">${player.hsPercent !== null ? player.hsPercent.toFixed(0) + '%' : '0%'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
-                    <div class="stat-item" data-stat="elo"><div class="stat-header"><div class="label">Elo</div><div class="value">${player.sortElo || 'N/A'}</div></div><div class="stat-progress-container"><div class="stat-progress-bar"></div><span class="stat-indicator-label">---</span></div></div>
-                </div>`;
-            updateStatProgressBars(cardElement, player); // Call updater which handles coloring and bars
+                    <div class="stat-item" data-stat="calculatedRating">
+                        <div class="stat-header">
+                            <div class="label" title="Berechnetes Perf. Rating (Letzte Matches)">Rating 2.0</div>
+                            <div class="value">${player.calculatedRating !== null ? player.calculatedRating.toFixed(2) : '0.00'}</div>
+                        </div>
+                        <div class="stat-progress-container progress-container-base">
+                            <div class="stat-progress-bar"></div>
+                            <span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                    <div class="stat-item" data-stat="kd">
+                        <div class="stat-header">
+                            <div class="label" title="K/D Ratio (Letzte Matches)">K/D</div>
+                            <div class="value">${player.kd !== null ? player.kd.toFixed(2) : '0.00'}</div>
+                        </div>
+                        <div class="stat-progress-container progress-container-base">
+                            <div class="stat-progress-bar"></div>
+                            <span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                    <div class="stat-item" data-stat="adr">
+                        <div class="stat-header">
+                            <div class="label" title="Average Damage per Round (Letzte Matches)">ADR</div>
+                            <div class="value">${player.adr !== null ? player.adr.toFixed(1) : '0.0'}</div>
+                        </div>
+                        <div class="stat-progress-container progress-container-base">
+                            <div class="stat-progress-bar"></div>
+                            <span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                    <div class="stat-item" data-stat="winRate">
+                        <div class="stat-header">
+                            <div class="label" title="Win Rate % (Letzte Matches)">Win Rate</div>
+                            <div class="value">${player.winRate !== null ? player.winRate.toFixed(0) + '%' : '0%'}</div>
+                        </div>
+                        <div class="stat-progress-container progress-container-base">
+                            <div class="stat-progress-bar"></div>
+                            <span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                    <div class="stat-item" data-stat="hsPercent">
+                        <div class="stat-header">
+                            <div class="label" title="Headshot % (Letzte Matches)">HS %</div>
+                            <div class="value">${player.hsPercent !== null ? player.hsPercent.toFixed(0) + '%' : '0%'}</div>
+                        </div>
+                        <div class="stat-progress-container progress-container-base">
+                            <div class="stat-progress-bar"></div>
+                            <span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                    <div class="stat-item" data-stat="elo">
+                         <div class="stat-header">
+                            <div class="label">Elo</div>
+                            <div class="value">${player.sortElo || 'N/A'}</div>
+                        </div>
+                         <div class="stat-progress-container progress-container-base">
+                            <div class="stat-progress-bar"></div>
+                            <span class="stat-indicator-label">---</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            updateStatProgressBars(cardElement, player);
         }
         detailCardContainer.appendChild(cardElement);
         cardElement.classList.remove('is-hiding');
+
         mainContentArea.classList.add('detail-visible');
         currentlyDisplayedNickname = player?.nickname;
+
         requestAnimationFrame(() => {
             cardElement.style.opacity = '1';
             cardElement.style.transform = 'translateX(0)';
             setTimeout(() => {
-                if (player && player.nickname === currentlyDisplayedNickname) {
+                if (player && currentlyDisplayedNickname === player.nickname) {
                     cardElement.scrollIntoView({behavior: 'smooth', block: 'nearest'});
                 }
             }, 100);
         });
     }
 
-
-    // --- Hide Detail Card --- (No changes needed)
+    // --- Hide Detail Card ---
     function hideDetailCard() {
         if (!detailCardContainer || !mainContentArea) return;
         const cardElement = detailCardContainer.querySelector('.player-card-hltv');
@@ -243,8 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
-    // --- Load All Player Data --- (No changes needed)
+    // --- Load All Player Data ---
     async function loadAllPlayers() {
         loadingIndicator.style.display = 'block';
         errorMessageElement.style.display = 'none';
@@ -295,8 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
-    // --- Event Listener for Player List Clicks --- (No changes needed)
+    // --- Event Listener for Player List Clicks ---
     playerListContainerEl.addEventListener('click', (event) => {
         const clickedItem = event.target.closest('li');
         if (clickedItem && !clickedItem.classList.contains('error-item')) {
@@ -317,12 +381,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-
     // --- Initial Load ---
     loadAllPlayers();
 
-
-    // --- Refresh Button --- (No changes needed)
+    // --- Refresh Button ---
     const refreshButton = document.getElementById('refresh-button');
     if (refreshButton) {
         refreshButton.addEventListener('click', () => {
