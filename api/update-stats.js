@@ -6,7 +6,8 @@ import path from 'path';
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const API_BASE_URL = 'https://open.faceit.com/data/v4';
 const REDIS_URL = process.env.REDIS_URL;
-const MATCH_COUNT = 20;
+// MODIFIED: Changed back to 20 matches
+const MATCH_COUNT = 20; // WAS 5 for testing
 const API_DELAY = 600; // Consider increasing if rate limits hit
 
 console.log('[CRON START] Update Stats function initializing...'); // Log start
@@ -37,8 +38,8 @@ if (REDIS_URL) {
                 console.log(`[CRON Redis] Retry connection attempt ${times}, delaying for ${delay}ms`);
                 return delay;
             },
-            // Add TLS options if necessary for Vercel Redis - uncomment if needed
-            // tls: { rejectUnauthorized: false } // Use with caution
+            // MODIFIED: Enabled TLS for Vercel Redis compatibility
+            tls: { rejectUnauthorized: false } // Use with caution
         });
 
         redis.on('error', (err) => {
@@ -140,13 +141,15 @@ export default async function handler(req, res) {
                 console.warn(`[CRON UPDATE ${nickname}] No recent match history found. Skipping detailed stats calc.`);
                 calculationError = true;
             } else {
-                console.log(`[CRON UPDATE ${nickname}] Fetched ${historyData.items.length} matches. Getting details...`);
+                console.log(`[CRON UPDATE ${nickname}] Fetched ${historyData.items.length} matches (limit: ${MATCH_COUNT}). Getting details...`);
                 // 3. Detail Stats für jedes Match holen
                 for (const match of historyData.items) {
                     const matchId = match.match_id;
                     await delay(API_DELAY);
                     try {
+                        console.log(`[CRON UPDATE ${nickname}] Fetching stats for match ${matchId}`); // Added log here
                         const matchStatsResponse = await fetch(`${API_BASE_URL}/matches/${matchId}/stats`, { headers: faceitHeaders });
+                        console.log(`[CRON UPDATE ${nickname}] Match Stats Status for ${matchId}: ${matchStatsResponse.status}`); // Added log here
                         if (!matchStatsResponse.ok) {
                             console.warn(`[CRON UPDATE ${nickname}] Failed fetch stats for match ${matchId} (${matchStatsResponse.status}). Skipping match.`);
                             continue;
@@ -162,7 +165,7 @@ export default async function handler(req, res) {
                             const r = parseInt(stats.Rounds || 0, 10);
                             const a = parseInt(stats.Assists || 0, 10); // <-- Added Assists
                             const hs = parseInt(stats['Headshots %'] || stats.Headshots || 0, 10);
-                            const dmg = parseInt(stats.Damage || 0, 10);
+                            const dmg = parseInt(stats.Damage || 0, 10); // Not standard, check if available in API response
                             const win = stats.Result === "1";
 
                             if (r > 0) {
@@ -184,6 +187,7 @@ export default async function handler(req, res) {
                                 recentMatchesData.perfScoreSum += matchPerfScore;
 
                                 recentMatchesData.matchesProcessed++;
+                                console.log(`[CRON UPDATE ${nickname}] Processed stats for match ${matchId} (${recentMatchesData.matchesProcessed}/${historyData.items.length})`); // Added log here
                             }
                         } else { console.warn(`[CRON UPDATE ${nickname}] Player stats not found in match ${matchId}.`); }
                     } catch (matchError) { console.error(`[CRON UPDATE ${nickname}] Error fetching/processing stats for match ${matchId}:`, matchError); }
@@ -227,7 +231,7 @@ export default async function handler(req, res) {
                     }
                 }
 
-            } else if (!calculationError) { console.warn(`[CRON UPDATE ${nickname}] No valid match details processed. Cannot calculate stats.`); errorCount++; }
+            } else if (!calculationError) { console.warn(`[CRON UPDATE ${nickname}] No valid match details processed (${recentMatchesData.matchesProcessed} matches). Cannot calculate stats.`); errorCount++; }
             else { console.warn(`[CRON UPDATE ${nickname}] Skipping stats calculation due to history fetch error for ${nickname}.`); errorCount++; }
 
         } catch (error) {
