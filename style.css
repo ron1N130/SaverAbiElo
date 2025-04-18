@@ -610,42 +610,62 @@ footer p {
     }
 }
 
-/* Glas‑Panel für die Detail‑Card */
+/* Glassmorphism & Aero‑Design für Detail‑Card */
+#player-detail-card-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
+}
 #player-detail-card-container .card-header,
 #player-detail-card-container .stats-grid {
-    background: rgba(255, 255, 255, 0.05);       /* leichtes Weiß */
-    backdrop-filter: blur(10px) saturate(150%);  /* weicher Blur + etwas Sättigung */
-    -webkit-backdrop-filter: blur(10px) saturate(150%);
-    border: 1px solid rgba(255, 255, 255, 0.2);  /* dezente Umrandung */
-    border-radius: 16px;                         /* sanfte Ecken */
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);   /* tiefer, weicher Schatten */
-    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    padding: 1.5rem;
 }
-
-/* Abstand zwischen Header und Stats */
 #player-detail-card-container .card-header {
-    margin-bottom: 1rem;
-}
-
-/* Stats‑Grid als eigenes Glass‑Panel */
-#player-detail-card-container .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    display: flex;
+    align-items: center;
     gap: 1rem;
 }
-
-/* Value‑Zahlen nochmal hervorheben */
-#player-detail-card-container .stat-item .value {
-    color: #fff;
-    font-weight: 700;
-    font-size: 2rem;
+#player-detail-card-container .card-header .avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
 }
-
-/* Label unter den Balken */
+#player-detail-card-container .card-header .player-name {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+}
+#player-detail-card-container .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+#player-detail-card-container .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #fff;
+}
+#player-detail-card-container .stat-item .value {
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+#player-detail-card-container .stat-progress-bar {
+    height: 8px;
+    border-radius: 4px;
+    margin-top: 0.5rem;
+}
 #player-detail-card-container .stat-indicator-label {
+    margin-top: 0.25rem;
     font-size: 0.75rem;
     font-weight: 600;
-    margin-top: 0.25rem;
-    display: block;
-    color: rgba(255,255,255,0.8);
+    color: rgba(255,255,255,0.85);
 }
