@@ -100,35 +100,17 @@ let redis = null;
 if (REDIS_URL) {
     redis = new Redis(REDIS_URL, {
         lazyConnect: true,        // verbindet erst bei erstem Kommando
-        connectTimeout: 20000,    // 20 Sek. Timeout
+        connectTimeout: 20000,    // 20 Sek. Timeout
         maxRetriesPerRequest: 3,
     });
-    // „error“-Event abfangen, damit es nicht als Unhandled auftaucht
+    // Fehler-Event abfangen, damit es nicht als Unhandled auftaucht
     redis.on("error", (err) => {
-        console.error("[Redis] connection error → continue without Redis", err.message);
-        redis = null; // deaktiviert Redis für den weiteren Request‑Flow
-    });
-    try {
-        await redis.connect();
-    } catch (err) {
-        console.error("[Redis] initial connect failed", err.message);
+        console.error("[Redis] connection error – continuing without Redis:", err.message);
         redis = null;
-    }
+    });
 }
 
-// „error“‑Event konsumieren, damit es nicht als Unhandled auftaucht
-redis.on("error", (err) => {
-    console.error("[Redis] connection error → continue without Redis", err.message);
-    redis = null; // deaktiviert Redis für den weiteren Request‑Flow
-});
-try {
-    await redis.connect();
-} catch (err) {
-    console.error("[Redis] initial connect failed", err.message);
-    redis = null;
-}
-
-// --- Hilfs‑Fetch mit Rate‑Limit‑Pause -----------------------------------
+// --- Hilfs‑Fetch mit Rate‑Limit‑Pause ----------------------------------- mit Rate‑Limit‑Pause -----------------------------------
 async function fetchFaceitApi(endpoint) {
     await delay(API_DELAY);
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
