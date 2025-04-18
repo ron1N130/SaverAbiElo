@@ -1,33 +1,32 @@
-// api/faceit-data.js
+// api/faceit-data.js – angepasst nach HLTV Rating 2.0 Formel
 import Redis from "ioredis";
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
-const REDIS_URL = process.env.REDIS_URL;
-const API_BASE_URL = "https://open.faceit.com/data/v4";
+const REDIS_URL       = process.env.REDIS_URL;
+const API_BASE_URL    = "https://open.faceit.com/data/v4";
 
-// Hilfs‑Fetch mit Error‑Throw
+// --- Hilfsfunktionen ---------------------------------------------------
 async function fetchJson(url, headers) {
-    const res = await fetch(url, {headers});
-    if (!res.ok) throw new Error(`API ${res.status}`);
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`Fetch ${url} → ${res.status}`);
     return res.json();
 }
 
 /**
- * Berechnet HLTV‑ähnliche Kennzahlen aus einem Array von Match‑Objekten.
- * @param {Array} matches – Array von Objekten mit den Feldern:
+ * Berechnet alle Kennzahlen aus einem Match‑Array nach HLTV 2.0
+ * matches: Array von Objekten mit den Keys
  *   Kills, Deaths, Assists, Headshots, 'K/R Ratio', ADR, Rounds, Win
- * @returns {Object} { kd, adr, winRate, hsp, kast, impact, rating, weight }
  */
 function calculateAverageStats(matches) {
-    const DMG_PER_KILL = 105;
     const weight = matches.length;
-
     if (weight === 0) {
         return {
             kd: 0,
+            dpr: 0,
+            kpr: 0,
             adr: 0,
             winRate: 0,
-            hsp: 0,
+            hsPercent: 0,
             kast: 0,
             impact: 0,
             rating: 0,
@@ -35,63 +34,137 @@ function calculateAverageStats(matches) {
         };
     }
 
-    // 1) Basis‑Stats pro Match
-    const matchStats = matches.map(m => {
-        const kills = Number(m.Kills) || 0;
-        const deaths = Number(m.Deaths) || 0;
-        const rounds = Number(m.Rounds) || 1;
-        const kpr = Number(m['K/R Ratio']) || 0;
-        const adr = Number(m.ADR) || DMG_PER_KILL * kpr;
-        const hs = Number(m.Headshots) || 0;
-        const win = Number(m.Win) || 0;
-        return {kills, deaths, rounds, kpr, adr, hs, win};
+    // Rohdaten aggregieren
+    let totalKills = 0;
+    let totalDeaths = 0;
+    let totalRounds = 0;
+    let totalDamage = 0;
+    let totalHeadshots = 0;
+    let totalWins = 0;
+    matches.forEach(m => {
+        const kills   = Number(m.Kills)   || 0;
+        const deaths  = Number(m.Deaths)  || 0;
+        const rounds  = Number(m.Rounds)  || 1;
+        const adr     = Number(m.ADR)     || (kills * 105);
+        const hs      = Number(m.Headshots) || 0;
+        const win     = Number(m.Win)     || 0;
+
+        totalKills   += kills;
+        totalDeaths  += deaths;
+        totalRounds  += rounds;
+        totalDamage  += adr * rounds;
+        totalHeadshots += hs;
+        totalWins    += win;
     });
 
-    // 2) Aggregierte Kennzahlen
-    const totalKills = matchStats.reduce((sum, s) => sum + s.kills, 0);
-    const totalDeaths = matchStats.reduce((sum, s) => sum + s.deaths, 0);
-    const kd = totalDeaths === 0 ? totalKills : totalKills / totalDeaths;
-    const adrAvg = matchStats.reduce((sum, s) => sum + s.adr, 0) / weight;
-    const dpr = matchStats.reduce((sum, s) => sum + (s.deaths / s.rounds), 0) / weight;
-    const kprAvg = matchStats.reduce((sum, s) => sum + s.kpr, 0) / weight;
-    const hsp = totalKills > 0
-        ? (matchStats.reduce((sum, s) => sum + s.hs, 0) / totalKills) * 100
-        : 0;
-    const winRate = (matchStats.reduce((sum, s) => sum + s.win, 0) / weight) * 100;
+    // Durchschnittswerte
+    const kpr       = totalKills  / totalRounds;
+    const dpr       = totalDeaths / totalRounds;
+    const adrAvg    = totalDamage / totalRounds;
+    const kd        = totalDeaths ? totalKills / totalDeaths : totalKills;
+    const winRate   = (totalWins / weight) * 100;
+    const hsPercent = totalKills ? (totalHeadshots / totalKills) * 100 : 0;
 
-    // 3) KAST: Anteil der Matches, in denen der Spieler mindestens gekillt, geholfen oder überlebt hat
-    const kastCount = matchStats.reduce((sum, s) => {
-        const contributed = (s.kills > 0 || s.assists > 0 || s.deaths < s.rounds) ? 1 : 0;
-        return sum + contributed;
-    }, 0);
+    // KAST berechnen
+    let kastCount = 0;
+    matches.forEach(m => {
+        const survivedOrContrib = (Number(m.Kills) > 0 || Number(m.Assists) > 0 || Number(m.Deaths) < Number(m.Rounds));
+        if (survivedOrContrib) kastCount++;
+    });
     const kast = (kastCount / weight) * 100;
 
-    // 4) Impact‑Faktor
-    const impact = 2.13 * kprAvg + 0.42 * (totalKills / weight) - 0.41;
+    // Impact-Faktor
+    const impact = 2.13 * kpr + 0.42 * (totalKills / totalRounds) - 0.41;
 
-    // 5) Rating nach HLTV 2.0
-    const rawRating = 0.0073 * kast
-        + 0.3591 * kprAvg
+    // Rating 2.0 Formel
+    const ratingRaw =
+        0.0073 * kast
+        + 0.3591 * kpr
         - 0.5329 * dpr
         + 0.2372 * impact
         + 0.0032 * adrAvg
         + 0.1587;
-    const rating = Math.max(0, rawRating);
+    const rating = Math.max(0, ratingRaw);
 
     return {
         kd: +kd.toFixed(2),
+        dpr: +dpr.toFixed(2),
+        kpr: +kpr.toFixed(2),
         adr: +adrAvg.toFixed(1),
         winRate: +winRate.toFixed(1),
-        hsp: +hsp.toFixed(1),
+        hsPercent: +hsPercent.toFixed(1),
         kast: +kast.toFixed(1),
         impact: +impact.toFixed(2),
         rating: +rating.toFixed(2),
         weight
     };
-}
+};
 
+// Rohdaten aggregieren
+let totalKills = 0;
+let totalDeaths = 0;
+let totalRounds = 0;
+let totalDamage = 0;
+let totalHeadshots = 0;
+let totalWins = 0;
+matches.forEach(m => {
+    const kills   = Number(m.Kills)   || 0;
+    const deaths  = Number(m.Deaths)  || 0;
+    const rounds  = Number(m.Rounds)  || 1;
+    const adr     = Number(m.ADR)     || kills * 105;   // fallback: 105 dmg per kill
+    const hs      = Number(m.Headshots) || 0;
+    const win     = Number(m.Win)     || 0;
+
+    totalKills   += kills;
+    totalDeaths  += deaths;
+    totalRounds  += rounds;
+    totalDamage  += adr * rounds;
+    totalHeadshots += hs;
+    totalWins    += win;
+});
+
+// Durchschnittswerte
+const kpr       = totalKills  / totalRounds;      // Kills pro Runde
+const dpr       = totalDeaths / totalRounds;      // Tode pro Runde
+const adr_avg   = totalDamage / totalRounds;      // Schaden pro Runde
+const kd        = totalDeaths ? totalKills/totalDeaths : totalKills;
+const winRate   = (totalWins / matches.length) * 100;               // WinRate in % (Matches)
+const hsPercent = totalKills ? (totalHeadshots/totalKills)*100 : 0; // HS%
+
+// KAST approximieren (wenn keine Round-by-Round-Daten):
+// Hier als Platzhalter: WinRate verwenden oder entfernen, da echte KAST berechenbar sein muss
+const kast = winRate; // dient als Näherung für HLTV KAST
+
+// Impact nach Dave's Näherung
+const impact = 2.13 * kpr + 0.42 * (totalKills/totalRounds) - 0.41;
+
+// Rating 2.0 Formel
+// Rating = 0.0073·KAST + 0.3591·KPR – 0.5329·DPR + 0.2372·Impact + 0.0032·ADR + 0.1587
+const ratingRaw =
+    0.0073 * kast
+    + 0.3591 * kpr
+    - 0.5329 * dpr
+    + 0.2372 * impact
+    + 0.0032 * adr_avg
+    + 0.1587;
+const rating = Math.max(0, ratingRaw);
+
+return {
+    kd: +kd.toFixed(2),
+    adr: +adr_avg.toFixed(1),
+    winRate: +winRate.toFixed(1),
+    hsPercent: +hsPercent.toFixed(1),
+    kast: +kast.toFixed(1),
+    impact: +impact.toFixed(2),
+    rating: +rating.toFixed(2),
+    weight: matches.length
+};
+
+/**
+ * Wählt die letzten 10 Matches nach Datum aus und berechnet die Stats
+ */
 function calculateCurrentFormStats(matches) {
-    const sorted = [...matches].sort((a, b) => b.CreatedAt - a.CreatedAt);
+    const sorted = [...matches].sort((a,b) => b.CreatedAt - a.CreatedAt);
     const recent = sorted.slice(0, 10);
     return {
         stats: calculateAverageStats(recent),
@@ -99,114 +172,94 @@ function calculateCurrentFormStats(matches) {
     };
 }
 
-// Redis initialisieren (optional)
+// --- Redis‑Initialisierung ---------------------------------------------
 let redis = null;
 if (REDIS_URL) {
-    redis = new Redis(REDIS_URL, {lazyConnect: true});
-    redis.on("error", () => {
-        redis = null;
-    });
+    redis = new Redis(REDIS_URL, { lazyConnect: true });
+    redis.on("error", () => { redis = null; });
 }
 
+// ------------------------------------------------------------------------
 export default async function handler(req, res) {
     const nickname = req.query.nickname;
     if (!nickname) {
-        return res.status(400).json({error: "nickname fehlt"});
+        return res.status(400).json({ error: "nickname fehlt" });
     }
 
-    try {
-        const headers = {Authorization: `Bearer ${FACEIT_API_KEY}`};
-        // 1) Basis‑Details
-        const details = await fetchJson(
-            `${API_BASE_URL}/players?nickname=${encodeURIComponent(nickname)}`,
-            headers
-        );
+    const headers = { Authorization: `Bearer ${FACEIT_API_KEY}` };
+    // Faceit-Grunddaten
+    const details = await fetchJson(
+        `${API_BASE_URL}/players?nickname=${encodeURIComponent(nickname)}`,
+        headers
+    );
 
-        // 2) Response‑Template
-        const resp = {
-            nickname: details.nickname,
-            avatar: details.avatar || "default_avatar.png",
-            faceitUrl: details.faceit_url?.replace("{lang}", "en") ?? "#",
-            elo: details.games?.cs2?.faceit_elo ?? "N/A",
-            level: details.games?.cs2?.skill_level ?? "N/A",
-            sortElo: parseInt(details.games?.cs2?.faceit_elo, 10) || 0,
-            calculatedRating: null,
-            kd: null,
-            adr: null,
-            winRate: null,
-            hsPercent: null,
-            kast: null,
-            impact: null,
-            matchesConsidered: 0,
-            lastUpdated: null
-        };
+    // Antwort-Template
+    const resp = {
+        nickname: details.nickname,
+        avatar: details.avatar || "default_avatar.png",
+        faceitUrl: details.faceit_url?.replace("{lang}", "en") ?? "#",
+        elo: details.games?.cs2?.faceit_elo ?? "N/A",
+        level: details.games?.cs2?.skill_level ?? "N/A",
+        sortElo: parseInt(details.games?.cs2?.faceit_elo, 10) || 0,
+        calculatedRating: null,
+        kd: null,
+        adr: null,
+        winRate: null,
+        hsPercent: null,
+        kast: null,
+        impact: null,
+        matchesConsidered: 0,
+        lastUpdated: null
+    };
 
-        // 3) Stats aus Redis‑Cache oder Live‑Fallback
-        let statsObj = null;
-        if (redis) {
-            const cacheKey = `player_stats:${details.player_id}`;
-            const cached = await redis.get(cacheKey);
-            if (cached) {
-                statsObj = JSON.parse(cached);
-            }
-        }
-
-        if (!statsObj) {
-            // Live‑Fallback: letzte 10 Matches abrufen und berechnen
-            const hist = await fetchJson(
+    // Stats aus Cache oder Live-Fallback
+    if (redis) {
+        const cacheKey = `player_stats:${details.player_id}`;
+        const statsStr = await redis.get(cacheKey);
+        if (statsStr) {
+            Object.assign(resp, JSON.parse(statsStr));
+        } else {
+            // Live-Daten der letzten 10 Matches holen
+            const history = await fetchJson(
                 `${API_BASE_URL}/players/${details.player_id}/history?game=cs2&limit=10`,
                 headers
             );
-            const items = hist.items || [];
-            const matchData = await Promise.all(
+            const items = history.items || [];
+            const matchData = (await Promise.all(
                 items.map(async h => {
-                    const stat = await fetchJson(
+                    const stats = await fetchJson(
                         `${API_BASE_URL}/matches/${h.match_id}/stats`,
                         headers
                     );
-                    const r = stat.rounds?.[0];
-                    if (!r) return null;
-                    const winner = r.round_stats.Winner;
-                    const playerStats = r.teams
-                        .flatMap(t => t.players.map(p => ({...p, team_id: t.team_id})))
+                    const round = stats.rounds?.[0];
+                    if (!round) return null;
+                    const winner = round.round_stats.Winner;
+                    const p = round.teams
+                        .flatMap(t => t.players.map(p => ({ ...p, team_id: t.team_id })))
                         .find(p => p.player_id === details.player_id);
-                    if (!playerStats) return null;
-                    return {
-                        Kills: +playerStats.player_stats.Kills,
-                        Deaths: +playerStats.player_stats.Deaths,
-                        Assists: +playerStats.player_stats.Assists,
-                        Headshots: +playerStats.player_stats.Headshots,
-                        "K/R Ratio": +playerStats.player_stats["K/R Ratio"],
-                        ADR: +(playerStats.player_stats.ADR ?? playerStats.player_stats["Average Damage per Round"]),
-                        Rounds: +r.round_stats.Rounds || 1,
-                        Win: +(playerStats.team_id === winner),
+                    return p && {
+                        Kills:   +p.player_stats.Kills,
+                        Deaths:  +p.player_stats.Deaths,
+                        Assists: +p.player_stats.Assists,
+                        Headshots: +p.player_stats.Headshots,
+                        'K/R Ratio': +p.player_stats['K/R Ratio'],
+                        ADR: +(
+                            p.player_stats.ADR ?? p.player_stats['Average Damage per Round']
+                        ),
+                        Rounds: +(round.round_stats.Rounds || 1),
+                        Win: +(p.team_id === winner),
                         CreatedAt: h.started_at
                     };
                 })
-            );
-            const filtered = matchData.filter(Boolean);
-            const {stats, matchesCount} = calculateCurrentFormStats(filtered);
-            statsObj = {
-                calculatedRating: stats.rating,
-                kd: stats.kd,
-                adr: stats.adr,
-                winRate: stats.winRate,
-                hsPercent: stats.hsp,
-                kast: stats.kast,
-                impact: stats.impact,
-                matchesConsidered: matchesCount,
-                lastUpdated: new Date().toISOString()
-            };
+            )).filter(Boolean);
+
+            const { stats: cf, matchesCount } = calculateCurrentFormStats(matchData);
+            Object.assign(resp, cf);
+            resp.matchesConsidered = matchesCount;
+            resp.lastUpdated = new Date().toISOString();
         }
-
-        // 4) Zusammenführen & antworten
-        Object.assign(resp, statsObj);
-        res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate");
-        return res.status(200).json(resp);
-
-    } catch (err) {
-        console.error(`[api/faceit-data] ${nickname} →`, err);
-        // immer JSON zurückliefern, auch bei Fehlern
-        return res.status(200).json({nickname, error: err.message});
     }
+
+    res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate");
+    res.status(200).json(resp);
 }
