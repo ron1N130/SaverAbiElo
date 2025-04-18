@@ -27,14 +27,13 @@ document.addEventListener("DOMContentLoaded", () => {
         elo:              { bad: 1100, okay: 1700, good: 2200, max: 3500 },
     };
 
-    // Progress‐Bar in Liste aktualisieren
+    // Progress‑Bar in Liste aktualisieren
     function updateEloProgressBarForList(container) {
         const elo = parseInt(container.dataset.elo || 0, 10);
         const bar = container.querySelector('.elo-progress-bar');
         if (!bar) return;
         const cfg = thresholds.elo;
-        let pct = 0;
-        let col = 'var(--bar-color-bad)';
+        let pct = 0, col = 'var(--bar-color-bad)';
         if (!isNaN(elo) && elo > 0) {
             pct = Math.min(100, (elo / cfg.max) * 100);
             if (elo >= cfg.good)      col = 'var(--bar-color-good)';
@@ -54,9 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const cfg  = thresholds[stat];
             const bar  = item.querySelector('.stat-progress-bar');
             const lbl  = item.querySelector('.stat-indicator-label');
-            let pct = 0;
-            let col = 'var(--bar-color-bad)';
-            let txt = '---';
+            let pct = 0, col = 'var(--bar-color-bad)', txt = '---';
             if (val !== null && !isNaN(val)) {
                 pct = Math.min(100, (val / cfg.max) * 100);
                 if (val >= cfg.good)      { col = 'var(--bar-color-good)';  txt = 'GOOD'; }
@@ -75,7 +72,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch(`/api/faceit-data?nickname=${encodeURIComponent(nickname)}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const p = await res.json();
-            // numerische Felder konvertieren
             p.sortElo          = toNum(p.elo);
             p.calculatedRating = toNum(p.calculatedRating);
             p.kd               = toNum(p.kd);
@@ -97,16 +93,16 @@ document.addEventListener("DOMContentLoaded", () => {
             li.dataset.nickname = player.nickname;
             if (player.error) {
                 li.classList.add('error-item');
-                li.innerHTML = `<span class=\"player-info\">${player.nickname} - Fehler: ${player.error}</span>`;
+                li.innerHTML = `<span class='player-info'>${player.nickname} - Fehler: ${player.error}</span>`;
             } else {
                 li.innerHTML = `
-          <span class=\"player-info\">
-            <img src=\"${player.avatar || 'default_avatar.png'}\" class=\"avatar\" onerror=\"this.src='default_avatar.png'\" />
-            <span class=\"player-name\">${player.nickname}</span>
+          <span class='player-info'>
+            <img src='${player.avatar || 'default_avatar.png'}' class='avatar' onerror="this.src='default_avatar.png'" />
+            <span class='player-name'>${player.nickname}</span>
           </span>
-          <div class=\"player-list-right\">
-            <span class=\"player-elo\">${player.sortElo ?? 'N/A'}</span>
-            <div class=\"elo-progress-container\" data-elo=\"${player.sortElo}\"><div class=\"elo-progress-bar\"></div></div>
+          <div class='player-list-right'>
+            <span class='player-elo'>${player.sortElo ?? 'N/A'}</span>
+            <div class='elo-progress-container' data-elo='${player.sortElo}'><div class='elo-progress-bar'></div></div>
           </div>`;
                 updateEloProgressBarForList(li.querySelector('.elo-progress-container'));
             }
@@ -118,12 +114,32 @@ document.addEventListener("DOMContentLoaded", () => {
     function displayDetailCard(player) {
         detailCardContainer.innerHTML = '';
         if (!player || player.error) {
-            detailCardContainer.innerHTML = `<div class=\"error-card\">${player.nickname} - ${player.error}</div>`;
+            detailCardContainer.innerHTML = `<div class='error-card'>${player.nickname} - ${player.error}</div>`;
             return;
         }
-        const html = `
-      <div class=\"card-header\"> ... YOUR CARD CONTENT HERE ... </div>`;
-        detailCardContainer.innerHTML = html;
+        const faceitUrl = player.faceitUrl || `https://www.faceit.com/en/players/${player.nickname}`;
+        const lastUpdated = player.lastUpdated ?
+            `Stats vom ${new Intl.DateTimeFormat('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(player.lastUpdated))} Uhr`
+            : 'Stats werden aktualisiert...';
+        const matchesText = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
+        detailCardContainer.innerHTML = `
+      <div class='card-header'>
+        <div class='player-info'>
+          <a href='${faceitUrl}' target='_blank'>
+            <img src='${player.avatar}' class='avatar' onerror="this.src='default_avatar.png'" />
+          </a>
+          <a href='${faceitUrl}' target='_blank' class='player-name'>${player.nickname}</a>
+        </div>
+        <div class='stats-label' title='${lastUpdated}'>${matchesText}</div>
+      </div>
+      <div class='stats-grid'>
+        <div class='stat-item' data-stat='calculatedRating'><div class='value'>${safe(player.calculatedRating,2)}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
+        <div class='stat-item' data-stat='kd'><div class='value'>${safe(player.kd,2)}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
+        <div class='stat-item' data-stat='adr'><div class='value'>${safe(player.adr,1)}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
+        <div class='stat-item' data-stat='winRate'><div class='value'>${safe(player.winRate,0,'%')}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
+        <div class='stat-item' data-stat='hsPercent'><div class='value'>${safe(player.hsPercent,0,'%')}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
+        <div class='stat-item' data-stat='elo'><div class='value'>${player.sortElo}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
+      </div>`;
         updateStatProgressBars(detailCardContainer, player);
     }
 
@@ -132,7 +148,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const li = e.target.closest('li');
         if (!li) return;
         const pd = allPlayersData.find(p => p.nickname === li.dataset.nickname);
-        displayDetailCard(pd);
+        if (pd) displayDetailCard(pd);
     });
 
     // Initial Load
@@ -141,7 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const names = await (await fetch('/players.json')).json();
             const settled = await Promise.allSettled(names.map(getPlayerData));
-            allPlayersData = settled.map(r => r.status === 'fulfilled' ? r.value : { nickname: '?', error: r.reason });
+            allPlayersData = settled.map(r => r.status === 'fulfilled' ? r.value : { nickname:'?', error:r.reason });
             allPlayersData.sort((a,b)=> (b.sortElo||0)-(a.sortElo||0));
             displayPlayerList(allPlayersData);
         } catch (err) {
