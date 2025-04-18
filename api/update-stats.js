@@ -1,32 +1,155 @@
+// api/update-stats.js
 import Redis from 'ioredis';
-import fetch from 'node-fetch'; // node-fetch@3 ESM? Should be node-fetch@2 based on package-lock
-import fs from 'fs';
+import fetch from 'node-fetch'; // Stelle sicher, dass die Version zu deiner package-lock.json passt (v2 oder v3)
+import fs from 'fs'; // Verwende fs.promises für async/await
 import path from 'path';
 
+// --- HLTV Rating Calculation Functions (Korrekt hier platziert) ---
+
+/**
+ * Calculates HLTV Rating 2.0 and other stats based on a list of matches.
+ * Requires matches to have 'Kills', 'Deaths', 'Rounds', 'K/R Ratio', 'ADR', 'Headshots', 'Assists', 'Win', 'CreatedAt' properties.
+ * @param {Array<Object>} matches - An array of match stat objects for the player.
+ * @returns {Object} - An object containing calculated average stats including rating, kast, impact etc.
+ */
+function calculateAverageStats(matches) {
+    const DMG_PER_KILL = 105; // Standard damage estimate per kill if ADR is missing
+    const TRADE_PERCENT = 0.2; // Estimated percentage of deaths that are traded
+
+    const weight = matches.length; // Number of matches used for calculation
+
+    if (weight === 0) {
+        // Return default zero stats if no matches are provided
+        return {
+            kills: 0, deaths: 0, hs: 0, wins: 0, kd: 0, dpr: 0, kpr: 0, avgk: 0, adr: 0,
+            hsp: 0, winRate: 0, apr: 0, kast: 0, impact: 0, rating: 0, weight,
+        };
+    }
+
+    // Process each match to ensure stats are numbers and estimate ADR if necessary
+    const matchStats = matches.map((match) => {
+        // Die Feldnamen hier MÜSSEN denen entsprechen, die du im Hauptteil aus der API ziehst
+        const kills = Number(match['Kills']) || 0;
+        const deaths = Number(match['Deaths']) || 0;
+        const rounds = Number(match['Rounds']) || 1; // Avoid division by zero
+        const kpr = Number(match['K/R Ratio']) || 0; // Kills Per Round
+        const headshots = Number(match['Headshots']) || 0;
+        const assists = Number(match['Assists']) || 0;
+        // ADR estimate/fallback
+        const adr = Number(match['ADR']) || (kpr * DMG_PER_KILL);
+        const win = Number(match['Win']) || 0;
+
+        const validRounds = Math.max(1, rounds);
+        return { kills, deaths, rounds: validRounds, kpr, adr, headshots, assists, win };
+    });
+
+    // Calculate totals
+    const totalKills = matchStats.reduce((sum, stat) => sum + stat.kills, 0);
+    const totalDeaths = matchStats.reduce((sum, stat) => sum + stat.deaths, 0);
+    // const totalRounds = matchStats.reduce((sum, stat) => sum + stat.rounds, 0); // Nicht direkt für Formel gebraucht
+    const totalHs = matchStats.reduce((sum, stat) => sum + stat.headshots, 0);
+    const totalWins = matchStats.reduce((sum, stat) => sum + stat.win, 0);
+
+    // Calculate averages and ratios needed for formulas
+    const kd = totalDeaths === 0 ? totalKills : totalKills / totalDeaths;
+    const kpr_avg = matchStats.reduce((sum, stat) => sum + stat.kpr, 0) / weight;
+    const avgk = totalKills / weight;
+    const adr_avg = matchStats.reduce((sum, stat) => sum + stat.adr, 0) / weight;
+    const hsp = totalKills === 0 ? 0 : (totalHs / totalKills) * 100;
+    const winRate = (totalWins / weight) * 100;
+
+    // Calculate per-round stats needed for formulas
+    const dpr = matchStats.reduce((sum, stat) => sum + (stat.deaths / stat.rounds), 0) / weight;
+    const apr = matchStats.reduce((sum, stat) => sum + (stat.assists / stat.rounds), 0) / weight;
+
+    // Calculate KAST (using the formula from the provided reference code exactly)
+    const kast = matchStats.reduce((sum, stat) => {
+        const survivedRounds = stat.rounds - stat.deaths;
+        const tradedEstimate = TRADE_PERCENT * stat.rounds;
+        const contributionSum = (stat.kills + stat.assists + survivedRounds + tradedEstimate) * 0.45;
+        const kastValue = (contributionSum / stat.rounds) * 100;
+        return sum + Math.min(kastValue, 100);
+    }, 0) / weight;
+
+    // Calculate Impact Rating
+    const impact = Math.max(0, 2.13 * kpr_avg + 0.42 * apr - 0.41);
+
+    // Calculate HLTV Rating 2.0
+    const rating = Math.max(0,
+        0.0073 * kast +
+        0.3591 * kpr_avg +
+        -0.5329 * dpr +
+        0.2372 * impact +
+        0.0032 * adr_avg +
+        0.1587
+    );
+
+    // Return all calculated average stats, formatted
+    return {
+        // Du kannst hier auswählen, welche Stats du brauchst
+        kills: totalKills, deaths: totalDeaths, hs: totalHs, wins: totalWins,
+        kd: parseFloat(kd.toFixed(2)),
+        dpr: parseFloat(dpr.toFixed(2)),
+        kpr: parseFloat(kpr_avg.toFixed(2)),
+        avgk: parseFloat(avgk.toFixed(2)),
+        adr: parseFloat(adr_avg.toFixed(2)),
+        hsp: parseFloat(hsp.toFixed(2)),
+        winRate: parseFloat(winRate.toFixed(2)),
+        apr: parseFloat(apr.toFixed(2)),
+        kast: parseFloat(kast.toFixed(2)),
+        impact: parseFloat(impact.toFixed(2)),
+        rating: parseFloat(rating.toFixed(2)), // <-- Das wichtigste Ergebnis
+        weight: weight, // Anzahl verwendeter Matches
+    };
+}
+
+/**
+ * Filters matches to include only those from the last 14 days and calculates average stats.
+ * @param {Array<Object>} allMatches - Array of all match objects, each needing a 'CreatedAt' property.
+ * @returns {Object} - Object with 'stats' (calculated average stats) and 'matchesCount' (number of recent matches).
+ */
+function calculateCurrentFormStats(allMatches) {
+    if (!Array.isArray(allMatches)) {
+        console.error("[HLTV Calc] Invalid input: allMatches must be an array.");
+        return { stats: calculateAverageStats([]), matchesCount: 0 };
+    }
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+    const recentMatches = allMatches.filter(match => {
+        // Stelle sicher, dass 'CreatedAt' der richtige Feldname ist
+        const createdAt = match['CreatedAt'];
+        if (!createdAt) return false;
+        try {
+            const matchDate = new Date(Number(createdAt) ? Number(createdAt) * 1000 : createdAt); // Annahme: Unix Timestamp in Sekunden
+            return matchDate instanceof Date && !isNaN(matchDate) && matchDate >= twoWeeksAgo;
+        } catch (e) {
+            console.warn("[HLTV Calc] Could not parse date for match:", match, e);
+            return false;
+        }
+    });
+    // console.log(`[HLTV Calc] Filtered ${allMatches.length} matches to ${recentMatches.length} (last 14 days).`);
+    return {
+        stats: calculateAverageStats(recentMatches), // Berechne Stats basierend auf gefilterten Matches
+        matchesCount: recentMatches.length,
+    };
+}
+// --- Ende HLTV Rating Calculation Functions ---
+
+
+// --- Globale Konfiguration und Initialisierung (NUR EINMAL!) ---
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const API_BASE_URL = 'https://open.faceit.com/data/v4';
 const REDIS_URL = process.env.REDIS_URL;
-// MODIFIED: Changed back to 20 matches
-const MATCH_COUNT = 20; // WAS 5 for testing
-const API_DELAY = 600; // Consider increasing if rate limits hit
+const MATCH_COUNT = 20; // Anzahl Matches aus History holen
+const API_DELAY = 600; // Pause zwischen API Calls (ms)
 
-console.log('[CRON START] Update Stats function initializing...'); // Log start
+console.log('[CRON START] Update Stats function initializing...');
 
-if (!FACEIT_API_KEY) {
-    console.error("[CRON FATAL] FACEIT_API_KEY environment variable is not set!");
-}
-if (!REDIS_URL) {
-    console.error("[CRON FATAL] REDIS_URL environment variable is not set!");
-} else {
-    try {
-        const urlParts = new URL(REDIS_URL);
-        console.log(`[CRON INFO] Attempting Redis connection to host: ${urlParts.hostname}, port: ${urlParts.port}, username: ${urlParts.username ? 'Yes' : 'No'}`);
-    } catch (e) {
-        console.error("[CRON WARN] Could not parse REDIS_URL for logging parts.");
-    }
-}
+if (!FACEIT_API_KEY) console.error("[CRON FATAL] FACEIT_API_KEY missing!");
+if (!REDIS_URL) console.error("[CRON FATAL] REDIS_URL missing!");
 
-// Initialize Redis client
+// Redis Client Initialisierung (NUR EINMAL!)
 let redis = null;
 if (REDIS_URL) {
     try {
@@ -34,39 +157,53 @@ if (REDIS_URL) {
             connectTimeout: 10000,
             maxRetriesPerRequest: 3,
             retryStrategy(times) {
-                const delay = Math.min(times * 50, 2000); // Exponential backoff
-                console.log(`[CRON Redis] Retry connection attempt ${times}, delaying for ${delay}ms`);
+                const delay = Math.min(times * 100, 2000); // Angepasste Strategie
+                console.log(`[CRON Redis] Retry attempt ${times}, delaying ${delay}ms`);
                 return delay;
             },
-            // MODIFIED: Enabled TLS for Vercel Redis compatibility
-            tls: { rejectUnauthorized: false } // Use with caution
+            tls: { rejectUnauthorized: false } // Für Vercel Redis
         });
+        redis.on('error', (err) => console.error('[CRON Redis Error]', err));
+        redis.on('connect', () => console.log('[CRON Redis] Connected.'));
+        redis.on('reconnecting', () => console.log('[CRON Redis] Reconnecting...'));
+        // Optional: Handle 'end' if needed
+    } catch (error) { console.error('[CRON Redis] Failed init:', error); redis = null; }
+} else { console.warn('[CRON Redis] REDIS_URL not set.'); }
 
-        redis.on('error', (err) => {
-            console.error('[CRON Redis Client Error]', err);
-            redis = null; // Ensure redis is null on persistent error
+// --- Helper Funktionen ---
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper: Faceit API Abruf (wie zuvor)
+async function fetchFaceitApi(endpoint) {
+    await delay(API_DELAY);
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            headers: { 'Authorization': `Bearer ${FACEIT_API_KEY}` }
         });
-        redis.on('connect', () => { console.log('[CRON Redis Client] Connected successfully.'); });
-        redis.on('reconnecting', () => { console.log('[CRON Redis Client] Reconnecting...'); });
-        redis.on('end', () => {
-            console.log('[CRON Redis Client] Connection ended.');
-            redis = null; // Ensure redis is null if connection ends
-        });
+        // Fehlerbehandlung (Rate Limit, 404, andere Fehler)
+        if (response.status === 429) {
+            console.warn(`[CRON API] Rate limit hit for ${endpoint}. Waiting extra long...`);
+            await delay(API_DELAY * 10);
+            return fetchFaceitApi(endpoint); // Vorsicht bei Retries
+        }
+        if (!response.ok) {
+            if (response.status === 404) return null; // Nicht gefunden ist ok
+            console.error(`[CRON API] Error ${response.status} for ${endpoint}: ${await response.text()}`);
+            throw new Error(`Faceit API error: ${response.status}`);
+        }
+        return response.json();
     } catch (error) {
-        console.error('[CRON Redis Client] Failed to initialize:', error);
-        redis = null;
+        console.error(`[CRON API] Network or fetch error for ${endpoint}:`, error);
+        throw error;
     }
-} else {
-    console.warn('[CRON Redis Client] Skipping initialization because REDIS_URL is not set.');
 }
 
-// --- Helper ---
+// Helper: Spielerliste laden (wie zuvor)
 function getPlayerNicknames() {
     try {
         const jsonPath = path.resolve(process.cwd(), 'players.json');
-        console.log(`[CRON INFO] Reading players from: ${jsonPath}`);
         if (fs.existsSync(jsonPath)) {
-            const rawData = fs.readFileSync(jsonPath);
+            const rawData = fs.readFileSync(jsonPath); // Sync ist ok für Initialisierung
             const nicknames = JSON.parse(rawData.toString());
             console.log(`[CRON INFO] Found ${nicknames.length} players in players.json`);
             return nicknames;
@@ -78,161 +215,157 @@ function getPlayerNicknames() {
         return [];
     }
 }
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // --- Hauptfunktion für Cron Job ---
 export default async function handler(req, res) {
-    // ADDED: Log to check if handler is invoked at all
-    console.log('[CRON HANDLER INVOKED] Function started.');
-    console.log(`[CRON HANDLER] Received request. Query: ${JSON.stringify(req.query || {})}`);
+    console.log('[CRON HANDLER INVOKED]');
 
-    if (req.query.source !== 'cron') {
-        console.warn('[CRON FORBIDDEN] Access denied. Request source not "cron".');
-        return res.status(403).json({ error: 'Forbidden: Access denied.' });
+    // --- Trigger-Validierung (wie zuvor) ---
+    // Beispiel: Nur erlauben, wenn von Vercel Cron getriggert
+    const bearer = req.headers.authorization;
+    if (!bearer || bearer !== `Bearer ${process.env.CRON_SECRET}`) { // Verwende CRON_SECRET von Vercel
+        console.warn('[CRON FORBIDDEN] Unauthorized: Missing or incorrect CRON secret.');
+        return res.status(401).send('Unauthorized');
     }
-    if (!FACEIT_API_KEY) {
-        console.error("[CRON HANDLER FATAL] FACEIT_API_KEY missing!");
-        return res.status(500).json({ error: 'Server config error: API Key missing' });
-    }
-    if (!redis) {
-        console.error("[CRON HANDLER FATAL] Redis client not available or connection failed previously. Cannot update stats.");
-        return res.status(500).json({ error: 'Server configuration error: Database connection failed' });
+    // --------------------------------
+
+    if (!FACEIT_API_KEY || !redis) {
+        console.error("[CRON HANDLER FATAL] API Key or Redis unavailable!");
+        return res.status(500).json({ error: 'Server configuration error' });
     }
 
-    const faceitHeaders = { 'Authorization': `Bearer ${FACEIT_API_KEY}` };
-    console.log('[CRON UPDATE] Starting scheduled stats update cycle...');
     const nicknames = getPlayerNicknames();
-    if (!nicknames || nicknames.length === 0) {
-        console.log('[CRON UPDATE] No players found or error reading players.json. Exiting.');
-        return res.status(200).json({ message: 'No players found or error reading list.' });
+    if (!nicknames?.length) {
+        console.log('[CRON UPDATE] No players found. Exiting.');
+        return res.status(200).json({ message: 'No players found.' });
     }
 
+    console.log('[CRON UPDATE] Starting scheduled stats update cycle...');
     let successCount = 0;
     let errorCount = 0;
     const totalPlayers = nicknames.length;
 
+    // --- Spieler-Schleife ---
     for (let i = 0; i < totalPlayers; i++) {
         const nickname = nicknames[i];
-        console.log(`[CRON UPDATE] Processing player ${i + 1}/${totalPlayers}: ${nickname}`);
+        console.log(`\n[CRON UPDATE ${i + 1}/${totalPlayers}] Processing: ${nickname}`);
         let playerId = null;
-        // MODIFIED: Added assists tracking
-        let recentMatchesData = { kills: 0, deaths: 0, rounds: 0, adrSum: 0, hsCount: 0, wins: 0, matchesProcessed: 0, perfScoreSum: 0, assists: 0 };
-        let calculationError = false;
+        // Dieses Array wird die aufbereiteten Daten für die HLTV-Berechnung sammeln
+        let matchesForHltvCalc = [];
 
         try {
             // 1. Player ID holen
-            await delay(API_DELAY);
-            const playerDetailsResponse = await fetch(`${API_BASE_URL}/players?nickname=${nickname}`, { headers: faceitHeaders });
-            console.log(`[CRON UPDATE ${nickname}] Fetch Player Details Status: ${playerDetailsResponse.status}`);
-            if (!playerDetailsResponse.ok) { throw new Error(`Failed to fetch player details (${playerDetailsResponse.status})`); }
-            const playerData = await playerDetailsResponse.json();
-            playerId = playerData.player_id;
-            if (!playerId) { throw new Error('Player ID not found in response.'); }
+            const playerDetails = await fetchFaceitApi(`/players?nickname=${nickname}`);
+            if (!playerDetails?.player_id) { throw new Error('Player ID not found'); }
+            playerId = playerDetails.player_id;
+            console.log(`[CRON UPDATE ${nickname}] Player ID: ${playerId}`);
 
             // 2. Match History holen
-            await delay(API_DELAY);
-            console.log(`[CRON UPDATE ${nickname}] Fetching history for Player ID: ${playerId}`);
-            const historyResponse = await fetch(`${API_BASE_URL}/players/${playerId}/history?game=cs2&limit=${MATCH_COUNT}`, { headers: faceitHeaders });
-            console.log(`[CRON UPDATE ${nickname}] Fetch History Status: ${historyResponse.status}`);
-            if (!historyResponse.ok) { throw new Error(`Failed to fetch match history (${historyResponse.status})`); }
-            const historyData = await historyResponse.json();
-
-            if (!historyData || !Array.isArray(historyData.items) || historyData.items.length === 0) {
-                console.warn(`[CRON UPDATE ${nickname}] No recent match history found. Skipping detailed stats calc.`);
-                calculationError = true;
-            } else {
-                console.log(`[CRON UPDATE ${nickname}] Fetched ${historyData.items.length} matches (limit: ${MATCH_COUNT}). Getting details...`);
-                // 3. Detail Stats für jedes Match holen
-                for (const match of historyData.items) {
-                    const matchId = match.match_id;
-                    await delay(API_DELAY);
-                    try {
-                        console.log(`[CRON UPDATE ${nickname}] Fetching stats for match ${matchId}`); // Added log here
-                        const matchStatsResponse = await fetch(`${API_BASE_URL}/matches/${matchId}/stats`, { headers: faceitHeaders });
-                        console.log(`[CRON UPDATE ${nickname}] Match Stats Status for ${matchId}: ${matchStatsResponse.status}`); // Added log here
-                        if (!matchStatsResponse.ok) {
-                            console.warn(`[CRON UPDATE ${nickname}] Failed fetch stats for match ${matchId} (${matchStatsResponse.status}). Skipping match.`);
-                            continue;
-                        }
-                        const matchStatsData = await matchStatsResponse.json();
-                        const playerStatsInMatch = matchStatsData?.rounds?.[0]?.teams?.flatMap(team => team.players)?.find(p => p.player_id === playerId);
-
-                        if (playerStatsInMatch?.player_stats) {
-                            const stats = playerStatsInMatch.player_stats;
-                            // MODIFIED: Added assists (a)
-                            const k = parseInt(stats.Kills || 0, 10);
-                            const d = parseInt(stats.Deaths || 0, 10);
-                            const r = parseInt(stats.Rounds || 0, 10);
-                            const a = parseInt(stats.Assists || 0, 10); // <-- Added Assists
-                            const hs = parseInt(stats['Headshots %'] || stats.Headshots || 0, 10);
-                            const dmg = parseInt(stats.Damage || 0, 10); // Not standard, check if available in API response
-                            const win = stats.Result === "1";
-
-                            if (r > 0) {
-                                // MODIFIED: Sum assists
-                                recentMatchesData.kills += k;
-                                recentMatchesData.deaths += d;
-                                recentMatchesData.rounds += r;
-                                recentMatchesData.assists += a; // <-- Sum Assists
-                                recentMatchesData.hsCount += parseInt(stats.Headshots || 0, 10);
-                                if (win) recentMatchesData.wins++;
-
-                                const matchAdr = dmg / r;
-                                recentMatchesData.adrSum += matchAdr;
-
-                                const matchKpr = k / r;
-                                const matchAdrNorm = matchAdr / 100;
-                                const matchKD = k / Math.max(1, d);
-                                const matchPerfScore = (matchKD * 0.5) + (matchAdrNorm * 0.3) + (matchKpr * 0.1);
-                                recentMatchesData.perfScoreSum += matchPerfScore;
-
-                                recentMatchesData.matchesProcessed++;
-                                console.log(`[CRON UPDATE ${nickname}] Processed stats for match ${matchId} (${recentMatchesData.matchesProcessed}/${historyData.items.length})`); // Added log here
-                            }
-                        } else { console.warn(`[CRON UPDATE ${nickname}] Player stats not found in match ${matchId}.`); }
-                    } catch (matchError) { console.error(`[CRON UPDATE ${nickname}] Error fetching/processing stats for match ${matchId}:`, matchError); }
-                } // Ende Match-Loop
+            const historyData = await fetchFaceitApi(`/players/${playerId}/history?game=csgo&offset=0&limit=${MATCH_COUNT}`);
+            if (!historyData?.items?.length) {
+                console.log(`[CRON UPDATE ${nickname}] No recent match history found.`);
+                // Keine Berechnung möglich, aber kein Fehler -> weiter zum nächsten Spieler
+                continue;
             }
+            console.log(`[CRON UPDATE ${nickname}] Fetched ${historyData.items.length} matches from history.`);
 
-            // 4. Berechne Durchschnittswerte
-            let calculatedStats = {};
-            if (recentMatchesData.matchesProcessed > 0 && !calculationError) {
-                const avgKD = (recentMatchesData.kills / Math.max(1, recentMatchesData.deaths)).toFixed(2);
-                const avgADR = (recentMatchesData.adrSum / recentMatchesData.matchesProcessed).toFixed(1);
-                const avgHS = ((recentMatchesData.hsCount / Math.max(1, recentMatchesData.kills)) * 100).toFixed(0);
-                const winRate = ((recentMatchesData.wins / recentMatchesData.matchesProcessed) * 100).toFixed(0);
-                const avgPerfRating = (recentMatchesData.perfScoreSum / recentMatchesData.matchesProcessed).toFixed(2);
-                // MODIFIED: Add assists per round (APR) and total assists
-                const avgAPR = (recentMatchesData.assists / Math.max(1, recentMatchesData.rounds)).toFixed(2);
+            // 3. Detail Stats für jedes Match holen und für HLTV-Calc aufbereiten
+            console.log(`[CRON UPDATE ${nickname}] Fetching details for ${historyData.items.length} matches...`);
+            for (const historyItem of historyData.items) {
+                const matchId = historyItem.match_id;
+                const matchDetails = await fetchFaceitApi(`/matches/${matchId}/stats`);
+                if (!matchDetails?.rounds?.length) {
+                    console.warn(`[CRON UPDATE ${nickname}] No detailed stats for match ${matchId}.`);
+                    continue;
+                }
 
-                calculatedStats = {
-                    calculatedRating: avgPerfRating, kd: avgKD, adr: avgADR,
-                    winRate: winRate, hsPercent: avgHS, apr: avgAPR, // Added APR
-                    totalAssists: recentMatchesData.assists, // Added total assists
-                    matchesConsidered: recentMatchesData.matchesProcessed,
-                    lastUpdated: Date.now()
-                };
-                console.log(`[CRON UPDATE ${nickname}] Calculated stats:`, calculatedStats);
+                // Finde Spieler-Stats
+                let playerStatsData = null;
+                let teamWon = 0;
+                const matchRounds = parseInt(matchDetails.rounds[0].round_stats['Rounds'], 10) || 1;
+                const winningFaction = matchDetails.rounds[0].round_stats['Winner'];
 
-                // 5. Speichere in Redis
-                if (!redis) {
-                    console.error(`[CRON UPDATE ${nickname}] Redis client became unavailable. Cannot store stats.`);
-                    errorCount++;
-                } else {
-                    try {
-                        const redisKey = `player_stats:${playerId}`;
-                        const expirationSeconds = 7 * 24 * 60 * 60; // 1 week
-                        await redis.set(redisKey, JSON.stringify(calculatedStats), 'EX', expirationSeconds);
-                        console.log(`[CRON UPDATE ${nickname}] Stored calculated stats in Redis (Key: ${redisKey})`);
-                        successCount++;
-                    } catch (redisError) {
-                        console.error(`[CRON UPDATE ${nickname}] Error storing stats in Redis:`, redisError);
-                        errorCount++;
+                for (const team of matchDetails.rounds[0].teams) {
+                    const foundPlayer = team.players.find(p => p.player_id === playerId);
+                    if (foundPlayer) {
+                        playerStatsData = foundPlayer.player_stats;
+                        if (team.team_id === winningFaction) teamWon = 1;
+                        break;
                     }
                 }
 
-            } else if (!calculationError) { console.warn(`[CRON UPDATE ${nickname}] No valid match details processed (${recentMatchesData.matchesProcessed} matches). Cannot calculate stats.`); errorCount++; }
-            else { console.warn(`[CRON UPDATE ${nickname}] Skipping stats calculation due to history fetch error for ${nickname}.`); errorCount++; }
+                if (playerStatsData) {
+                    // Füge Match-Daten zum Array für die HLTV-Berechnung hinzu
+                    // !!! Stelle sicher, dass die Feldnamen hier exakt denen entsprechen,
+                    // die `calculateAverageStats` in seinen `map`-Schritt erwartet !!!
+                    matchesForHltvCalc.push({
+                        Kills: playerStatsData.Kills,
+                        Deaths: playerStatsData.Deaths,
+                        Assists: playerStatsData.Assists,
+                        Headshots: playerStatsData.Headshots,
+                        'K/R Ratio': playerStatsData['K/R Ratio'], // <-- Wichtig!
+                        ADR: playerStatsData.ADR,                   // <-- Wichtig! (Kann fehlen)
+                        Rounds: matchRounds,
+                        Win: teamWon,
+                        CreatedAt: historyItem.started_at // Unix Timestamp (Sekunden)
+                    });
+                    console.log(`[CRON UPDATE ${nickname}] Added stats for match ${matchId} to calculation list.`);
+                } else {
+                    console.warn(`[CRON UPDATE ${nickname}] Player not found in match details ${matchId}.`);
+                }
+            } // Ende Match-Detail-Schleife
+
+            // 4. HLTV Rating und Stats berechnen (NUR wenn Daten vorhanden)
+            if (matchesForHltvCalc.length > 0) {
+                console.log(`[CRON UPDATE ${nickname}] Calculating HLTV stats based on ${matchesForHltvCalc.length} collected matches.`);
+                const formStatsResult = calculateCurrentFormStats(matchesForHltvCalc);
+                const finalStats = formStatsResult.stats; // Das Objekt mit rating, kd, adr etc.
+                const matchesConsideredRecent = formStatsResult.matchesCount; // Anzahl Matches der letzten 14 Tage
+
+                if (matchesConsideredRecent === 0) {
+                    console.log(`[CRON UPDATE ${nickname}] No matches found within the last 14 days. Storing 0/empty stats.`);
+                    // Speichere leere/Standardwerte, wenn keine recent matches vorhanden
+                    const emptyStats = calculateAverageStats([]); // Holt Standardwerte
+                    const dataToStore = {
+                        calculatedRating: emptyStats.rating, kd: emptyStats.kd, adr: emptyStats.adr,
+                        winRate: emptyStats.winRate, hsPercent: emptyStats.hsp,
+                        matchesConsidered: 0, kast: emptyStats.kast, impact: emptyStats.impact,
+                        lastUpdated: new Date().toISOString()
+                    };
+                    const redisKey = `player_stats:${playerId}`;
+                    await redis.set(redisKey, JSON.stringify(dataToStore), 'EX', 7 * 24 * 60 * 60); // 1 Woche TTL
+                    console.log(`[CRON UPDATE ${nickname}] Stored empty stats in Redis (0 recent matches).`);
+                    successCount++; // Zählt als Erfolg, da Prozess durchlief
+
+                } else {
+                    console.log(`[CRON UPDATE ${nickname}] Calculated HLTV stats (Last ${matchesConsideredRecent} matches): Rating=${finalStats.rating}, K/D=${finalStats.kd}, ADR=${finalStats.adr}`);
+
+                    // 5. Ergebnis in Redis speichern
+                    const redisKey = `player_stats:${playerId}`;
+                    // Stelle sicher, dass die Struktur dem entspricht, was faceit-data.js liest
+                    const dataToStore = {
+                        calculatedRating: finalStats.rating, // <-- HLTV Rating 2.0
+                        kd: finalStats.kd,
+                        adr: finalStats.adr,
+                        winRate: finalStats.winRate,
+                        hsPercent: finalStats.hsp,
+                        matchesConsidered: matchesConsideredRecent,
+                        kast: finalStats.kast,
+                        impact: finalStats.impact,
+                        // Füge hier ggf. weitere Werte aus finalStats hinzu, die du brauchst
+                        lastUpdated: new Date().toISOString()
+                    };
+                    await redis.set(redisKey, JSON.stringify(dataToStore), 'EX', 7 * 24 * 60 * 60); // 1 Woche TTL
+                    console.log(`[CRON UPDATE ${nickname}] Stored calculated HLTV stats in Redis.`);
+                    successCount++;
+                }
+
+            } else {
+                console.warn(`[CRON UPDATE ${nickname}] No detailed match stats successfully collected. Cannot calculate HLTV rating.`);
+                // Optional: Alte Stats löschen oder als N/A markieren
+                // await redis.del(`player_stats:${playerId}`);
+                errorCount++; // Zählt als Fehler, da keine Berechnung stattfand
+            }
 
         } catch (error) {
             console.error(`[CRON UPDATE ${nickname}] FAILED processing player:`, error);
