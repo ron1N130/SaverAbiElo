@@ -1,4 +1,4 @@
-// api/faceit-data.js – robust gegen 503‑Errors beim Match‑Fetch
+// api/faceit-data.js – robust gegen 503 und nur 15 Matches
 import Redis from "ioredis";
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
@@ -29,17 +29,17 @@ function calculateAverageStats(matches) {
     }
 
     const matchStats = matches.map(m => {
-        const kills    = +m.Kills   || 0;
-        const deaths   = +m.Deaths  || 0;
-        const rounds   = +m.Rounds  || 1;
-        const kpr      = +m["K/R Ratio"] || 0;
-        const adr      = +m.ADR     || (kpr * DMG_PER_KILL);
-        const headshots= +m.Headshots|| 0;
-        const assists  = +m.Assists  || 0;
+        const kills     = +m.Kills        || 0;
+        const deaths    = +m.Deaths       || 0;
+        const rounds    = +m.Rounds       || 1;
+        const kpr       = +m["K/R Ratio"] || 0;
+        const adr       = +m.ADR          || (kpr * DMG_PER_KILL);
+        const headshots = +m.Headshots    || 0;
+        const assists   = +m.Assists      || 0;
         return { kills, deaths, rounds, kpr, adr, headshots, assists };
     });
 
-    const kills  = matchStats.reduce((s,x)=>s+x.kills,0);
+    const kills  = matchStats.reduce((s,x)=>s+x.kills, 0);
     const deaths = matchStats.reduce((s,x)=>s+x.deaths,0);
     const kd     = deaths ? kills/deaths : 0;
     const dpr    = matchStats.reduce((s,x)=>s + x.deaths/x.rounds,0) / weight;
@@ -56,7 +56,7 @@ function calculateAverageStats(matches) {
             const traded   = TRADE_PERCENT * x.rounds;
             const raw      = (x.kills + x.assists + survived + traded) * 0.45;
             return sum + Math.min((raw / x.rounds) * 100, 100);
-        }, 0) / weight;
+        },0) / weight;
 
     const impact = Math.max(2.13 * kpr + 0.42 * apr - 0.41, 0);
 
@@ -72,23 +72,23 @@ function calculateAverageStats(matches) {
     return {
         kills,
         deaths,
-        kd: +kd.toFixed(2),
-        dpr: +dpr.toFixed(2),
-        kpr: +kpr.toFixed(2),
-        avgk: +avgk.toFixed(2),
-        adr: +adr.toFixed(1),
+        kd:      +kd.toFixed(2),
+        dpr:     +dpr.toFixed(2),
+        kpr:     +kpr.toFixed(2),
+        avgk:    +avgk.toFixed(2),
+        adr:     +adr.toFixed(1),
         hs,
-        hsp: +hsp.toFixed(1),
-        apr: +apr.toFixed(2),
-        kast: +kast.toFixed(1),
-        impact: +impact.toFixed(2),
-        rating: +rating.toFixed(2),
+        hsp:     +hsp.toFixed(1),
+        apr:     +apr.toFixed(2),
+        kast:    +kast.toFixed(1),
+        impact:  +impact.toFixed(2),
+        rating:  +rating.toFixed(2),
         weight
     };
 }
 
 /**
- * Nimmt die letzten 15 Matches (sortiert nach CreatedAt) und berechnet die Stats
+ * Wählt die letzten 15 Matches (nach CreatedAt) und berechnet die Stats
  */
 function calculateCurrentFormStats(matches) {
     const recent = matches
@@ -131,15 +131,8 @@ export default async function handler(req, res) {
             level: details.games?.cs2?.skill_level ?? "N/A",
             sortElo: parseInt(details.games?.cs2?.faceit_elo,10)||0,
             calculatedRating: null,
-            kd: null,
-            dpr: null,
-            kpr: null,
-            adr: null,
-            hsPercent: null,
-            kast: null,
-            impact: null,
-            matchesConsidered: 0,
-            lastUpdated: null
+            kd: null, dpr: null, kpr: null, adr: null, hsPercent: null,
+            kast: null, impact: null, matchesConsidered: 0, lastUpdated: null
         };
 
         // 1) Redis‑Cache prüfen
@@ -151,13 +144,19 @@ export default async function handler(req, res) {
 
         // 2) Live‑Fallback
         if (!statsObj) {
-            const history = await fetchJson(
-                `${API_BASE_URL}/players/${details.player_id}/history?game=cs2&limit=50`,
-                headers
-            );
-            const items = history.items || [];
+            // History fetch in try/catch
+            let items = [];
+            try {
+                const hist = await fetchJson(
+                    `${API_BASE_URL}/players/${details.player_id}/history?game=cs2&limit=15`,
+                    headers
+                );
+                items = hist.items || [];
+            } catch (_err) {
+                items = []; // bei 503 oder Timeout keine Matches
+            }
 
-            // jeder Fetch in try/catch ‑ wenn einer 503 wirft, skippen wir ihn
+            // pro-Match stats holen, Fehler ignorieren
             const matchData = (
                 await Promise.all(
                     items.map(async h => {
@@ -174,20 +173,19 @@ export default async function handler(req, res) {
                                 .find(p=>p.player_id===details.player_id);
                             if (!p) return null;
                             return {
-                                Kills:     +p.player_stats.Kills,
-                                Deaths:    +p.player_stats.Deaths,
-                                Assists:   +p.player_stats.Assists,
-                                Headshots: +p.player_stats.Headshots,
-                                "K/R Ratio": +p.player_stats["K/R Ratio"],
-                                ADR:       +(
+                                Kills:      +p.player_stats.Kills,
+                                Deaths:     +p.player_stats.Deaths,
+                                Assists:    +p.player_stats.Assists,
+                                Headshots:  +p.player_stats.Headshots,
+                                "K/R Ratio":+p.player_stats["K/R Ratio"],
+                                ADR:        +(
                                     p.player_stats.ADR ??
                                     p.player_stats["Average Damage per Round"]
                                 ),
-                                Rounds:    +(round.round_stats.Rounds||1),
-                                CreatedAt: h.started_at
+                                Rounds:     +(round.round_stats.Rounds||1),
+                                CreatedAt:  h.started_at
                             };
-                        } catch (_err) {
-                            // 503 oder andere Errors einfach ignorieren
+                        } catch {
                             return null;
                         }
                     })
