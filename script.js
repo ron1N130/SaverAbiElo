@@ -13,6 +13,7 @@ const safe = (v, digits = 2, suf = "") => (v === null ? "—" : v.toFixed(digits
 document.addEventListener("DOMContentLoaded", () => {
     const playerListContainerEl = document.getElementById("player-list");
     const detailCardContainer   = document.getElementById("player-detail-card-container");
+    const mainContentArea       = document.getElementById("main-content-area");
     const loadingIndicator      = document.getElementById("loading-indicator");
     const errorMessageElement   = document.getElementById("error-message");
 
@@ -112,6 +113,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Detail‑Card rendern
     function displayDetailCard(player) {
+        console.log('displayDetailCard:', player);
+        // Sichtbar machen
+        detailCardContainer.style.display = 'block';
+        mainContentArea.classList.add('detail-visible');
+        console.log('displayDetailCard:', player);
         detailCardContainer.innerHTML = '';
         if (!player || player.error) {
             detailCardContainer.innerHTML = `<div class='error-card'>${player.nickname} - ${player.error}</div>`;
