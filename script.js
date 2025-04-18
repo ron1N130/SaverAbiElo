@@ -111,43 +111,56 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Detail‑Card rendern
+    // … im DOMContentLoaded–Block …
     function displayDetailCard(player) {
-        console.log('displayDetailCard:', player);
-        // Sichtbar machen
-        detailCardContainer.style.display = 'block';
-        mainContentArea.classList.add('detail-visible');
-        console.log('displayDetailCard:', player);
-        detailCardContainer.innerHTML = '';
+        detailCardContainer.innerHTML = "";
+        detailCardContainer.style.display = "block";
+
         if (!player || player.error) {
-            detailCardContainer.innerHTML = `<div class='error-card'>${player.nickname} - ${player.error}</div>`;
+            detailCardContainer.innerHTML = `<div class="error-card">${player.nickname} – ${player.error}</div>`;
             return;
         }
-        const faceitUrl = player.faceitUrl || `https://www.faceit.com/en/players/${player.nickname}`;
-        const lastUpdated = player.lastUpdated ?
-            `Stats vom ${new Intl.DateTimeFormat('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(player.lastUpdated))} Uhr`
-            : 'Stats werden aktualisiert...';
-        const matchesText = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
+
+        // Header
+        const faceitUrl = player.faceitUrl;
+        const lastText  = player.matchesConsidered
+            ? `Letzte ${player.matchesConsidered} Matches`
+            : "Aktuelle Stats";
+
+        // Grid‑HTML: 3 Spalten × 2 Reihen
         detailCardContainer.innerHTML = `
-      <div class='card-header'>
-        <div class='player-info'>
-          <a href='${faceitUrl}' target='_blank'>
-            <img src='${player.avatar}' class='avatar' onerror="this.src='default_avatar.png'" />
-          </a>
-          <a href='${faceitUrl}' target='_blank' class='player-name'>${player.nickname}</a>
-        </div>
-        <div class='stats-label' title='${lastUpdated}'>${matchesText}</div>
+    <div class="card-header">
+      <a href="${faceitUrl}" target="_blank">
+        <img src="${player.avatar}" class="avatar" onerror="this.src='default_avatar.png'">
+      </a>
+      <div>
+        <a href="${faceitUrl}" target="_blank" class="player-name">${player.nickname}</a>
+        <div class="stats-label">${lastText}</div>
       </div>
-      <div class='stats-grid'>
-        <div class='stat-item' data-stat='calculatedRating'><div class='value'>${safe(player.calculatedRating,2)}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='kd'><div class='value'>${safe(player.kd,2)}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='adr'><div class='value'>${safe(player.adr,1)}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='winRate'><div class='value'>${safe(player.winRate,0,'%')}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='hsPercent'><div class='value'>${safe(player.hsPercent,0,'%')}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='elo'><div class='value'>${player.sortElo}</div><div class='stat-progress-bar'></div><span class='stat-indicator-label'></span></div>
-      </div>`;
+    </div>
+    <div class="stats-grid">
+      ${[
+            { key: "rating",    label: "Rating 2.0",  value: player.calculatedRating?.toFixed(2) },
+            { key: "dpr",       label: "DPR",         value: player.deathsPerRound?.toFixed(2) },
+            { key: "kast",      label: "KAST %",      value: player.kast?.toFixed(1) + "%" },
+            { key: "kd",        label: "K/D",         value: player.kd?.toFixed(2) },
+            { key: "adr",       label: "ADR",         value: player.adr?.toFixed(1) },
+            { key: "kpr",       label: "KPR",         value: (player.kd/matches)*1?.toFixed(2) /* oder falls du kpr separat speicherst */ }
+        ].map(stat => `
+        <div class="stat-item" data-stat="${stat.key}">
+          <div class="label">${stat.label}</div>
+          <div class="value">${stat.value ?? "—"}</div>
+          <div class="stat-progress-container">
+            <div class="stat-progress-bar"></div>
+          </div>
+          <div class="stat-indicator-label"></div>
+        </div>
+      `).join("")}
+    </div>
+  `;
         updateStatProgressBars(detailCardContainer, player);
     }
+
 
     // Klick‑Handler
     playerListContainerEl.addEventListener('click', e => {

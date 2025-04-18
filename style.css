@@ -181,6 +181,31 @@ ol#player-list li::before {
     color: var(--text-secondary);
     margin-right: 0.5rem;
 }
+/* stats-grid jetzt immer 3 Spalten × 2 Reihen */
+.player-card-hltv .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, auto);
+    gap: 1.5rem;
+}
+
+/* Label über Value, zentriert */
+.player-card-hltv .stat-item {
+    text-align: center;
+    padding: 1rem;
+}
+.player-card-hltv .stat-item .label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+.player-card-hltv .stat-item .value {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+/* Progress‑Bar und Indikator bleiben gleich */
 
 .player-info {
     display: flex;
