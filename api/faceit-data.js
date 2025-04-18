@@ -12,9 +12,73 @@ async function fetchJson(url, headers) {
     return res.json();
 }
 
-// Rating‑Berechnung (letzte 10 Matches)
-function calculateAverageStats(matches) { /* ... unverändert ... */
+/**
+ * Berechnet HLTV-ähnliche Kennzahlen aus einem Array von Match-Objekten.
+ * @param {Array} matches – Array von Objekten mit den Feldern:
+ *   Kills, Deaths, Assists, Headshots, 'K/R Ratio', ADR, Rounds, Win
+ * @returns {Object} { kd, adr, winRate, hsp, kast, impact, rating, weight }
+ */
+function calculateAverageStats(matches) {
+    const DMG_PER_KILL = 105;
+    const weight = matches.length;
+    if (weight === 0) {
+        return {
+            kd: 0,
+            adr: 0,
+            winRate: 0,
+            hsp: 0,
+            kast: 0,
+            impact: 0,
+            rating: 0,
+            weight
+        };
+    }
+
+    const matchStats = matches.map(m => {
+        const kills   = Number(m.Kills)   || 0;
+        const deaths  = Number(m.Deaths)  || 0;
+        const rounds  = Number(m.Rounds)  || 1;
+        const kpr     = Number(m['K/R Ratio']) || 0;
+        const adr     = Number(m.ADR)     || DMG_PER_KILL * kpr;
+        const hs      = Number(m.Headshots)   || 0;
+        const win     = Number(m.Win)     || 0;
+        return { kills, deaths, rounds, kpr, adr, hs, win };
+    });
+
+    const totalKills  = matchStats.reduce((sum, s) => sum + s.kills, 0);
+    const totalDeaths = matchStats.reduce((sum, s) => sum + s.deaths, 0);
+    const kd    = totalDeaths === 0 ? totalKills : totalKills / totalDeaths;
+    const adrAvg = matchStats.reduce((sum, s) => sum + s.adr, 0) / weight;
+    const dpr   = matchStats.reduce((sum, s) => sum + (s.deaths / s.rounds), 0) / weight;
+    const kprAvg = matchStats.reduce((sum, s) => sum + s.kpr, 0) / weight;
+    const hsp   = totalKills > 0
+        ? (matchStats.reduce((sum, s) => sum + s.hs, 0) / totalKills) * 100
+        : 0;
+    const winRate = (matchStats.reduce((sum, s) => sum + s.win, 0) / weight) * 100;
+    const kast  = 100 * (0.0073 + 0.3591 * kprAvg - 0.5329 * dpr);
+    const impact = 2.13 * kprAvg + 0.42 * (totalKills / weight) - 0.41;
+    const rating = Math.max(
+        0,
+        0.0073 * kast +
+        0.3591 * kprAvg -
+        0.5329 * dpr +
+        0.2372 * impact +
+        0.0032 * adrAvg +
+        0.1587
+    );
+
+    return {
+        kd: +kd.toFixed(2),
+        adr: +adrAvg.toFixed(1),
+        winRate: +winRate.toFixed(1),
+        hsp: +hsp.toFixed(1),
+        kast: +kast.toFixed(1),
+        impact: +impact.toFixed(2),
+        rating: +rating.toFixed(2),
+        weight
+    };
 }
+
 
 function calculateCurrentFormStats(matches) {
     const sorted = [...matches].sort((a, b) => b.CreatedAt - a.CreatedAt);
