@@ -30,6 +30,28 @@ document.addEventListener("DOMContentLoaded", () => {
         kpr: {bad: 0.5, okay: 0.6, good: 0.8, max: 1.2},
         elo: {bad: 1800, okay: 2000, good: 2900, max: 3500}
     };
+    // ============================================================
+// Funktion zum Auffüllen und Färben des kleinen Elo‑Bars in der Liste
+// ============================================================
+    function updateEloProgressBarForList(containerEl) {
+        // Wert aus dem data-Attribut holen
+        const val = parseInt(containerEl.dataset.elo, 10) || 0;
+        const cfg = thresholds.elo;
+
+        // Prozent (max 100%)
+        const pct = Math.min(100, (val / cfg.max) * 100);
+
+        // Bar‑Element auswählen
+        const bar = containerEl.querySelector('.elo-progress-bar');
+        bar.style.width = pct + '%';
+
+        // Farbe je nach Schwellenwert
+        let color = 'var(--bar-bad)';
+        if (val >= cfg.good)      color = 'var(--bar-good)';
+        else if (val >= cfg.okay) color = 'var(--bar-okay)';
+        bar.style.backgroundColor = color;
+    }
+
 
     // -------------------------------------------------------------
     // EINZIGE updateStatProgressBars‑Funktion
