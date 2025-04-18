@@ -4,33 +4,33 @@
 :root {
     /* Farbschema */
     --bg-gradient-start: #1f1f29;
-    --bg-gradient-end:   #2a2a3d;
-    --bg-color:          #1e1e24;
-    --card-bg-rgb:       38, 38, 46;
-    --glass-bg:          rgba(255, 255, 255, 0.04);
-    --glass-border:      rgba(255, 255, 255, 0.18);
-    --glass-blur:        20px;
+    --bg-gradient-end: #2a2a3d;
+    --bg-color: #1e1e24;
+    --card-bg-rgb: 38, 38, 46;
+    --glass-bg: rgba(255, 255, 255, 0.04);
+    --glass-border: rgba(255, 255, 255, 0.18);
+    --glass-blur: 20px;
 
     /* Textfarben */
-    --text-primary:   #e0e0e0;
+    --text-primary: #e0e0e0;
     --text-secondary: #a0a0b0;
 
     /* Progress‑Bars */
-    --bar-good:   #66bb6a;
-    --bar-okay:   #ffee58;
-    --bar-bad:    #ef5350;
-    --bar-bg:     #404050;
+    --bar-good: #66bb6a;
+    --bar-okay: #ffee58;
+    --bar-bad: #ef5350;
+    --bar-bg: #404050;
 
     /* Rahmen & Schatten */
-    --radius:     12px;
-    --border:     1px solid rgba(var(--card-bg-rgb), 0.1);
-    --shadow:     0 8px 32px rgba(0, 0, 0, 0.5);
+    --radius: 12px;
+    --border: 1px solid rgba(var(--card-bg-rgb), 0.1);
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 
     /* Layout */
-    --font:       'Roboto', sans-serif;
-    --gap:        1.5rem;
-    --max-list:   450px;
-    --max-card:   700px;
+    --font: 'Roboto', sans-serif;
+    --gap: 1.5rem;
+    --max-list: 450px;
+    --max-card: 700px;
 }
 
 /* ==========================================================================
@@ -181,6 +181,7 @@ ol#player-list li::before {
     color: var(--text-secondary);
     margin-right: 0.5rem;
 }
+
 /* stats-grid jetzt immer 3 Spalten × 2 Reihen */
 .player-card-hltv .stats-grid {
     display: grid;
@@ -194,11 +195,13 @@ ol#player-list li::before {
     text-align: center;
     padding: 1rem;
 }
+
 .player-card-hltv .stat-item .label {
     font-size: 0.85rem;
     color: var(--text-secondary);
     margin-bottom: 0.25rem;
 }
+
 .player-card-hltv .stat-item .value {
     font-size: 2rem;
     font-weight: bold;
@@ -361,12 +364,14 @@ ol#player-list li::before {
         align-items: center;
         justify-content: center !important;
     }
+
     #player-list-container,
     #player-detail-card-container {
         max-width: 650px;
         width: 100%;
         position: static;
     }
+
     ol#player-list {
         overflow-y: visible;
     }
@@ -376,15 +381,48 @@ ol#player-list li::before {
     header h1 {
         font-size: 1.5rem;
     }
+
     .player-card-hltv .card-header {
         flex-direction: column;
         text-align: center;
     }
+
     .player-card-hltv .avatar {
         width: 70px;
         height: 70px;
     }
+
     .player-card-hltv .player-name {
         font-size: 1.6rem;
     }
 }
+
+#player-list-container {
+    max-height: calc(80vh - 4rem);
+    overflow: hidden; /* Container fix */
+}
+
+ol#player-list {
+    overflow-y: auto;
+    max-height: 100%;
+}
+
+/* Main auf fixe Breite */
+main {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* deaktivieren, dass Body scrollt */
+body {
+    overflow: hidden;
+}
+
+/* Footer-Scroll erlauben, falls doch Seite scrollen soll */
+footer {
+    position: sticky;
+    bottom: 0;
+}
+
+/* ... restliches CSS unverändert ... */
+

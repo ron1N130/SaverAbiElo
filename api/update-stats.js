@@ -46,7 +46,7 @@ function calculateAverageStats(matches) {
         const hs = Number(m["Headshots"]) || 0;
         const assists = Number(m["Assists"]) || 0;
         const win = Number(m["Win"]) || 0;
-        return { kills, deaths, rounds, kpr, adr, hs, assists, win };
+        return {kills, deaths, rounds, kpr, adr, hs, assists, win};
     });
     // … (Berechnungen wie gehabt)
     const totalKills = matchStats.reduce((s, a) => s + a.kills, 0);
@@ -114,7 +114,7 @@ if (REDIS_URL) {
 async function fetchFaceitApi(endpoint) {
     await delay(API_DELAY);
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: { Authorization: `Bearer ${FACEIT_API_KEY}` },
+        headers: {Authorization: `Bearer ${FACEIT_API_KEY}`},
     });
     if (res.status === 429) {
         console.warn("[API] Rate‑Limit – extra sleep");
@@ -170,7 +170,7 @@ export default async function handler(req, res) {
                 }
             }
 
-            const { stats, matchesCount } = calculateCurrentFormStats(matchesForCalc);
+            const {stats, matchesCount} = calculateCurrentFormStats(matchesForCalc);
             const dataToStore = {
                 calculatedRating: stats.rating,
                 kd: stats.kd,
@@ -189,5 +189,5 @@ export default async function handler(req, res) {
             failed++;
         }
     }
-    res.status(200).json({ success, failed });
+    res.status(200).json({success, failed});
 }

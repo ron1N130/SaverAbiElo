@@ -1,178 +1,138 @@
-// -------------------------------------------------------------
-// 1) Hilfsfunktionen am Anfang
-// -------------------------------------------------------------
-function toNum(v) {
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
+// api/faceit-data.js
+import Redis from "ioredis";
+
+const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
+const REDIS_URL = process.env.REDIS_URL;
+const API_BASE_URL = "https://open.faceit.com/data/v4";
+
+// Hilfs‑Fetch mit Error‑Throw
+async function fetchJson(url, headers) {
+    const res = await fetch(url, {headers});
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    return res.json();
 }
-const safe = (v, digits = 2, suf = "") => (v === null ? "—" : v.toFixed(digits) + suf);
 
-// -------------------------------------------------------------
-// 2) Hauptscript
-// -------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-    const playerListContainerEl = document.getElementById("player-list");
-    const detailCardContainer   = document.getElementById("player-detail-card-container");
-    const loadingIndicator      = document.getElementById("loading-indicator");
-    const errorMessageElement   = document.getElementById("error-message");
+// Rating‑Berechnung (letzte 10 Matches)
+function calculateAverageStats(matches) { /* ... unverändert ... */
+}
 
-    let allPlayersData = [];
-
-    const thresholds = {
-        rating:           { bad: 0.85,  okay: 1.05, good: 1.25, max: 1.8 },
-        dpr:              { bad: 0.5,   okay: 0.65, good: 0.85, max: 1.0 },
-        kast:             { bad: 50,    okay: 60,  good: 70,  max: 100 },
-        kd:               { bad: 0.8,   okay: 1.0,  good: 1.2,  max: 2.0 },
-        adr:              { bad: 65,    okay: 80,  good: 95,  max: 120 },
-        kpr:              { bad: 0.5,   okay: 0.6, good: 0.8,  max: 1.2 },
-        elo:              { bad: 1100,  okay: 1700, good: 2200, max: 3500 }
+function calculateCurrentFormStats(matches) {
+    const sorted = [...matches].sort((a, b) => b.CreatedAt - a.CreatedAt);
+    const recent = sorted.slice(0, 10);
+    return {
+        stats: calculateAverageStats(recent),
+        matchesCount: recent.length
     };
+}
 
-    // Progress‑Bar in Liste aktualisieren
-    function updateEloProgressBarForList(container) {
-        const elo = parseInt(container.dataset.elo || 0, 10);
-        const bar = container.querySelector('.elo-progress-bar');
-        if (!bar) return;
-        const cfg = thresholds.elo;
-        let pct = 0, col = 'var(--bar-color-bad)';
-        if (!isNaN(elo) && elo > 0) {
-            pct = Math.min(100, (elo / cfg.max) * 100);
-            if (elo >= cfg.good)      col = 'var(--bar-color-good)';
-            else if (elo >= cfg.okay) col = 'var(--bar-color-okay)';
-            else                       col = 'var(--bar-color-bad)';
-        } else {
-            col = 'var(--bar-background)';
-        }
-        bar.style.width = `${pct}%`;
-        bar.style.backgroundColor = col;
-    }
-
-    // Bars in Detail‑Card aktualisieren
-    function updateStatProgressBars(card, player) {
-        card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
-            const stat = item.dataset.stat;
-            const val  = player[stat];
-            const cfg  = thresholds[stat] || {max:1};
-            const bar  = item.querySelector('.stat-progress-bar');
-            const lbl  = item.querySelector('.stat-indicator-label');
-            let pct = 0, col = 'var(--bar-color-bad)', txt = '---';
-            if (val !== null && !isNaN(val)) {
-                pct = Math.min(100, (val / cfg.max) * 100);
-                if (val >= cfg.good)      { col = 'var(--bar-color-good)';  txt = 'GOOD'; }
-                else if (val >= cfg.okay) { col = 'var(--bar-color-okay)'; txt = 'OKAY'; }
-                else                       { col = 'var(--bar-color-bad)';  txt = 'BAD'; }
-            }
-            bar.style.width = `${pct}%`;
-            bar.style.backgroundColor = col;
-            lbl.textContent = txt;
-        });
-    }
-
-    // Spieler‑Daten von API holen
-    async function getPlayerData(nickname) {
-        try {
-            const res = await fetch(`/api/faceit-data?nickname=${encodeURIComponent(nickname)}`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const p = await res.json();
-            // Konvertieren in Numbers
-            p.sortElo          = toNum(p.elo);
-            p.rating           = toNum(p.rating);
-            p.dpr              = toNum(p.dpr);
-            p.kpr              = toNum(p.kpr);
-            p.kd               = toNum(p.kd);
-            p.adr              = toNum(p.adr);
-            p.winRate          = toNum(p.winRate);
-            p.kast             = toNum(p.kast);
-            p.hsPercent        = toNum(p.hsPercent);
-            return p;
-        } catch (err) {
-            console.error("getPlayerData error:", err);
-            return { nickname, error: err.message, sortElo: -1 };
-        }
-    }
-
-    // Liste rendern
-    function displayPlayerList(players) {
-        playerListContainerEl.innerHTML = '';
-        players.forEach(player => {
-            const li = document.createElement('li');
-            li.dataset.nickname = player.nickname;
-            if (player.error) {
-                li.classList.add('error-item');
-                li.innerHTML = `<span class='player-info'>${player.nickname} - Fehler: ${player.error}</span>`;
-            } else {
-                li.innerHTML = `
-          <span class='player-info'>
-            <img src='${player.avatar || 'default_avatar.png'}' class='avatar' onerror="this.src='default_avatar.png'" />
-            <span class='player-name'>${player.nickname}</span>
-          </span>
-          <div class='player-list-right'>
-            <span class='player-elo'>${player.sortElo ?? 'N/A'}</span>
-            <div class='elo-progress-container' data-elo='${player.sortElo}'><div class='elo-progress-bar'></div></div>
-          </div>`;
-                updateEloProgressBarForList(li.querySelector('.elo-progress-container'));
-            }
-            playerListContainerEl.appendChild(li);
-        });
-    }
-
-    // Detail‑Card rendern (3×2 Layout)
-    function displayDetailCard(player) {
-        detailCardContainer.innerHTML = '';
-        detailCardContainer.style.display = 'block';
-
-        if (!player || player.error) {
-            detailCardContainer.innerHTML = `<div class='error-card'>${player.nickname} - ${player.error}</div>`;
-            return;
-        }
-
-        const faceitUrl     = player.faceitUrl;
-        const matchesText   = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
-
-        detailCardContainer.innerHTML = `
-      <div class='card-header'>
-        <a href='${faceitUrl}' target='_blank'>
-          <img src='${player.avatar}' class='avatar' onerror="this.src='default_avatar.png'" />
-        </a>
-        <div>
-          <a href='${faceitUrl}' target='_blank' class='player-name'>${player.nickname}</a>
-          <div class='stats-label'>${matchesText}</div>
-        </div>
-      </div>
-      <div class='stats-grid'>
-        <div class='stat-item' data-stat='rating'><div class='label'>Rating&nbsp;2.0</div><div class='value'>${safe(player.rating,2)}</div><div class='stat-progress-container'><div class='stat-progress-bar'></div></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='dpr'><div class='label'>DPR</div><div class='value'>${safe(player.dpr,2)}</div><div class='stat-progress-container'><div class='stat-progress-bar'></div></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='kast'><div class='label'>KAST&nbsp;%</div><div class='value'>${safe(player.kast,1,'%')}</div><div class='stat-progress-container'><div class='stat-progress-bar'></div></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='kd'><div class='label'>K/D</div><div class='value'>${safe(player.kd,2)}</div><div class='stat-progress-container'><div class='stat-progress-bar'></div></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='adr'><div class='label'>ADR</div><div class='value'>${safe(player.adr,1)}</div><div class='stat-progress-container'><div class='stat-progress-bar'></div></div><span class='stat-indicator-label'></span></div>
-        <div class='stat-item' data-stat='kpr'><div class='label'>KPR</div><div class='value'>${safe(player.kpr,2)}</div><div class='stat-progress-container'><div class='stat-progress-bar'></div></div><span class='stat-indicator-label'></span></div>
-      </div>`;
-
-        updateStatProgressBars(detailCardContainer, player);
-    }
-
-    // Klick‑Handler
-    playerListContainerEl.addEventListener('click', e => {
-        const li = e.target.closest('li');
-        if (!li) return;
-        const pd = allPlayersData.find(p => p.nickname === li.dataset.nickname);
-        if (pd) displayDetailCard(pd);
+// Redis initialisieren (optional)
+let redis = null;
+if (REDIS_URL) {
+    redis = new Redis(REDIS_URL, {lazyConnect: true});
+    redis.on("error", () => {
+        redis = null;
     });
+}
 
-    // Initial Load
-    (async () => {
-        loadingIndicator.style.display = 'block';
-        try {
-            const names     = await (await fetch('/players.json')).json();
-            const settled   = await Promise.allSettled(names.map(getPlayerData));
-            allPlayersData  = settled.map(r => r.status === 'fulfilled' ? r.value : { nickname:'?', error:r.reason });
-            allPlayersData.sort((a,b)=> (b.sortElo||0)-(a.sortElo||0));
-            displayPlayerList(allPlayersData);
-        } catch (err) {
-            errorMessageElement.textContent = err.message;
-            errorMessageElement.style.display = 'block';
-        } finally {
-            loadingIndicator.style.display = 'none';
+export default async function handler(req, res) {
+    const nickname = req.query.nickname;
+    if (!nickname) {
+        return res.status(400).json({error: "nickname fehlt"});
+    }
+
+    try {
+        const headers = {Authorization: `Bearer ${FACEIT_API_KEY}`};
+        // 1) Basis‑Details
+        const details = await fetchJson(
+            `${API_BASE_URL}/players?nickname=${encodeURIComponent(nickname)}`,
+            headers
+        );
+
+        // 2) Response‑Template
+        const resp = {
+            nickname: details.nickname,
+            avatar: details.avatar || "default_avatar.png",
+            faceitUrl: details.faceit_url?.replace("{lang}", "en") ?? "#",
+            elo: details.games?.cs2?.faceit_elo ?? "N/A",
+            level: details.games?.cs2?.skill_level ?? "N/A",
+            sortElo: parseInt(details.games?.cs2?.faceit_elo, 10) || 0,
+            calculatedRating: null,
+            kd: null,
+            adr: null,
+            winRate: null,
+            hsPercent: null,
+            kast: null,
+            impact: null,
+            matchesConsidered: 0,
+            lastUpdated: null
+        };
+
+        // 3) Stats aus Redis‑Cache oder Live‑Fallback
+        let statsObj = null;
+        if (redis) {
+            const cacheKey = `player_stats:${details.player_id}`;
+            const cached = await redis.get(cacheKey);
+            if (cached) {
+                statsObj = JSON.parse(cached);
+            }
         }
-    })();
-});
+
+        if (!statsObj) {
+            // Live‑Fallback: letzte 10 Matches abrufen und berechnen
+            const hist = await fetchJson(
+                `${API_BASE_URL}/players/${details.player_id}/history?game=cs2&limit=10`,
+                headers
+            );
+            const items = hist.items || [];
+            const matchData = await Promise.all(
+                items.map(async h => {
+                    const stat = await fetchJson(
+                        `${API_BASE_URL}/matches/${h.match_id}/stats`,
+                        headers
+                    );
+                    const r = stat.rounds?.[0];
+                    if (!r) return null;
+                    const winner = r.round_stats.Winner;
+                    const playerStats = r.teams
+                        .flatMap(t => t.players.map(p => ({...p, team_id: t.team_id})))
+                        .find(p => p.player_id === details.player_id);
+                    if (!playerStats) return null;
+                    return {
+                        Kills: +playerStats.player_stats.Kills,
+                        Deaths: +playerStats.player_stats.Deaths,
+                        Assists: +playerStats.player_stats.Assists,
+                        Headshots: +playerStats.player_stats.Headshots,
+                        "K/R Ratio": +playerStats.player_stats["K/R Ratio"],
+                        ADR: +(playerStats.player_stats.ADR ?? playerStats.player_stats["Average Damage per Round"]),
+                        Rounds: +r.round_stats.Rounds || 1,
+                        Win: +(playerStats.team_id === winner),
+                        CreatedAt: h.started_at
+                    };
+                })
+            );
+            const filtered = matchData.filter(Boolean);
+            const {stats, matchesCount} = calculateCurrentFormStats(filtered);
+            statsObj = {
+                rating: stats.rating,
+                kd: stats.kd,
+                adr: stats.adr,
+                winRate: stats.winRate,
+                hsPercent: stats.hsp,
+                kast: stats.kast,
+                impact: stats.impact,
+                matchesConsidered: matchesCount,
+                lastUpdated: new Date().toISOString()
+            };
+        }
+
+        // 4) Zusammenführen & antworten
+        Object.assign(resp, statsObj);
+        res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate");
+        return res.status(200).json(resp);
+
+    } catch (err) {
+        console.error(`[api/faceit-data] ${nickname} →`, err);
+        // immer JSON zurückliefern, auch bei Fehlern
+        return res.status(200).json({nickname, error: err.message});
+    }
+}
