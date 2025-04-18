@@ -13,7 +13,7 @@ async function fetchJson(url, headers) {
 }
 
 /**
- * Berechnet HLTV-ähnliche Kennzahlen aus einem Array von Match-Objekten.
+ * Berechnet HLTV‑ähnliche Kennzahlen aus einem Array von Match‑Objekten.
  * @param {Array} matches – Array von Objekten mit den Feldern:
  *   Kills, Deaths, Assists, Headshots, 'K/R Ratio', ADR, Rounds, Win
  * @returns {Object} { kd, adr, winRate, hsp, kast, impact, rating, weight }
@@ -21,6 +21,7 @@ async function fetchJson(url, headers) {
 function calculateAverageStats(matches) {
     const DMG_PER_KILL = 105;
     const weight = matches.length;
+
     if (weight === 0) {
         return {
             kd: 0,
@@ -34,38 +35,48 @@ function calculateAverageStats(matches) {
         };
     }
 
+    // 1) Basis‑Stats pro Match
     const matchStats = matches.map(m => {
-        const kills   = Number(m.Kills)   || 0;
-        const deaths  = Number(m.Deaths)  || 0;
-        const rounds  = Number(m.Rounds)  || 1;
-        const kpr     = Number(m['K/R Ratio']) || 0;
-        const adr     = Number(m.ADR)     || DMG_PER_KILL * kpr;
-        const hs      = Number(m.Headshots)   || 0;
-        const win     = Number(m.Win)     || 0;
-        return { kills, deaths, rounds, kpr, adr, hs, win };
+        const kills = Number(m.Kills) || 0;
+        const deaths = Number(m.Deaths) || 0;
+        const rounds = Number(m.Rounds) || 1;
+        const kpr = Number(m['K/R Ratio']) || 0;
+        const adr = Number(m.ADR) || DMG_PER_KILL * kpr;
+        const hs = Number(m.Headshots) || 0;
+        const win = Number(m.Win) || 0;
+        return {kills, deaths, rounds, kpr, adr, hs, win};
     });
 
-    const totalKills  = matchStats.reduce((sum, s) => sum + s.kills, 0);
+    // 2) Aggregierte Kennzahlen
+    const totalKills = matchStats.reduce((sum, s) => sum + s.kills, 0);
     const totalDeaths = matchStats.reduce((sum, s) => sum + s.deaths, 0);
-    const kd    = totalDeaths === 0 ? totalKills : totalKills / totalDeaths;
+    const kd = totalDeaths === 0 ? totalKills : totalKills / totalDeaths;
     const adrAvg = matchStats.reduce((sum, s) => sum + s.adr, 0) / weight;
-    const dpr   = matchStats.reduce((sum, s) => sum + (s.deaths / s.rounds), 0) / weight;
+    const dpr = matchStats.reduce((sum, s) => sum + (s.deaths / s.rounds), 0) / weight;
     const kprAvg = matchStats.reduce((sum, s) => sum + s.kpr, 0) / weight;
-    const hsp   = totalKills > 0
+    const hsp = totalKills > 0
         ? (matchStats.reduce((sum, s) => sum + s.hs, 0) / totalKills) * 100
         : 0;
     const winRate = (matchStats.reduce((sum, s) => sum + s.win, 0) / weight) * 100;
-    const kast  = 100 * (0.0073 + 0.3591 * kprAvg - 0.5329 * dpr);
+
+    // 3) KAST: Anteil der Matches, in denen der Spieler mindestens gekillt, geholfen oder überlebt hat
+    const kastCount = matchStats.reduce((sum, s) => {
+        const contributed = (s.kills > 0 || s.assists > 0 || s.deaths < s.rounds) ? 1 : 0;
+        return sum + contributed;
+    }, 0);
+    const kast = (kastCount / weight) * 100;
+
+    // 4) Impact‑Faktor
     const impact = 2.13 * kprAvg + 0.42 * (totalKills / weight) - 0.41;
-    const rating = Math.max(
-        0,
-        0.0073 * kast +
-        0.3591 * kprAvg -
-        0.5329 * dpr +
-        0.2372 * impact +
-        0.0032 * adrAvg +
-        0.1587
-    );
+
+    // 5) Rating nach HLTV 2.0
+    const rawRating = 0.0073 * kast
+        + 0.3591 * kprAvg
+        - 0.5329 * dpr
+        + 0.2372 * impact
+        + 0.0032 * adrAvg
+        + 0.1587;
+    const rating = Math.max(0, rawRating);
 
     return {
         kd: +kd.toFixed(2),
@@ -78,7 +89,6 @@ function calculateAverageStats(matches) {
         weight
     };
 }
-
 
 function calculateCurrentFormStats(matches) {
     const sorted = [...matches].sort((a, b) => b.CreatedAt - a.CreatedAt);
