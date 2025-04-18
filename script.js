@@ -60,22 +60,22 @@ document.addEventListener("DOMContentLoaded", () => {
             const stat = item.dataset.stat;
             const val  = stat === 'elo' ? player.sortElo : player[stat];
             const cfg  = thresholds[stat];
-            const bar  = item.querySelector('.stat-progress-bar');
-            const lbl  = item.querySelector('.stat-indicator-label');
+            // Wir setzen die Variablen auf dem CONTAINER, nicht auf der inneren .stat-progress-bar
+            const container = item.querySelector('.stat-progress-container');
+            const label     = item.querySelector('.stat-indicator-label');
 
             let pct   = 0;
             let color = 'var(--bar-bad)';
             let text  = '---';
 
             if (val != null && !isNaN(val)) {
+                // Für DPR invertieren, weil niedrige Werte besser sind
                 if (stat === 'dpr') {
-                    // je niedriger, desto besser → invertiere
                     pct = Math.min(100, ((cfg.max - val) / cfg.max) * 100);
                     if (val <= cfg.good)      { text = 'GOOD'; color = 'var(--bar-good)'; }
                     else if (val <= cfg.okay) { text = 'OKAY'; color = 'var(--bar-okay)'; }
-                    else                       { text = 'BAD';  color = 'var(--bar-bad)'; }
+                    else                      { text = 'BAD';  color = 'var(--bar-bad)'; }
                 } else {
-                    // Standard: je höher, desto besser
                     pct = Math.min(100, (val / cfg.max) * 100);
                     if (val >= cfg.good)      { text = 'GOOD'; color = 'var(--bar-good)'; }
                     else if (val >= cfg.okay) { text = 'OKAY'; color = 'var(--bar-okay)'; }
@@ -83,11 +83,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
-            bar.style.width = pct + '%';
-            bar.style.backgroundColor = color;
-            lbl.textContent = text;
+            // CSS‑Variablen füllen
+            container.style.setProperty('--pos',  `${pct}%`);
+            container.style.setProperty('--glow', color);
+            label.textContent = text;
         });
     }
+
 
 
 
