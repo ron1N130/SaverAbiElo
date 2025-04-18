@@ -1,4 +1,4 @@
-// api/faceit-data.js – angepasst nach HLTV Rating 2.0 Formel von faceitperf.pro
+// api/faceit-data.js – aktuell: HLTV Rating 2.0 mit den letzten 15 Matches
 import Redis from "ioredis";
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
@@ -14,8 +14,6 @@ async function fetchJson(url, headers) {
 
 /**
  * Berechnet alle Kennzahlen aus einem Match‑Array nach HLTV 2.0
- * matches: Array von Objekten mit den Keys
- *   Kills, Deaths, Assists, Headshots, 'K/R Ratio', ADR, Rounds
  */
 function calculateAverageStats(matches) {
     const DMG_PER_KILL = 105;
@@ -30,7 +28,6 @@ function calculateAverageStats(matches) {
         };
     }
 
-    // Rohdaten umformen
     const matchStats = matches.map(m => {
         const kills   = +m.Kills   || 0;
         const deaths  = +m.Deaths  || 0;
@@ -42,7 +39,6 @@ function calculateAverageStats(matches) {
         return { kills, deaths, rounds, kpr, adr, headshots, assists };
     });
 
-    // Summen
     const kills  = matchStats.reduce((s,x)=>s+x.kills,0);
     const deaths = matchStats.reduce((s,x)=>s+x.deaths,0);
     const kd     = deaths ? kills/deaths : 0;
@@ -54,8 +50,7 @@ function calculateAverageStats(matches) {
     const hsp    = kills ? (hs / kills) * 100 : 0;
     const apr    = matchStats.reduce((s,x)=>s + x.assists/x.rounds,0) / weight;
 
-    // echtes KAST
-    const kast = matchStats
+    const kast   = matchStats
         .reduce((sum, x) => {
             const survived = x.rounds - x.deaths;
             const traded   = TRADE_PERCENT * x.rounds;
@@ -63,10 +58,8 @@ function calculateAverageStats(matches) {
             return sum + Math.min((raw / x.rounds) * 100, 100);
         }, 0) / weight;
 
-    // Impact
     const impact = Math.max(2.13 * kpr + 0.42 * apr - 0.41, 0);
 
-    // Rating 2.0
     const ratingRaw =
         0.0073 * kast +
         0.3591 * kpr +
@@ -95,13 +88,15 @@ function calculateAverageStats(matches) {
 }
 
 /**
- * Filtert die letzten 14 Tage und berechnet die Kennzahlen
+ * Nimmt die zuletzt gespielten 15 Matches (sortiert nach CreatedAt) und berechnet
  */
 function calculateCurrentFormStats(matches) {
-    const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
-    const recent = matches.filter(m =>
-        new Date(m.CreatedAt).getTime() >= twoWeeksAgo
-    );
+    // nach Datum absteigend sortieren und Top 15 auswählen
+    const recent = matches
+        .slice()  // nicht das Original-Array mutieren
+        .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
+        .slice(0, 15);
+
     return {
         stats: calculateAverageStats(recent),
         matchesCount: recent.length
@@ -124,13 +119,11 @@ export default async function handler(req, res) {
 
     try {
         const headers = { Authorization: `Bearer ${FACEIT_API_KEY}` };
-        // 1) Basis‑Details
         const details = await fetchJson(
             `${API_BASE_URL}/players?nickname=${encodeURIComponent(nickname)}`,
             headers
         );
 
-        // 2) Aufbau der Antwort mit Platzhaltern
         const resp = {
             nickname: details.nickname,
             avatar: details.avatar || "default_avatar.png",
@@ -138,8 +131,6 @@ export default async function handler(req, res) {
             elo: details.games?.cs2?.faceit_elo ?? "N/A",
             level: details.games?.cs2?.skill_level ?? "N/A",
             sortElo: parseInt(details.games?.cs2?.faceit_elo, 10) || 0,
-
-            // werden unten überschrieben
             calculatedRating: null,
             kd: null,
             dpr: null,
@@ -152,25 +143,21 @@ export default async function handler(req, res) {
             lastUpdated: null
         };
 
-        // 3) Stats aus Redis‑Cache oder Live‑Fallback
+        // versuche Redis‑Cache
         let statsObj = null;
         if (redis) {
-            const cacheKey = `player_stats:${details.player_id}`;
-            const cached = await redis.get(cacheKey);
-            if (cached) {
-                statsObj = JSON.parse(cached);
-            }
+            const cached = await redis.get(`player_stats:${details.player_id}`);
+            if (cached) statsObj = JSON.parse(cached);
         }
 
         if (!statsObj) {
-            // Live‑Fallback: letzte Matches abrufen
+            // Live‑Fallback: bis zu 50 letzte Matches holen
             const history = await fetchJson(
                 `${API_BASE_URL}/players/${details.player_id}/history?game=cs2&limit=50`,
                 headers
             );
             const items = history.items || [];
 
-            // Roh‑Matchdaten extrahieren
             const matchData = (await Promise.all(
                 items.map(async h => {
                     const stat = await fetchJson(
@@ -180,7 +167,6 @@ export default async function handler(req, res) {
                     const round = stat.rounds?.[0];
                     if (!round) return null;
                     const winner = round.round_stats.Winner;
-                    // Spieler‑Stats finden
                     const p = round.teams
                         .flatMap(t => t.players.map(p => ({ ...p, team_id: t.team_id })))
                         .find(p => p.player_id === details.player_id);
@@ -201,9 +187,7 @@ export default async function handler(req, res) {
                 })
             )).filter(Boolean);
 
-            // Stats berechnen
             const { stats, matchesCount } = calculateCurrentFormStats(matchData);
-
             statsObj = {
                 calculatedRating: stats.rating,
                 kd: stats.kd,
@@ -218,7 +202,6 @@ export default async function handler(req, res) {
             };
         }
 
-        // 4) Zusammenführen & zurückliefern
         Object.assign(resp, statsObj);
         res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate");
         return res.status(200).json(resp);
