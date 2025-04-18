@@ -113,7 +113,7 @@ export default async function handler(req, res) {
             const filtered = matchData.filter(Boolean);
             const {stats, matchesCount} = calculateCurrentFormStats(filtered);
             statsObj = {
-                rating: stats.rating,
+                calculatedRating: stats.rating,
                 kd: stats.kd,
                 adr: stats.adr,
                 winRate: stats.winRate,
