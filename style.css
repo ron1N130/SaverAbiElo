@@ -332,46 +332,38 @@ ol#player-list li::before {
     font-weight: 700;
 }
 
-/* Basis für die leere/volle Bar */
+/* 1) Container: relative, Grund‑Bar, Trennlinien */
 .stat-progress-container {
-    --pos: 0%;
-    --glow: var(--bar-bad);
     position: relative;
     width: 100%;
     height: 8px;
     background: var(--bar-bg);
     border-radius: 4px;
-    overflow: hidden;
+    overflow: visible; /* damit Glow nicht abgeschnitten wird */
 }
 
-/* Färbt den hinteren Teil bis zum Thumb */
-.stat-progress-container .stat-progress-bar {
-    position: absolute;
-    top: 0; left: 0;
-    width: var(--pos);
-    height: 100%;
-    background: var(--glow);
-}
-
-/* Der eigentliche „Thumb“ */
+/* 2) Trennlinien für die Drittel */
+.stat-progress-container::before,
 .stat-progress-container::after {
     content: '';
     position: absolute;
-    top: 50%;
-    left: var(--pos);
-    transform: translate(-50%, -50%);
-    width: 4px;
-    height: 12px;
-    background: #fff;
-    border-radius: 2px;
-    box-shadow: 0 0 6px var(--glow);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255,255,255,0.1);
 }
+.stat-progress-container::before { left: 33.333%; }
+.stat-progress-container::after  { left: 66.666%; }
 
-
+/* 3) Das farbige, glühende Segment */
 .stat-progress-bar {
+    position: absolute;
+    top: 0;
     height: 100%;
-    background: var(--bar-bad);
-    transition: width 0.6s, background-color 0.6s;
+    /* left & width werden per JS gesetzt */
+    border-radius: 2px;
+    box-shadow: 0 0 8px transparent;
+    transition: left 0.3s, background-color 0.3s, box-shadow 0.3s;
 }
 
 .stat-indicator-label {
