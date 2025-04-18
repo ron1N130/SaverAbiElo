@@ -100,7 +100,7 @@ let redis = null;
 if (REDIS_URL) {
     redis = new Redis(REDIS_URL, {
         lazyConnect: true,        // verbindet erst bei erstem Kommando
-        connectTimeout: 20000,    // 20 Sek. Timeout
+        connectTimeout: 20000,    // 20 Sek. Timeout
         maxRetriesPerRequest: 3,
     });
     // Fehler-Event abfangen, damit es nicht als Unhandled auftaucht
