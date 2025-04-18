@@ -1,9 +1,11 @@
-// api/faceit-data.js – robust gegen 503, nur 15 Matches, HLTV 2.0 Rating
+// api/faceit-data.js – robust gegen 503, nur 15 Matches, mit Cache‑Versionierung
 import Redis from "ioredis";
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL      = process.env.REDIS_URL;
 const API_BASE_URL   = "https://open.faceit.com/data/v4";
+// Cache‑Version hochzählen, wenn du das Shape von statsObj änderst:
+const CACHE_VERSION  = 1;
 
 // --- Hilfs‑Fetch mit Error‑Throw ----------------------------------------
 async function fetchJson(url, headers) {
@@ -98,7 +100,7 @@ function calculateCurrentFormStats(matches) {
 let redis = null;
 if (REDIS_URL) {
     redis = new Redis(REDIS_URL, { lazyConnect: true });
-    redis.on("error", ()=>{ redis = null; });
+    redis.on("error", () => { redis = null; });
 }
 
 // --- Haupt‑Handler ----------------------------------------------------
@@ -110,42 +112,47 @@ export default async function handler(req, res) {
 
     try {
         const headers = { Authorization: `Bearer ${FACEIT_API_KEY}` };
-        // Basis‑Daten laden
+        // 1) Basis‑Daten von Faceit
         const details = await fetchJson(
             `${API_BASE_URL}/players?nickname=${encodeURIComponent(nickname)}`,
             headers
         );
 
-        // Grund‑Antwort
+        // 2) Grund‑Antwort
         const resp = {
             nickname: details.nickname,
             avatar: details.avatar || "default_avatar.png",
-            faceitUrl: details.faceit_url?.replace("{lang}","en") ?? "#",
+            faceitUrl: details.faceit_url?.replace("{lang}", "en") ?? "#",
             elo: details.games?.cs2?.faceit_elo ?? "N/A",
             level: details.games?.cs2?.skill_level ?? "N/A",
-            sortElo: parseInt(details.games?.cs2?.faceit_elo,10)||0,
+            sortElo: parseInt(details.games?.cs2?.faceit_elo, 10) || 0,
             calculatedRating: null,
-            kd: null, dpr: null, kpr: null, adr: null, hsPercent: null,
-            kast: null, impact: null,
+            kd: null,
+            dpr: null,
+            kpr: null,
+            adr: null,
+            hsPercent: null,
+            kast: null,
+            impact: null,
             matchesConsidered: 0,
             lastUpdated: null
         };
 
-        // 1) Redis‑Cache prüfen
+        // 3) Versuch, aus Cache zu laden – aber nur, wenn Version stimmt
         let statsObj = null;
         if (redis) {
-            const cached = await redis.get(`player_stats:${details.player_id}`);
-            if (cached) {
-                statsObj = JSON.parse(cached);
-                // wenn matchesConsidered fehlte, setzen wir auf 15
-                if (!statsObj.matchesConsidered) {
-                    statsObj.matchesConsidered = 15;
+            const raw = await redis.get(`player_stats:${details.player_id}`);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed.version === CACHE_VERSION) {
+                    statsObj = parsed;
                 }
             }
         }
 
-        // 2) Live‑Fallback, wenn kein Cache
+        // 4) Live‑Fallback, falls kein valider Cache
         if (!statsObj) {
+            // History holen (max 15, 503s ignorieren)
             let items = [];
             try {
                 const hist = await fetchJson(
@@ -157,54 +164,59 @@ export default async function handler(req, res) {
                 items = [];
             }
 
-            const matchData = (await Promise.all(
-                items.map(async h => {
-                    try {
-                        const stat = await fetchJson(
-                            `${API_BASE_URL}/matches/${h.match_id}/stats`,
-                            headers
-                        );
-                        const round = stat.rounds?.[0];
-                        if (!round) return null;
-                        const winner = round.round_stats.Winner;
-                        const p = round.teams
-                            .flatMap(t=>t.players.map(p=>({...p,team_id:t.team_id})))
-                            .find(p=>p.player_id===details.player_id);
-                        if (!p) return null;
-                        return {
-                            Kills:      +p.player_stats.Kills,
-                            Deaths:     +p.player_stats.Deaths,
-                            Assists:    +p.player_stats.Assists,
-                            Headshots:  +p.player_stats.Headshots,
-                            "K/R Ratio":+p.player_stats["K/R Ratio"],
-                            ADR:        +(
-                                p.player_stats.ADR ??
-                                p.player_stats["Average Damage per Round"]
-                            ),
-                            Rounds:     +(round.round_stats.Rounds||1),
-                            CreatedAt:  h.started_at
-                        };
-                    } catch {
-                        return null;
-                    }
-                })
-            )).filter(Boolean);
+            // Pro‑Match Stats holen (503s ignorieren)
+            const matchData = (
+                await Promise.all(
+                    items.map(async h => {
+                        try {
+                            const stat = await fetchJson(
+                                `${API_BASE_URL}/matches/${h.match_id}/stats`,
+                                headers
+                            );
+                            const round = stat.rounds?.[0];
+                            if (!round) return null;
+                            const winner = round.round_stats.Winner;
+                            const p = round.teams
+                                .flatMap(t => t.players.map(p => ({ ...p, team_id: t.team_id })))
+                                .find(p => p.player_id === details.player_id);
+                            if (!p) return null;
+                            return {
+                                Kills:      +p.player_stats.Kills,
+                                Deaths:     +p.player_stats.Deaths,
+                                Assists:    +p.player_stats.Assists,
+                                Headshots:  +p.player_stats.Headshots,
+                                "K/R Ratio":+p.player_stats["K/R Ratio"],
+                                ADR:        +(
+                                    p.player_stats.ADR ??
+                                    p.player_stats["Average Damage per Round"]
+                                ),
+                                Rounds:     +(round.round_stats.Rounds || 1),
+                                CreatedAt:  h.started_at
+                            };
+                        } catch {
+                            return null;
+                        }
+                    })
+                )
+            ).filter(Boolean);
 
+            // Stats berechnen
             const { stats, matchesCount } = calculateCurrentFormStats(matchData);
             statsObj = {
+                version:          CACHE_VERSION,
                 calculatedRating: stats.rating,
-                kd: stats.kd,
-                dpr: stats.dpr,
-                kpr: stats.kpr,
-                adr: stats.adr,
-                hsPercent: stats.hsp,
-                kast: stats.kast,
-                impact: stats.impact,
+                kd:               stats.kd,
+                dpr:              stats.dpr,
+                kpr:              stats.kpr,
+                adr:              stats.adr,
+                hsPercent:        stats.hsp,
+                kast:             stats.kast,
+                impact:           stats.impact,
                 matchesConsidered: matchesCount,
-                lastUpdated: new Date().toISOString()
+                lastUpdated:      new Date().toISOString()
             };
 
-            // In Redis cachen
+            // In Redis cachen (1 Woche)
             if (redis) {
                 await redis.set(
                     `player_stats:${details.player_id}`,
@@ -215,11 +227,9 @@ export default async function handler(req, res) {
             }
         }
 
-        // 3) ins resp übernehmen
+        // 5) In die Antwort übernehmen und senden
         Object.assign(resp, statsObj);
-
-        // 4) zurückgeben
-        res.setHeader("Cache-Control","s-maxage=60, stale-while-revalidate");
+        res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate");
         return res.status(200).json(resp);
 
     } catch (err) {
