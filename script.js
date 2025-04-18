@@ -23,7 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const thresholds = {
         rating: {bad: 0.85, okay: 1.05, good: 1.25, max: 1.8},
-        dpr: {bad: 0.7, okay: 0.6, good: 0.5, max: 1},
+        dpr: {bad: 0.75, okay: 0.7, good: 0.6, max: 1},
         kast: {bad: 50, okay: 60, good: 70, max: 100},
         kd: {bad: 0.8, okay: 1.0, good: 1.2, max: 2.0},
         adr: {bad: 65, okay: 70, good: 85, max: 120},
