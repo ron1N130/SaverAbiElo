@@ -1,4 +1,4 @@
-// api/faceit-data.js – aktuell: HLTV Rating 2.0 mit den letzten 15 Matches
+// api/faceit-data.js – robust gegen 503‑Errors beim Match‑Fetch
 import Redis from "ioredis";
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
@@ -29,13 +29,13 @@ function calculateAverageStats(matches) {
     }
 
     const matchStats = matches.map(m => {
-        const kills   = +m.Kills   || 0;
-        const deaths  = +m.Deaths  || 0;
-        const rounds  = +m.Rounds  || 1;
-        const kpr     = +m['K/R Ratio']   || 0;
-        const adr     = +m.ADR    || (kpr * DMG_PER_KILL);
-        const headshots = +m.Headshots || 0;
-        const assists   = +m.Assists   || 0;
+        const kills    = +m.Kills   || 0;
+        const deaths   = +m.Deaths  || 0;
+        const rounds   = +m.Rounds  || 1;
+        const kpr      = +m["K/R Ratio"] || 0;
+        const adr      = +m.ADR     || (kpr * DMG_PER_KILL);
+        const headshots= +m.Headshots|| 0;
+        const assists  = +m.Assists  || 0;
         return { kills, deaths, rounds, kpr, adr, headshots, assists };
     });
 
@@ -50,7 +50,7 @@ function calculateAverageStats(matches) {
     const hsp    = kills ? (hs / kills) * 100 : 0;
     const apr    = matchStats.reduce((s,x)=>s + x.assists/x.rounds,0) / weight;
 
-    const kast   = matchStats
+    const kast = matchStats
         .reduce((sum, x) => {
             const survived = x.rounds - x.deaths;
             const traded   = TRADE_PERCENT * x.rounds;
@@ -88,13 +88,12 @@ function calculateAverageStats(matches) {
 }
 
 /**
- * Nimmt die zuletzt gespielten 15 Matches (sortiert nach CreatedAt) und berechnet
+ * Nimmt die letzten 15 Matches (sortiert nach CreatedAt) und berechnet die Stats
  */
 function calculateCurrentFormStats(matches) {
-    // nach Datum absteigend sortieren und Top 15 auswählen
     const recent = matches
-        .slice()  // nicht das Original-Array mutieren
-        .sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt))
+        .slice()
+        .sort((a,b)=> new Date(b.CreatedAt) - new Date(a.CreatedAt))
         .slice(0, 15);
 
     return {
@@ -107,7 +106,7 @@ function calculateCurrentFormStats(matches) {
 let redis = null;
 if (REDIS_URL) {
     redis = new Redis(REDIS_URL, { lazyConnect: true });
-    redis.on("error", () => { redis = null; });
+    redis.on("error", ()=>{ redis = null; });
 }
 
 // --- Haupt‑Handler ----------------------------------------------------
@@ -127,10 +126,10 @@ export default async function handler(req, res) {
         const resp = {
             nickname: details.nickname,
             avatar: details.avatar || "default_avatar.png",
-            faceitUrl: details.faceit_url?.replace("{lang}", "en") ?? "#",
+            faceitUrl: details.faceit_url?.replace("{lang}","en") ?? "#",
             elo: details.games?.cs2?.faceit_elo ?? "N/A",
             level: details.games?.cs2?.skill_level ?? "N/A",
-            sortElo: parseInt(details.games?.cs2?.faceit_elo, 10) || 0,
+            sortElo: parseInt(details.games?.cs2?.faceit_elo,10)||0,
             calculatedRating: null,
             kd: null,
             dpr: null,
@@ -143,49 +142,57 @@ export default async function handler(req, res) {
             lastUpdated: null
         };
 
-        // versuche Redis‑Cache
+        // 1) Redis‑Cache prüfen
         let statsObj = null;
         if (redis) {
             const cached = await redis.get(`player_stats:${details.player_id}`);
             if (cached) statsObj = JSON.parse(cached);
         }
 
+        // 2) Live‑Fallback
         if (!statsObj) {
-            // Live‑Fallback: bis zu 50 letzte Matches holen
             const history = await fetchJson(
                 `${API_BASE_URL}/players/${details.player_id}/history?game=cs2&limit=50`,
                 headers
             );
             const items = history.items || [];
 
-            const matchData = (await Promise.all(
-                items.map(async h => {
-                    const stat = await fetchJson(
-                        `${API_BASE_URL}/matches/${h.match_id}/stats`,
-                        headers
-                    );
-                    const round = stat.rounds?.[0];
-                    if (!round) return null;
-                    const winner = round.round_stats.Winner;
-                    const p = round.teams
-                        .flatMap(t => t.players.map(p => ({ ...p, team_id: t.team_id })))
-                        .find(p => p.player_id === details.player_id);
-                    if (!p) return null;
-                    return {
-                        Kills:    +p.player_stats.Kills,
-                        Deaths:   +p.player_stats.Deaths,
-                        Assists:  +p.player_stats.Assists,
-                        Headshots:+p.player_stats.Headshots,
-                        "K/R Ratio": +p.player_stats["K/R Ratio"],
-                        ADR:       +(
-                            p.player_stats.ADR ??
-                            p.player_stats["Average Damage per Round"]
-                        ),
-                        Rounds:   +(round.round_stats.Rounds || 1),
-                        CreatedAt: h.started_at
-                    };
-                })
-            )).filter(Boolean);
+            // jeder Fetch in try/catch ‑ wenn einer 503 wirft, skippen wir ihn
+            const matchData = (
+                await Promise.all(
+                    items.map(async h => {
+                        try {
+                            const stat = await fetchJson(
+                                `${API_BASE_URL}/matches/${h.match_id}/stats`,
+                                headers
+                            );
+                            const round = stat.rounds?.[0];
+                            if (!round) return null;
+                            const winner = round.round_stats.Winner;
+                            const p = round.teams
+                                .flatMap(t=>t.players.map(p=>({...p,team_id:t.team_id})))
+                                .find(p=>p.player_id===details.player_id);
+                            if (!p) return null;
+                            return {
+                                Kills:     +p.player_stats.Kills,
+                                Deaths:    +p.player_stats.Deaths,
+                                Assists:   +p.player_stats.Assists,
+                                Headshots: +p.player_stats.Headshots,
+                                "K/R Ratio": +p.player_stats["K/R Ratio"],
+                                ADR:       +(
+                                    p.player_stats.ADR ??
+                                    p.player_stats["Average Damage per Round"]
+                                ),
+                                Rounds:    +(round.round_stats.Rounds||1),
+                                CreatedAt: h.started_at
+                            };
+                        } catch (_err) {
+                            // 503 oder andere Errors einfach ignorieren
+                            return null;
+                        }
+                    })
+                )
+            ).filter(Boolean);
 
             const { stats, matchesCount } = calculateCurrentFormStats(matchData);
             statsObj = {
@@ -203,7 +210,7 @@ export default async function handler(req, res) {
         }
 
         Object.assign(resp, statsObj);
-        res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate");
+        res.setHeader("Cache-Control","s-maxage=60, stale-while-revalidate");
         return res.status(200).json(resp);
 
     } catch (err) {
