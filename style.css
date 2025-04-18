@@ -28,6 +28,17 @@
     --layout-gap: 2rem;
 }
 
+body {
+    background: linear-gradient(
+            130deg,
+            #1f1f29 0%,
+            #2a2a3d 50%,
+            #20202d 100%
+    );
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
 html {
     box-sizing: border-box;
 }
@@ -669,3 +680,21 @@ footer p {
     font-weight: 600;
     color: rgba(255,255,255,0.85);
 }
+/* Feintuning Glass‑Panel */
+#player-detail-card-container .card-header,
+#player-detail-card-container .stats-grid {
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 8px 48px rgba(0,0,0,0.5);
+}
+
+#player-list-container {
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(10px) saturate(120%);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    padding: 1.5rem;
+}
+
