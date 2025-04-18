@@ -47,11 +47,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Farbe je nach Schwellenwert
         let color = 'var(--bar-bad)';
-        if (val >= cfg.good)      color = 'var(--bar-good)';
+        if (val >= cfg.good) color = 'var(--bar-good)';
         else if (val >= cfg.okay) color = 'var(--bar-okay)';
         bar.style.backgroundColor = color;
     }
-
 
     // -------------------------------------------------------------
     // EINZIGE updateStatProgressBars‑Funktion
@@ -59,28 +58,37 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateStatProgressBars(card, player) {
         card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
             const stat = item.dataset.stat;
+            // für "elo" aus der Liste bleibts beim sortElo, sonst nimmst Du player[stat]
             const val = stat === 'elo' ? player.sortElo : player[stat];
             const cfg = thresholds[stat];
-            const thumb = item.querySelector('.stat-progress-bar');
-            const lbl = item.querySelector('.stat-indicator-label');
+            const bar = item.querySelector('.stat-progress-bar');
+            const label = item.querySelector('.stat-indicator-label');
 
-            // 1) Prozent und Farbe berechnen
             let pct = 0;
             let color = 'var(--bar-bad)';
             let text = '---';
+
             if (val != null && !isNaN(val)) {
                 pct = Math.min(100, (val / cfg.max) * 100);
-                if (val >= cfg.good) text = 'GOOD', color = 'var(--bar-good)'; else if (val >= cfg.okay) text = 'OKAY', color = 'var(--bar-okay)'; else text = 'BAD', color = 'var(--bar-bad)';
+                if (val >= cfg.good) {
+                    text = 'GOOD';
+                    color = 'var(--bar-good)';
+                } else if (val >= cfg.okay) {
+                    text = 'OKAY';
+                    color = 'var(--bar-okay)';
+                } else {
+                    text = 'BAD';
+                    color = 'var(--bar-bad)';
+                }
             }
 
-            // 2) CSS‑Variablen für ::after‑Daumen setzen
-            thumb.style.setProperty('--pos', `${pct}%`);
-            thumb.style.setProperty('--glow', color);
-
-            // 3) Label-Text
-            lbl.textContent = text;
+            // hier setzen wir direkt Breite und Farbe
+            bar.style.width = pct + '%';
+            bar.style.backgroundColor = color;
+            label.textContent = text;
         });
     }
+
 
     async function getPlayerData(nickname) {
         try {
