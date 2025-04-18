@@ -17,47 +17,38 @@ async function fetchJson(url, headers) {
  * matches: Array von Objekten mit den Keys
  *   Kills, Deaths, Assists, Headshots, 'K/R Ratio', ADR, Rounds, Win
  */
+/**
+ * Berechnet alle Kennzahlen aus einem Match‑Array nach HLTV 2.0
+ */
 function calculateAverageStats(matches) {
     const weight = matches.length;
     if (weight === 0) {
         return {
-            kd: 0,
-            dpr: 0,
-            kpr: 0,
-            adr: 0,
-            winRate: 0,
-            hsPercent: 0,
-            kast: 0,
-            impact: 0,
-            rating: 0,
-            weight
+            kd: 0, dpr: 0, kpr: 0, adr: 0,
+            winRate: 0, hsPercent: 0, kast: 0,
+            impact: 0, rating: 0, weight
         };
     }
 
-    // Rohdaten aggregieren
-    let totalKills = 0;
-    let totalDeaths = 0;
-    let totalRounds = 0;
-    let totalDamage = 0;
-    let totalHeadshots = 0;
-    let totalWins = 0;
-    matches.forEach(m => {
-        const kills   = Number(m.Kills)   || 0;
-        const deaths  = Number(m.Deaths)  || 0;
-        const rounds  = Number(m.Rounds)  || 1;
-        const adr     = Number(m.ADR)     || (kills * 105);
-        const hs      = Number(m.Headshots) || 0;
-        const win     = Number(m.Win)     || 0;
+    let totalKills = 0, totalDeaths = 0, totalRounds = 0;
+    let totalDamage = 0, totalHeadshots = 0, totalWins = 0;
 
-        totalKills   += kills;
-        totalDeaths  += deaths;
-        totalRounds  += rounds;
-        totalDamage  += adr * rounds;
-        totalHeadshots += hs;
-        totalWins    += win;
+    matches.forEach(m => {
+        const kills  = Number(m.Kills)   || 0;
+        const deaths = Number(m.Deaths)  || 0;
+        const rounds = Number(m.Rounds)  || 1;
+        const adr    = Number(m.ADR)     || (kills * 105);
+        const hs     = Number(m.Headshots)|| 0;
+        const win    = Number(m.Win)     || 0;
+
+        totalKills    += kills;
+        totalDeaths   += deaths;
+        totalRounds   += rounds;
+        totalDamage   += adr * rounds;
+        totalHeadshots+= hs;
+        totalWins     += win;
     });
 
-    // Durchschnittswerte
     const kpr       = totalKills  / totalRounds;
     const dpr       = totalDeaths / totalRounds;
     const adrAvg    = totalDamage / totalRounds;
@@ -65,25 +56,27 @@ function calculateAverageStats(matches) {
     const winRate   = (totalWins / weight) * 100;
     const hsPercent = totalKills ? (totalHeadshots / totalKills) * 100 : 0;
 
-    // KAST berechnen
+    // KAST nah approximiert
     let kastCount = 0;
     matches.forEach(m => {
-        const survivedOrContrib = (Number(m.Kills) > 0 || Number(m.Assists) > 0 || Number(m.Deaths) < Number(m.Rounds));
-        if (survivedOrContrib) kastCount++;
+        if (Number(m.Kills)>0 || Number(m.Assists)>0 || Number(m.Deaths)<Number(m.Rounds)) {
+            kastCount++;
+        }
     });
     const kast = (kastCount / weight) * 100;
 
-    // Impact-Faktor
-    const impact = 2.13 * kpr + 0.42 * (totalKills / totalRounds) - 0.41;
+    const impact =
+        2.13 * kpr +
+        0.42 * (totalKills / totalRounds) -
+        0.41;
 
-    // Rating 2.0 Formel
     const ratingRaw =
-        0.0073 * kast
-        + 0.3591 * kpr
-        - 0.5329 * dpr
-        + 0.2372 * impact
-        + 0.0032 * adrAvg
-        + 0.1587;
+        0.0073 * kast +
+        0.3591 * kpr -
+        0.5329 * dpr +
+        0.2372 * impact +
+        0.0032 * adrAvg +
+        0.1587;
     const rating = Math.max(0, ratingRaw);
 
     return {
@@ -98,67 +91,7 @@ function calculateAverageStats(matches) {
         rating: +rating.toFixed(2),
         weight
     };
-};
-
-// Rohdaten aggregieren
-let totalKills = 0;
-let totalDeaths = 0;
-let totalRounds = 0;
-let totalDamage = 0;
-let totalHeadshots = 0;
-let totalWins = 0;
-matches.forEach(m => {
-    const kills   = Number(m.Kills)   || 0;
-    const deaths  = Number(m.Deaths)  || 0;
-    const rounds  = Number(m.Rounds)  || 1;
-    const adr     = Number(m.ADR)     || kills * 105;   // fallback: 105 dmg per kill
-    const hs      = Number(m.Headshots) || 0;
-    const win     = Number(m.Win)     || 0;
-
-    totalKills   += kills;
-    totalDeaths  += deaths;
-    totalRounds  += rounds;
-    totalDamage  += adr * rounds;
-    totalHeadshots += hs;
-    totalWins    += win;
-});
-
-// Durchschnittswerte
-const kpr       = totalKills  / totalRounds;      // Kills pro Runde
-const dpr       = totalDeaths / totalRounds;      // Tode pro Runde
-const adr_avg   = totalDamage / totalRounds;      // Schaden pro Runde
-const kd        = totalDeaths ? totalKills/totalDeaths : totalKills;
-const winRate   = (totalWins / matches.length) * 100;               // WinRate in % (Matches)
-const hsPercent = totalKills ? (totalHeadshots/totalKills)*100 : 0; // HS%
-
-// KAST approximieren (wenn keine Round-by-Round-Daten):
-// Hier als Platzhalter: WinRate verwenden oder entfernen, da echte KAST berechenbar sein muss
-const kast = winRate; // dient als Näherung für HLTV KAST
-
-// Impact nach Dave's Näherung
-const impact = 2.13 * kpr + 0.42 * (totalKills/totalRounds) - 0.41;
-
-// Rating 2.0 Formel
-// Rating = 0.0073·KAST + 0.3591·KPR – 0.5329·DPR + 0.2372·Impact + 0.0032·ADR + 0.1587
-const ratingRaw =
-    0.0073 * kast
-    + 0.3591 * kpr
-    - 0.5329 * dpr
-    + 0.2372 * impact
-    + 0.0032 * adr_avg
-    + 0.1587;
-const rating = Math.max(0, ratingRaw);
-
-return {
-    kd: +kd.toFixed(2),
-    adr: +adr_avg.toFixed(1),
-    winRate: +winRate.toFixed(1),
-    hsPercent: +hsPercent.toFixed(1),
-    kast: +kast.toFixed(1),
-    impact: +impact.toFixed(2),
-    rating: +rating.toFixed(2),
-    weight: matches.length
-};
+}
 
 /**
  * Wählt die letzten 10 Matches nach Datum aus und berechnet die Stats
