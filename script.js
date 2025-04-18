@@ -58,36 +58,37 @@ document.addEventListener("DOMContentLoaded", () => {
     function updateStatProgressBars(card, player) {
         card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
             const stat = item.dataset.stat;
-            // für "elo" aus der Liste bleibts beim sortElo, sonst nimmst Du player[stat]
-            const val = stat === 'elo' ? player.sortElo : player[stat];
-            const cfg = thresholds[stat];
-            const bar = item.querySelector('.stat-progress-bar');
-            const label = item.querySelector('.stat-indicator-label');
+            const val  = stat === 'elo' ? player.sortElo : player[stat];
+            const cfg  = thresholds[stat];
+            const bar  = item.querySelector('.stat-progress-bar');
+            const lbl  = item.querySelector('.stat-indicator-label');
 
-            let pct = 0;
+            let pct   = 0;
             let color = 'var(--bar-bad)';
-            let text = '---';
+            let text  = '---';
 
             if (val != null && !isNaN(val)) {
-                pct = Math.min(100, (val / cfg.max) * 100);
-                if (val >= cfg.good) {
-                    text = 'GOOD';
-                    color = 'var(--bar-good)';
-                } else if (val >= cfg.okay) {
-                    text = 'OKAY';
-                    color = 'var(--bar-okay)';
+                if (stat === 'dpr') {
+                    // je niedriger, desto besser → invertiere
+                    pct = Math.min(100, ((cfg.max - val) / cfg.max) * 100);
+                    if (val <= cfg.good)      { text = 'GOOD'; color = 'var(--bar-good)'; }
+                    else if (val <= cfg.okay) { text = 'OKAY'; color = 'var(--bar-okay)'; }
+                    else                       { text = 'BAD';  color = 'var(--bar-bad)'; }
                 } else {
-                    text = 'BAD';
-                    color = 'var(--bar-bad)';
+                    // Standard: je höher, desto besser
+                    pct = Math.min(100, (val / cfg.max) * 100);
+                    if (val >= cfg.good)      { text = 'GOOD'; color = 'var(--bar-good)'; }
+                    else if (val >= cfg.okay) { text = 'OKAY'; color = 'var(--bar-okay)'; }
+                    else                      { text = 'BAD';  color = 'var(--bar-bad)'; }
                 }
             }
 
-            // hier setzen wir direkt Breite und Farbe
             bar.style.width = pct + '%';
             bar.style.backgroundColor = color;
-            label.textContent = text;
+            lbl.textContent = text;
         });
     }
+
 
 
     async function getPlayerData(nickname) {
