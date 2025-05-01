@@ -45,7 +45,7 @@ function calculateNewImpact(kpr_avg, adr_avg, kast_avg) {
     const clamped_modifier = Math.max(0.7, Math.min(1.3, consistency_modifier));
 
     // --- Kombiniere Komponenten ---
-    const core_impact = (norm_kpr * 0.6) + (norm_adr * 0.4);
+    const core_impact = (norm_kpr * 0.65) + (norm_adr * 0.4);
     const final_impact = core_impact * clamped_modifier;
 
     return Math.max(0, final_impact);
