@@ -1,24 +1,24 @@
-// script.js - Überarbeitet für View-Toggle
 // -------------------------------------------------------------
 // Globale Variablen und Hilfsfunktionen
 // -------------------------------------------------------------
 const thresholds = {
+    // Schwellenwerte bleiben wie zuvor definiert
     rating: { bad: 0.85, okay: 1.05, good: 1.25, max: 1.8 },
-    dpr: { bad: 0.75, okay: 0.7, good: 0.6, max: 1 },
+    dpr: { bad: 0.75, okay: 0.7, good: 0.6, max: 1 }, // DPR wieder relevant
     kast: { bad: 50, okay: 60, good: 70, max: 100 },
-    kd: { bad: 0.8, okay: 1.0, good: 1.2, max: 2.0 },
+    kd: { bad: 0.8, okay: 1.0, good: 1.2, max: 2.0 }, // KD bleibt für interne Logik, wird aber nicht angezeigt
     adr: { bad: 65, okay: 70, good: 85, max: 120 },
     kpr: { bad: 0.5, okay: 0.6, good: 0.8, max: 1.2 },
-    impact: { bad: 0.8, okay: 1.0, good: 1.2, max: 2.5 }, // Schwellen für Impact (aus vorherigen Schritten)
-    elo: { bad: 1800, okay: 2000, good: 2900, max: 3500 }
+    impact: { bad: 0.8, okay: 1.0, good: 1.2, max: 2.5 },
+    elo: { bad: 1800, okay: 2000, good: 2900, max: 3500 },
+    // hsp wird nicht mehr angezeigt, aber Schwellen könnten bleiben
+    hsp: { bad: 15, okay: 20, good: 25, max: 50 }
 };
 
 // Hilfsfunktion zum sicheren Formatieren von Zahlen
 function safe(v, digits = 2, suf = "") {
-    // Prüft ob v null oder undefined ist
     if (v === null || typeof v === 'undefined') return "—";
     const num = parseFloat(v);
-    // Prüft ob num eine gültige Zahl ist
     return Number.isFinite(num) ? num.toFixed(digits) + suf : "—";
 }
 
@@ -36,24 +36,19 @@ let playerListContainerEl, detailCardContainer, mainContentArea,
     loadingIndicatorSaverAbi, errorMessageSaverAbi,
     loadingIndicatorUniliga, errorMessageUniliga,
     saverAbiContent, uniligaContent,
-    toggleButtons, allPlayersData = []; // Globale Variable für SaverAbi-Daten
+    toggleButtons, allPlayersData = [];
 
 // Funktion zum Initialisieren der DOM-Elemente
 function cacheDOMElements() {
-    // SaverAbi View Elemente
     playerListContainerEl = document.getElementById("player-list");
     detailCardContainer = document.getElementById("player-detail-card-container");
-    mainContentArea = document.getElementById("main-content-area"); // Container für Liste & Karte
+    mainContentArea = document.getElementById("main-content-area");
     loadingIndicatorSaverAbi = document.getElementById("loading-indicator-saverabi");
     errorMessageSaverAbi = document.getElementById("error-message-saverabi");
     saverAbiContent = document.getElementById("saverabi-content");
-
-    // Uniliga View Elemente
     loadingIndicatorUniliga = document.getElementById("loading-indicator-uniliga");
     errorMessageUniliga = document.getElementById("error-message-uniliga");
     uniligaContent = document.getElementById("uniliga-content");
-
-    // Toggle Buttons
     toggleButtons = document.querySelectorAll(".toggle-button");
 }
 
@@ -61,70 +56,59 @@ function cacheDOMElements() {
 // Funktionen für die SaverAbi-Ansicht
 // -------------------------------------------------------------
 
-// Funktion zum Abrufen der Spielerdaten (wie bisher)
+// Funktion zum Abrufen der Spielerdaten (unverändert zur letzten Version)
 async function getPlayerData(nickname) {
     try {
         const res = await fetch(`/api/faceit-data?nickname=${encodeURIComponent(nickname)}`);
         if (!res.ok) {
-            // Versuche, Fehlerdetails aus der Antwort zu lesen
             let errorMsg = `HTTP ${res.status}`;
             try {
                 const errData = await res.json();
-                errorMsg = errData.error || errorMsg; // Nutze Fehlermeldung aus API, falls vorhanden
-            } catch (parseError) { /* Ignoriere Parse-Fehler, nutze HTTP-Status */ }
+                errorMsg = errData.error || errorMsg;
+            } catch (parseError) { /* ignore */ }
             throw new Error(errorMsg);
         }
         const p = await res.json();
-        // Verarbeite die empfangenen Daten
         p.sortElo = toNum(p.elo);
-        // Nutze calculatedRating als Fallback für rating, falls rating null ist
-        p.rating = toNum(p.calculatedRating ?? p.rating); // Verwende calculatedRating, wenn rating fehlt
-        p.dpr = toNum(p.dpr);
+        p.rating = toNum(p.calculatedRating ?? p.rating);
+        p.dpr = toNum(p.dpr); // DPR wird wieder benötigt
         p.kast = toNum(p.kast);
         p.kd = toNum(p.kd);
         p.adr = toNum(p.adr);
         p.kpr = toNum(p.kpr);
-        // Stelle sicher, dass hsPercent vorhanden ist (Name aus API/Cache)
-        p.hsp = toNum(p.hsPercent); // hsPercent aus API wird zu hsp
+        p.hsp = toNum(p.hsPercent); // hsPercent aus API wird zu hsp (auch wenn nicht angezeigt)
         p.impact = toNum(p.impact);
 
-        // Überprüfe, ob ein Fehler in den Daten zurückgegeben wurde (z.B. Spieler nicht gefunden)
         if (p.error) {
             console.warn(`Data fetching warning for ${nickname}: ${p.error}`);
-            // Behandle dies als Fehler für die Anzeige
             return { nickname, error: p.error, sortElo: -1 };
         }
-
         return p;
     } catch (err) {
         console.error(`getPlayerData error for ${nickname}:`, err);
-        // Gib ein Fehlerobjekt zurück
         return { nickname, error: err.message || "Unbekannter Fehler", sortElo: -1 };
     }
 }
 
 
-// Funktion zum Anzeigen der Spielerliste (wie bisher, kleine Anpassungen)
+// Funktion zum Anzeigen der Spielerliste (unverändert)
 function displayPlayerList(players) {
-    if (!playerListContainerEl) return; // Sicherstellen, dass Element existiert
-    playerListContainerEl.innerHTML = ''; // Leere die Liste
+    if (!playerListContainerEl) return;
+    playerListContainerEl.innerHTML = '';
     players.forEach(player => {
         const li = document.createElement('li');
-        li.dataset.nickname = player.nickname; // Wichtig für Klick-Event
-
+        li.dataset.nickname = player.nickname;
         if (player.error) {
             li.classList.add('error-item');
-            // Zeige Fehler direkt in der Liste an
             li.innerHTML = `
                 <span class='player-info'>
-                    <img src='default_avatar.png' class='avatar' />
+                    <img src='default_avatar.png' class='avatar' alt="Standard Avatar"/>
                     <span class='player-name'>${player.nickname}</span>
                 </span>
                 <div class='player-list-right error-text'>
                    Fehler: ${player.error.substring(0, 30)}${player.error.length > 30 ? '...' : ''}
                 </div>`;
         } else {
-            // Normaler Listeneintrag
             li.innerHTML = `
                 <span class='player-info'>
                   <img src='${player.avatar || 'default_avatar.png'}' class='avatar' alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" />
@@ -136,14 +120,13 @@ function displayPlayerList(players) {
                     <div class='elo-progress-bar'></div>
                   </div>
                 </div>`;
-            // Update Elo-Bar für diesen Spieler
             updateEloProgressBarForList(li.querySelector('.elo-progress-container'));
         }
         playerListContainerEl.appendChild(li);
     });
 }
 
-// Funktion zum Färben der kleinen Elo-Bar in der Liste (wie bisher)
+// Funktion zum Färben der kleinen Elo-Bar in der Liste (unverändert)
 function updateEloProgressBarForList(containerEl) {
     if (!containerEl) return;
     const val = parseInt(containerEl.dataset.elo, 10) || 0;
@@ -158,11 +141,10 @@ function updateEloProgressBarForList(containerEl) {
     bar.style.backgroundColor = color;
 }
 
-// Funktion zum Anzeigen der Detailkarte (wie bisher, nutzt safe() und hsp)
+// *** NEU: Angepasste Funktion zum Anzeigen der Detailkarte ***
 function displayDetailCard(player) {
     if (!detailCardContainer || !mainContentArea) return;
 
-    // Detailkarte nur anzeigen, wenn SaverAbi-Ansicht aktiv ist
     if (!saverAbiContent.classList.contains('active')) {
         detailCardContainer.style.display = 'none';
         mainContentArea.classList.remove('detail-visible');
@@ -181,9 +163,9 @@ function displayDetailCard(player) {
     const matchesText = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
     const lastUpdatedText = player.lastUpdated ? ` | Stand: ${new Date(player.lastUpdated).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} Uhr` : '';
 
+    // HTML Struktur angepasst an das neue Layout (Rating, DPR, KAST | Impact, ADR, KPR)
     detailCardContainer.innerHTML = `
-        <div class="player-card-hltv">
-          <div class="card-header">
+        <div class="player-card-hltv new-layout"> <div class="card-header">
             <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer">
               <img src="${player.avatar}" class="avatar" alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" />
             </a>
@@ -191,40 +173,37 @@ function displayDetailCard(player) {
               <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer" class="player-name">${player.nickname}</a>
               <div class="stats-label">${matchesText}${lastUpdatedText}</div>
             </div>
-          </div>
+            </div>
           <div class="stats-grid">
              <div class="stat-item" data-stat="rating">
-               <div class="label">Rating 2.0</div>
-               <div class="value">${safe(player.rating, 2)}</div>
-               <div class="stat-progress-container"><div class="stat-progress-bar"></div></div>
+               <div class="label">RATING 2.0</div> <div class="value">${safe(player.rating, 2)}</div>
+               <div class="stat-progress-container"><div class="stat-progress-bar"></div><div class="stat-progress-indicator"></div></div>
                <span class="stat-indicator-label"></span>
              </div>
-             <div class="stat-item" data-stat="impact"> <div class="label">Impact</div>
-               <div class="value">${safe(player.impact, 2)}</div>
-               <div class="stat-progress-container"><div class="stat-progress-bar"></div></div>
+             <div class="stat-item" data-stat="dpr"> <div class="label">DPR</div>
+               <div class="value">${safe(player.dpr, 2)}</div>
+               <div class="stat-progress-container"><div class="stat-progress-bar"></div><div class="stat-progress-indicator"></div></div>
                <span class="stat-indicator-label"></span>
              </div>
              <div class="stat-item" data-stat="kast">
-               <div class="label">KAST %</div>
-               <div class="value">${safe(player.kast, 1, '%')}</div>
-               <div class="stat-progress-container"><div class="stat-progress-bar"></div></div>
+               <div class="label">KAST</div> <div class="value">${safe(player.kast, 1, '%')}</div> <div class="stat-progress-container"><div class="stat-progress-bar"></div><div class="stat-progress-indicator"></div></div>
+               <span class="stat-indicator-label"></span>
+             </div>
+             <div class="stat-item" data-stat="impact">
+               <div class="label">IMPACT</div> <div class="value">${safe(player.impact, 2)}</div>
+               <div class="stat-progress-container"><div class="stat-progress-bar"></div><div class="stat-progress-indicator"></div></div>
                <span class="stat-indicator-label"></span>
              </div>
              <div class="stat-item" data-stat="adr">
                <div class="label">ADR</div>
                <div class="value">${safe(player.adr, 1)}</div>
-               <div class="stat-progress-container"><div class="stat-progress-bar"></div></div>
+               <div class="stat-progress-container"><div class="stat-progress-bar"></div><div class="stat-progress-indicator"></div></div>
                <span class="stat-indicator-label"></span>
              </div>
               <div class="stat-item" data-stat="kpr">
                <div class="label">KPR</div>
                <div class="value">${safe(player.kpr, 2)}</div>
-               <div class="stat-progress-container"><div class="stat-progress-bar"></div></div>
-               <span class="stat-indicator-label"></span>
-             </div>
-             <div class="stat-item" data-stat="hsp"> <div class="label">HS %</div>
-               <div class="value">${safe(player.hsp, 1, '%')}</div>
-               <div class="stat-progress-container"><div class="stat-progress-bar"></div></div>
+               <div class="stat-progress-container"><div class="stat-progress-bar"></div><div class="stat-progress-indicator"></div></div>
                <span class="stat-indicator-label"></span>
              </div>
             </div>
@@ -233,99 +212,112 @@ function displayDetailCard(player) {
     updateStatProgressBars(detailCardContainer, player);
 }
 
-// Funktion zum Updaten der Fortschrittsbalken in der Detailkarte (wie bisher)
+// *** NEU: Angepasste Funktion zum Updaten der Fortschrittsbalken ***
 function updateStatProgressBars(card, player) {
     card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
         const stat = item.dataset.stat;
-        // Behandle Elo separat, falls es hinzugefügt wird
-        const val = stat === 'elo' ? player.sortElo : player[stat];
+        const val = player[stat]; // Wert direkt holen
         const cfg = thresholds[stat];
         const bar = item.querySelector('.stat-progress-bar');
+        const indicator = item.querySelector('.stat-progress-indicator'); // Neuer Indikator-Strich
         const lbl = item.querySelector('.stat-indicator-label');
 
-        if (!cfg || !bar || !lbl) {
-            // console.warn(`Missing config, bar or label for stat: ${stat}`);
-            return; // Überspringe, wenn Konfig oder Elemente fehlen
+        if (!cfg || !bar || !lbl || !indicator) {
+             // console.warn(`Missing elements for stat: ${stat}`);
+             if(lbl) lbl.textContent = '---'; // Label leeren wenn Elemente fehlen
+             return;
         }
 
         let category = 0; // 0 = BAD
         let text = 'BAD';
         let color = 'var(--bar-bad)';
+        let barWidthPercent = 0; // Breite der farbigen Bar
 
         if (val != null && !isNaN(val)) {
-            // Spezielle Behandlung für DPR (niedriger ist besser)
-            if (stat === 'dpr') {
+            // Berechne Position relativ zum Maximum (oder einem sinnvollen oberen Grenzwert)
+            const maxValue = cfg.max || 1.5 * cfg.good; // Fallback falls max fehlt
+            barWidthPercent = Math.min(100, (val / maxValue) * 100);
+
+             // Kategorie bestimmen (für Label und Indikator-Position)
+            if (stat === 'dpr') { // Niedriger ist besser
                 if (val <= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; }
                 else if (val <= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; }
-            }
-            // Standardbehandlung (höher ist besser)
-            else {
+                else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; } // Default BAD
+            } else { // Höher ist besser
                 if (val >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; }
                 else if (val >= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; }
+                 else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; } // Default BAD
             }
         } else {
             text = '---'; // Kein Wert vorhanden
-            category = 0; // Standard auf "Bad" setzen oder neutral?
-            color = 'var(--bar-bg)'; // Graue Bar ohne Wert
+            category = -1; // Keine Kategorie
+            color = 'var(--bar-bg)'; // Graue Bar
+            barWidthPercent = 0;
         }
 
-        const third = 100 / 3;
-        bar.style.left = `${third * category}%`;
-        bar.style.width = `${third}%`;
+        // Style für die farbige Bar (Breite basiert auf Wert)
+        bar.style.width = `${barWidthPercent}%`;
         bar.style.backgroundColor = color;
-        // Nur Glow hinzufügen, wenn ein gültiger Wert vorhanden ist
-        bar.style.boxShadow = (val != null && !isNaN(val)) ? `0 0 8px ${color}` : 'none';
+        bar.style.boxShadow = (category !== -1) ? `0 0 6px ${color}` : 'none'; // Glow nur bei gültigem Wert
 
+        // Style für den Indikator-Strich (Position basiert auf Kategorie)
+        if (category === 1) { // OKAY
+             indicator.style.left = '50%'; // Mittig
+             indicator.style.backgroundColor = 'var(--bar-okay)';
+             indicator.style.display = 'block';
+        } else if (category === 2 && stat === 'dpr') { // GOOD bei DPR (links)
+             indicator.style.left = '16.66%'; // Mitte des linken Drittels
+             indicator.style.backgroundColor = 'var(--bar-good)';
+             indicator.style.display = 'block';
+        } else if (category === 2) { // GOOD bei anderen Stats (rechts)
+             indicator.style.left = '83.33%'; // Mitte des rechten Drittels
+             indicator.style.backgroundColor = 'var(--bar-good)';
+             indicator.style.display = 'block';
+        } else if (category === 0 && stat === 'dpr') { // BAD bei DPR (rechts)
+             indicator.style.left = '83.33%'; // Mitte des rechten Drittels
+             indicator.style.backgroundColor = 'var(--bar-bad)';
+             indicator.style.display = 'block';
+        } else if (category === 0) { // BAD bei anderen Stats (links)
+             indicator.style.left = '16.66%'; // Mitte des linken Drittels
+             indicator.style.backgroundColor = 'var(--bar-bad)';
+             indicator.style.display = 'block';
+        }
+        else { // Kein Wert oder undefinierte Kategorie
+            indicator.style.display = 'none';
+        }
+
+        // Label Text setzen
         lbl.textContent = text;
+        lbl.style.color = color; // Färbe auch das Label
     });
 }
 
-// Funktion zum Laden der SaverAbi-Ansicht
+
+// Funktion zum Laden der SaverAbi-Ansicht (unverändert)
 async function loadSaverAbiView() {
     if (!loadingIndicatorSaverAbi || !errorMessageSaverAbi || !playerListContainerEl) return;
-
     loadingIndicatorSaverAbi.style.display = 'block';
     errorMessageSaverAbi.style.display = 'none';
-    playerListContainerEl.innerHTML = ''; // Liste leeren
-    detailCardContainer.style.display = 'none'; // Detailkarte ausblenden
+    playerListContainerEl.innerHTML = '';
+    detailCardContainer.style.display = 'none';
     mainContentArea.classList.remove('detail-visible');
-
     try {
-        // Lade Spielernamen aus players.json
         const namesRes = await fetch('/players.json');
         if (!namesRes.ok) throw new Error(`Fehler beim Laden der Spielerliste (${namesRes.status})`);
         const names = await namesRes.json();
-
-        // Hole Daten für alle Spieler parallel
         const settled = await Promise.allSettled(names.map(getPlayerData));
-
-        // Verarbeite Ergebnisse
         allPlayersData = settled.map(r => {
             if (r.status === 'fulfilled') {
                 return r.value;
             } else {
-                // Versuche, den Nickname aus dem Grund des Fehlers zu extrahieren (nicht zuverlässig)
-                // Besser: Wir wissen nicht, welcher Nickname fehlgeschlagen ist, wenn Promise.allSettled verwendet wird
-                // Wir geben einfach ein generisches Fehlerobjekt zurück oder loggen den Fehler
                 console.error("Ein Spieler konnte nicht geladen werden:", r.reason);
-                // Hier könnten wir versuchen, den Nickname zu erraten, aber das ist unsicher.
-                // Stattdessen filtern wir fehlerhafte Einträge später oder zeigen sie als Fehler an.
-                // Fürs Erste geben wir null zurück, um sie später zu filtern
-                return null; // Markiere als fehlerhaft
+                return null;
             }
-        }).filter(p => p !== null); // Entferne null-Einträge (fehlerhafte Promises)
-
-        // Sortiere Spieler nach Elo (höchste zuerst)
+        }).filter(p => p !== null);
         allPlayersData.sort((a, b) => (b.sortElo ?? -1) - (a.sortElo ?? -1));
-
-        // Zeige die Spielerliste an
         displayPlayerList(allPlayersData);
-
-        // Füge Klick-Listener zur Liste hinzu (nur einmal nach dem Laden)
-        // Entferne alte Listener, falls vorhanden, um Duplikate zu vermeiden
         playerListContainerEl.removeEventListener('click', handlePlayerListClick);
         playerListContainerEl.addEventListener('click', handlePlayerListClick);
-
     } catch (err) {
         console.error("Fehler in loadSaverAbiView:", err);
         errorMessageSaverAbi.textContent = `Fehler beim Laden der SaverAbi-Daten: ${err.message}`;
@@ -335,68 +327,44 @@ async function loadSaverAbiView() {
     }
 }
 
-// Event-Handler für Klicks auf die Spielerliste
+// Event-Handler für Klicks auf die Spielerliste (unverändert)
 function handlePlayerListClick(e) {
     const li = e.target.closest('li');
-    if (!li || !li.dataset.nickname) return; // Kein gültiges Listenelement geklickt
+    if (!li || !li.dataset.nickname) return;
     const nickname = li.dataset.nickname;
     const playerData = allPlayersData.find(p => p.nickname === nickname);
     if (playerData) {
-        displayDetailCard(playerData); // Zeige Detailkarte für den geklickten Spieler
+        displayDetailCard(playerData);
     }
 }
 
 
 // -------------------------------------------------------------
-// Funktionen für die Uniliga-Ansicht
+// Funktionen für die Uniliga-Ansicht (unverändert)
 // -------------------------------------------------------------
-let uniligaDataLoaded = false; // Flag, um zu verhindern, dass Daten mehrmals geladen werden
-
-// Funktion zum Laden der Uniliga-Daten (Platzhalter)
+let uniligaDataLoaded = false;
 async function loadUniligaView() {
-    if (uniligaDataLoaded) return; // Nicht erneut laden, wenn schon geladen
-
+    if (uniligaDataLoaded) return;
     if (!loadingIndicatorUniliga || !errorMessageUniliga || !uniligaContent) return;
     const dataArea = document.getElementById('uniliga-data-area');
     if (!dataArea) return;
-
     loadingIndicatorUniliga.style.display = 'block';
     errorMessageUniliga.style.display = 'none';
-    dataArea.innerHTML = '<p>Lade Uniliga Daten...</p>'; // Zeige Ladezustand an
-
+    dataArea.innerHTML = '<p>Lade Uniliga Daten...</p>';
     try {
-        // --- HIER KOMMT DER API CALL ---
-        // const response = await fetch('/api/uniliga-stats'); // Ziel-API-Endpunkt
-        // if (!response.ok) {
-        //     throw new Error(`Fehler beim Abrufen der Uniliga-Daten (${response.status})`);
-        // }
-        // const data = await response.json();
-
-        // --- HIER DATEN VERARBEITEN UND ANZEIGEN ---
-        // z.B. Tabellen für Spieler und Teams erstellen
-        // dataArea.innerHTML = `
-        //     <h3>Spieler Stats</h3>
-        //     <table id="uniliga-player-table">...</table>
-        //     <h3>Team Stats</h3>
-        //     <table id="uniliga-team-table">...</table>
-        // `;
-        // // Tabellen befüllen...
-
-        // --- VORERST NUR PLATZHALTER ---
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simuliere Laden
+        // --- API Call Platzhalter ---
+        await new Promise(resolve => setTimeout(resolve, 1000));
          dataArea.innerHTML = `
              <p>Uniliga Statistiken sind hier bald verfügbar.</p>
              <p>Die Daten werden vom Faceit Turnier mit der ID <code>c1fcd6a9-34ef-4e18-8e92-b57af0667a40</code> abgerufen.</p>
              <p><i>(Implementierung des API-Calls und der Datenanzeige steht noch aus.)</i></p>
          `;
-
-        uniligaDataLoaded = true; // Setze Flag nach erfolgreichem Laden
-
+        uniligaDataLoaded = true;
     } catch (err) {
         console.error("Fehler in loadUniligaView:", err);
         errorMessageUniliga.textContent = `Fehler beim Laden der Uniliga-Daten: ${err.message}`;
         errorMessageUniliga.style.display = 'block';
-        dataArea.innerHTML = ''; // Leere den Datenbereich bei Fehler
+        dataArea.innerHTML = '';
     } finally {
         loadingIndicatorUniliga.style.display = 'none';
     }
@@ -404,52 +372,37 @@ async function loadUniligaView() {
 
 
 // -------------------------------------------------------------
-// Umschaltlogik für Ansichten
+// Umschaltlogik für Ansichten (unverändert)
 // -------------------------------------------------------------
 function switchView(viewToShow) {
-    // Alle Content-Bereiche ausblenden
     document.querySelectorAll('.view-content').forEach(content => {
         content.classList.remove('active');
     });
-    // Alle Buttons deaktivieren
     toggleButtons.forEach(button => {
         button.classList.remove('active');
     });
-
-    // Gewünschten Content-Bereich anzeigen
     const contentToShow = document.getElementById(`${viewToShow}-content`);
     if (contentToShow) {
         contentToShow.classList.add('active');
     }
-
-    // Passenden Button aktivieren
     const buttonToActivate = document.querySelector(`.toggle-button[data-view="${viewToShow}"]`);
     if (buttonToActivate) {
         buttonToActivate.classList.add('active');
     }
-
-    // Detailkarte ausblenden, wenn Uniliga-Ansicht aktiv ist
     if (viewToShow === 'uniliga' && detailCardContainer) {
          detailCardContainer.style.display = 'none';
          mainContentArea.classList.remove('detail-visible');
     }
-
-    // Lade Daten für die Ansicht, falls noch nicht geschehen
-    if (viewToShow === 'saverabi') {
-        // SaverAbi-Daten werden initial geladen, hier evtl. nur bei Bedarf neu laden?
-        // Fürs Erste: Keine Aktion hier, da initial geladen.
-    } else if (viewToShow === 'uniliga') {
-        loadUniligaView(); // Lade Uniliga-Daten (nur wenn nötig, prüft intern Flag)
+    if (viewToShow === 'uniliga') {
+        loadUniligaView();
     }
 }
 
 // -------------------------------------------------------------
-// Initialisierung beim Laden der Seite
+// Initialisierung beim Laden der Seite (unverändert)
 // -------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-    cacheDOMElements(); // DOM Elemente einmalig holen
-
-    // Event Listener für Toggle Buttons hinzufügen
+    cacheDOMElements();
     toggleButtons.forEach(button => {
         button.addEventListener('click', (event) => {
             const view = event.target.dataset.view;
@@ -458,8 +411,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     });
-
-    // Initial die SaverAbi-Ansicht laden und anzeigen
-    switchView('saverabi'); // Setzt SaverAbi als aktiv
-    loadSaverAbiView();     // Lädt die Daten dafür
+    switchView('saverabi');
+    loadSaverAbiView();
 });

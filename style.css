@@ -1,4 +1,7 @@
-:root {
+/* ==========================================================================
+   Root-Variablen (unverändert)
+   ========================================================================== */
+   :root {
     /* Farbschema */
     --bg-gradient-start: #1f1f29;
     --bg-gradient-end: #2a2a3d;
@@ -17,7 +20,9 @@
     --bar-good: #66bb6a;
     --bar-okay: #ffee58;
     --bar-bad: #ef5350;
-    --bar-bg: #404050;
+    --bar-bg: #404050; /* Hintergrund der leeren Bar */
+    --indicator-height: 12px; /* Höhe des Indikator-Strichs */
+    --indicator-width: 3px;  /* Breite des Indikator-Strichs */
     --button-bg: #3a3a4a;
     --button-hover-bg: #4a4a5a;
     --button-active-bg: var(--bar-okay); /* Aktiver Button Highlight */
@@ -57,476 +62,256 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden; /* Verhindert horizontales Scrollen */
+    overflow-y: auto;   /* Erlaubt vertikales Scrollen */
 }
 
 /* ==========================================================================
-   Header & Footer (Header leicht angepasst)
+   Header & Footer (unverändert)
    ========================================================================== */
 header {
     text-align: center;
-    padding: 1rem var(--gap); /* Padding links/rechts hinzugefügt */
+    padding: 1rem var(--gap);
     border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3);
 }
-
-header h1 {
-    margin: 0 0 0.5rem 0; /* Kleiner Abstand nach unten */
-    font-weight: 700;
-}
-
+header h1 { margin: 0 0 0.5rem 0; font-weight: 700; }
 footer {
     text-align: center;
     padding: 1rem 0;
-    margin-top: var(--gap); /* Abstand nach oben */
+    margin-top: var(--gap);
     border-top: 1px solid rgba(var(--card-bg-rgb), 0.3);
     font-size: 0.9rem;
     color: var(--text-secondary);
 }
 
 /* ==========================================================================
-   NEU: View Toggle Buttons
+   View Toggle Buttons (unverändert)
    ========================================================================== */
-.view-toggle {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem; /* Kleinerer Abstand zwischen Buttons */
-    margin-top: 0.5rem;
-}
-
+.view-toggle { display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.5rem; }
 .toggle-button {
-    padding: 0.6rem 1.2rem;
-    font-size: 0.95rem;
-    font-weight: 700;
-    border: none;
-    border-radius: var(--radius);
-    background-color: var(--button-bg);
-    color: var(--text-secondary); /* Inaktive Buttons etwas gedämpfter */
-    cursor: pointer;
+    padding: 0.6rem 1.2rem; font-size: 0.95rem; font-weight: 700;
+    border: none; border-radius: var(--radius); background-color: var(--button-bg);
+    color: var(--text-secondary); cursor: pointer;
     transition: background-color 0.2s, color 0.2s;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
-
-.toggle-button:hover {
-    background-color: var(--button-hover-bg);
-    color: var(--text-primary);
-}
-
+.toggle-button:hover { background-color: var(--button-hover-bg); color: var(--text-primary); }
 .toggle-button.active {
-    background-color: var(--button-active-bg);
-    color: var(--button-active-text); /* Dunkler Text auf hellem Hintergrund */
+    background-color: var(--button-active-bg); color: var(--button-active-text);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* ==========================================================================
+   Loading & Error (unverändert)
+   ========================================================================== */
+.loading-indicator, .error-message {
+    max-width: var(--max-list); margin: var(--gap) auto; padding: var(--gap);
+    text-align: center; background: rgba(var(--card-bg-rgb), 0.75);
+    backdrop-filter: blur(var(--glass-blur)); border: var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    color: var(--text-secondary); font-size: 1.1rem;
+}
+.error-message { color: var(--bar-bad); font-weight: bold; }
+.error-text { color: var(--bar-bad); font-size: 0.85rem; } /* Für Fehler in der Liste */
+
 
 /* ==========================================================================
-   Loading & Error (Klassennamen angepasst)
+   Layout & View Content (unverändert)
    ========================================================================== */
-.loading-indicator, /* Allgemeine Klasse */
-.error-message {    /* Allgemeine Klasse */
-    max-width: var(--max-list);
-    margin: var(--gap) auto;
-    padding: var(--gap);
-    text-align: center;
-    background: rgba(var(--card-bg-rgb), 0.75);
-    backdrop-filter: blur(var(--glass-blur));
-    border: var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    color: var(--text-secondary);
-    font-size: 1.1rem;
-}
-
-.error-message {
-    color: var(--bar-bad);
-    font-weight: bold;
-}
-
-/* ==========================================================================
-   Layout (unverändert)
-   ========================================================================== */
-main {
-    flex: 1;
-    max-width: calc(var(--max-list) + var(--max-card) + var(--gap) * 2);
-    margin: 0 auto;
-    padding: 0 var(--gap);
-}
-
+main { flex: 1; max-width: calc(var(--max-list) + var(--max-card) + var(--gap) * 2); margin: 0 auto; padding: 0 var(--gap); }
 /* Layout für SaverAbi Ansicht */
-#main-content-area {
-    display: flex;
-    gap: var(--gap);
-    justify-content: center;
-    align-items: flex-start;
-}
-
-#main-content-area.detail-visible {
-    justify-content: flex-start;
-}
-
-/* ==========================================================================
-   NEU: View Content Container Handling
-   ========================================================================== */
-.view-content {
-    display: none; /* Standardmäßig ausgeblendet */
-    width: 100%;
-    animation: fadeIn 0.5s ease-in-out; /* Leichte Einblendung */
-}
-
-.view-content.active {
-    display: block; /* Aktive Ansicht anzeigen */
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
+#main-content-area { display: flex; gap: var(--gap); justify-content: center; align-items: flex-start; }
+#main-content-area.detail-visible { justify-content: flex-start; }
+/* View Content Handling */
+.view-content { display: none; width: 100%; animation: fadeIn 0.5s ease-in-out; }
+.view-content.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ==========================================================================
    Player List (SaverAbi View - unverändert)
    ========================================================================== */
 #player-list-container {
-    background: rgba(var(--card-bg-rgb), 0.75);
-    backdrop-filter: blur(var(--glass-blur));
-    border: var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: var(--gap) 0;
-    width: 100%;
-    max-width: var(--max-list);
-    display: flex;
-    flex-direction: column;
-    max-height: calc(80vh - 4rem); /* Höhe begrenzen */
-    overflow: hidden; /* Container fix */
+    background: rgba(var(--card-bg-rgb), 0.75); backdrop-filter: blur(var(--glass-blur));
+    border: var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: var(--gap) 0; width: 100%; max-width: var(--max-list);
+    display: flex; flex-direction: column; max-height: calc(80vh - 4rem);
+    overflow: hidden;
 }
-
-#player-list-container h2 {
-    margin: 0 0 var(--gap);
-    padding: 0 var(--gap);
-    text-align: center;
-    color: var(--text-primary);
-}
-
-ol#player-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    counter-reset: rank;
-    overflow-y: auto; /* Scrollen innerhalb der Liste */
-    max-height: 100%;
-}
-
+#player-list-container h2 { margin: 0 0 var(--gap); padding: 0 var(--gap); text-align: center; color: var(--text-primary); }
+ol#player-list { list-style: none; margin: 0; padding: 0; counter-reset: rank; overflow-y: auto; max-height: 100%; }
 ol#player-list li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem; /* Kleinerer Gap */
-    padding: 0.8rem var(--gap);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.5rem; padding: 0.8rem var(--gap);
     border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3);
-    cursor: pointer;
-    transition: background-color 0.2s;
+    cursor: pointer; transition: background-color 0.2s;
 }
-
-ol#player-list li:last-child {
-    border-bottom: none;
-}
-
-ol#player-list li:hover {
-    background: rgba(var(--card-bg-rgb), 0.95);
-}
-
+ol#player-list li:last-child { border-bottom: none; }
+ol#player-list li:hover { background: rgba(var(--card-bg-rgb), 0.95); }
 ol#player-list li::before {
-    counter-increment: rank;
-    content: counter(rank);
-    min-width: 1.5rem; /* Mindestbreite für Ranking */
-    text-align: right;
-    color: var(--text-secondary);
-    margin-right: 0.5rem;
-    font-size: 0.9em;
+    counter-increment: rank; content: counter(rank); min-width: 1.5rem;
+    text-align: right; color: var(--text-secondary); margin-right: 0.5rem; font-size: 0.9em;
 }
-
-.player-info {
-    display: flex;
-    align-items: center;
-    gap: 0.8rem; /* Angepasster Gap */
-    overflow: hidden; /* Verhindert Überlaufen */
-    flex-grow: 1; /* Nimmt verfügbaren Platz ein */
-}
-
-.player-info .avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid rgba(var(--card-bg-rgb), 0.3);
-    flex-shrink: 0; /* Verhindert Schrumpfen */
-}
-
-.player-info .player-name {
-    font-weight: bold;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-grow: 1;
-}
-
-.player-list-right {
-    text-align: right;
-    flex-shrink: 0; /* Verhindert Schrumpfen */
-}
-
-.player-elo {
-    font-weight: bold;
-    margin-bottom: 0.3rem;
-    font-size: 0.95em;
-}
-
-.elo-progress-container {
-    width: 60px;
-    height: 6px;
-    background: var(--bar-bg);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.elo-progress-bar {
-    height: 100%;
-    background: var(--bar-bad);
-    transition: width 0.5s, background-color 0.5s;
-}
+.player-info { display: flex; align-items: center; gap: 0.8rem; overflow: hidden; flex-grow: 1; }
+.player-info .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(var(--card-bg-rgb), 0.3); flex-shrink: 0; }
+.player-info .player-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; }
+.player-list-right { text-align: right; flex-shrink: 0; }
+.player-elo { font-weight: bold; margin-bottom: 0.3rem; font-size: 0.95em; }
+.elo-progress-container { width: 60px; height: 6px; background: var(--bar-bg); border-radius: 3px; overflow: hidden; }
+.elo-progress-bar { height: 100%; background: var(--bar-bad); transition: width 0.5s, background-color 0.5s; }
 
 /* ==========================================================================
-   Detail Card (SaverAbi View - unverändert, aber Positionierung beachten)
+   Detail Card (SaverAbi View - ANGEPASST)
    ========================================================================== */
 #player-detail-card-container {
-    display: none; /* Wird von JS gesteuert */
-    width: 100%;
-    max-width: var(--max-card);
-    position: sticky; /* Bleibt sticky */
-    top: 1rem;
-    align-self: flex-start; /* Stellt sicher, dass es oben bleibt */
+    display: none; width: 100%; max-width: var(--max-card);
+    position: sticky; top: 1rem; align-self: flex-start;
 }
 
-/* Wenn Uniliga-Ansicht aktiv ist, Detailkarte ausblenden (oder nicht sticky machen?) */
-/* Vorerst: JS blendet sie aus, wenn Ansicht wechselt */
-
-.player-card-hltv {
-    background: rgba(var(--card-bg-rgb), 0.75);
-    backdrop-filter: blur(var(--glass-blur));
-    border: var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: var(--gap);
-    opacity: 0;
-    transform: translateX(20px);
+.player-card-hltv { /* Allgemeine Karte */
+    background: rgba(var(--card-bg-rgb), 0.75); backdrop-filter: blur(var(--glass-blur));
+    border: var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: var(--gap); opacity: 0; transform: translateX(20px);
     transition: opacity 0.5s, transform 0.5s;
 }
+#main-content-area.detail-visible .player-card-hltv { opacity: 1; transform: translateX(0); }
 
-#main-content-area.detail-visible .player-card-hltv {
-    opacity: 1;
-    transform: translateX(0);
+.player-card-hltv .card-header { /* Header unverändert */
+    display: flex; align-items: center; gap: var(--gap); margin-bottom: var(--gap);
+    border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3); padding-bottom: var(--gap);
 }
+.player-card-hltv .card-header .avatar { width: 60px; height: 60px; border-radius: 50%; border: 3px solid rgba(var(--card-bg-rgb), 0.3); }
+.player-card-hltv .player-name { font-size: 1.5rem; color: var(--text-primary); text-decoration: none; transition: color 0.2s; }
+.player-card-hltv .player-name:hover { color: var(--bar-okay); }
+.stats-label { color: var(--text-secondary); font-size: 0.9rem; }
 
-.player-card-hltv .card-header {
-    display: flex;
-    align-items: center;
-    gap: var(--gap);
-    margin-bottom: var(--gap);
-    border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3);
-    padding-bottom: var(--gap);
-}
-
-.player-card-hltv .card-header .avatar {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    border: 3px solid rgba(var(--card-bg-rgb), 0.3);
-}
-
-.player-card-hltv .player-name {
-    font-size: 1.5rem;
-    color: var(--text-primary);
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
-.player-card-hltv .player-name:hover {
-    color: var(--bar-okay);
-}
-
-.stats-label {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-}
-
-/* Stats Grid Layout (unverändert) */
-.player-card-hltv .stats-grid {
+/* *** NEUES LAYOUT für die Stats *** */
+.player-card-hltv.new-layout .stats-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(2, auto);
-    gap: 1.5rem;
+    grid-template-columns: repeat(3, 1fr); /* Immer 3 Spalten */
+    grid-template-rows: repeat(2, auto);    /* Immer 2 Zeilen */
+    gap: var(--gap) 1rem; /* Vertikaler Gap größer, horizontal kleiner */
+    align-items: start; /* Items oben ausrichten */
 }
 
-/* Stat Item Layout (unverändert) */
-.player-card-hltv .stat-item {
+.player-card-hltv.new-layout .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Zentriert Inhalt horizontal */
     text-align: center;
-    padding: 1rem 0.5rem; /* Weniger horizontales Padding */
+    padding: 0.5rem 0; /* Weniger Padding */
 }
 
-.player-card-hltv .stat-item .label {
-    font-size: 0.8rem; /* Etwas kleiner */
+.player-card-hltv.new-layout .stat-item .label {
+    font-size: 0.8rem; /* Kleinere Schrift für Label */
     color: var(--text-secondary);
-    margin-bottom: 0.25rem;
-    white-space: nowrap; /* Verhindert Umbruch */
+    margin-bottom: 0.3rem;
+    text-transform: uppercase; /* Großbuchstaben wie im Bild */
+    font-weight: 700;
 }
 
-.player-card-hltv .stat-item .value {
-    font-size: 1.8rem; /* Etwas kleiner */
-    font-weight: bold;
-    margin-bottom: 0.5rem;
+.player-card-hltv.new-layout .stat-item .value {
+    font-size: 2rem; /* Größere Schrift für Wert */
+    font-weight: 700; /* Fett */
+    color: var(--text-primary);
+    margin-bottom: 0.6rem; /* Mehr Abstand zur Bar */
+    line-height: 1.1;
 }
 
-
-/* Progress Bar Container (unverändert) */
-.stat-progress-container {
-    position: relative;
-    width: 100%;
-    max-width: 120px; /* Maximale Breite der Bar */
-    margin: 0 auto; /* Zentrieren */
-    height: 8px;
-    background: var(--bar-bg);
+/* *** NEUES LAYOUT für Progress Bar *** */
+.player-card-hltv.new-layout .stat-progress-container {
+    position: relative; /* Für absolute Positionierung des Indikators */
+    width: 100%;        /* Volle Breite des Stat-Items */
+    max-width: 150px;   /* Maximale Breite begrenzen */
+    height: 8px;        /* Höhe der Bar */
+    background-color: var(--bar-bg); /* Hintergrund der leeren Bar */
     border-radius: 4px;
-    overflow: visible;
+    overflow: hidden;   /* Verhindert, dass Bar überläuft */
+    margin-bottom: 0.4rem; /* Abstand zum Label darunter */
 }
 
-/* Trennlinien (unverändert) */
-.stat-progress-container::before,
-.stat-progress-container::after {
-    content: '';
+/* Die farbige Bar, Breite wird von JS gesetzt */
+.player-card-hltv.new-layout .stat-progress-bar {
     position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: rgba(255,255,255,0.1);
-}
-.stat-progress-container::before { left: 33.333%; }
-.stat-progress-container::after  { left: 66.666%; }
-
-/* Farbige Bar (unverändert) */
-.stat-progress-bar {
-    position: absolute;
+    left: 0;
     top: 0;
     height: 100%;
-    border-radius: 2px;
-    box-shadow: 0 0 8px transparent;
-    transition: left 0.3s, background-color 0.3s, box-shadow 0.3s;
+    background-color: var(--bar-bad); /* Standardfarbe, wird von JS überschrieben */
+    border-radius: 4px; /* Gleicher Radius wie Container */
+    transition: width 0.4s ease-out, background-color 0.3s, box-shadow 0.3s;
+    box-shadow: 0 0 6px transparent; /* Glow-Effekt */
 }
 
-/* Indikator Label (unverändert) */
-.stat-indicator-label {
-    margin-top: 0.25rem;
+/* Der kleine Indikator-Strich */
+.player-card-hltv.new-layout .stat-progress-indicator {
+    position: absolute;
+    top: -2px; /* Leicht über der Bar positionieren */
+    bottom: -2px; /* Leicht unter der Bar positionieren */
+    width: var(--indicator-width);
+    background-color: var(--bar-okay); /* Standard, wird von JS überschrieben */
+    border-radius: 1px;
+    transform: translateX(-50%); /* Horizontal zentrieren */
+    transition: left 0.3s ease-out, background-color 0.3s;
+    display: none; /* Standardmäßig ausblenden, JS zeigt es an */
+    z-index: 1; /* Über der farbigen Bar */
+}
+
+
+/* Das Text-Label unter der Bar (GOOD/OKAY/BAD) */
+.player-card-hltv.new-layout .stat-indicator-label {
     font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    mix-blend-mode: screen;
+    font-weight: 700;
+    color: var(--text-secondary); /* Standardfarbe, wird von JS überschrieben */
+    text-transform: uppercase;
+    margin-top: 0.2rem; /* Kleiner Abstand nach oben */
+    transition: color 0.3s;
 }
 
+
 /* ==========================================================================
-   Uniliga Content Area Styles (NEU)
+   Uniliga Content Area Styles (unverändert)
    ========================================================================== */
-#uniliga-content h2 {
-    text-align: center;
-    margin-bottom: var(--gap);
-    color: var(--text-primary);
-}
-
+#uniliga-content h2 { text-align: center; margin-bottom: var(--gap); color: var(--text-primary); }
 #uniliga-data-area {
-    background: rgba(var(--card-bg-rgb), 0.75);
-    backdrop-filter: blur(var(--glass-blur));
-    border: var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: var(--gap);
-    color: var(--text-secondary);
-    /* Hier kommen später Tabellen etc. rein */
+    background: rgba(var(--card-bg-rgb), 0.75); backdrop-filter: blur(var(--glass-blur));
+    border: var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: var(--gap); color: var(--text-secondary);
 }
-
-#uniliga-data-area p {
-    margin-bottom: 0.5rem;
-}
+#uniliga-data-area p { margin-bottom: 0.5rem; }
 
 
 /* ==========================================================================
-   Responsive (Anpassungen für Toggle)
+   Responsive (Anpassungen für neues Layout)
    ========================================================================== */
 @media (max-width: 1250px) {
     /* SaverAbi Ansicht: */
-    #saverabi-content #main-content-area {
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start !important; /* Wichtig für Reihenfolge */
-    }
-
+    #saverabi-content #main-content-area { flex-direction: column; align-items: center; justify-content: flex-start !important; }
     #saverabi-content #player-list-container,
-    #saverabi-content #player-detail-card-container {
-        max-width: 650px; /* Maximale Breite für beide Elemente */
-        width: 100%;
-        position: static; /* Detailkarte nicht mehr sticky */
-        margin-bottom: var(--gap); /* Abstand zwischen Liste und Karte */
-    }
-
-     #saverabi-content #player-list-container {
-         max-height: none; /* Keine Höhenbegrenzung mehr */
-         overflow: visible; /* Kein internes Scrollen mehr nötig */
-     }
-     #saverabi-content ol#player-list {
-         overflow-y: visible;
-     }
-
-     /* Uniliga Ansicht nimmt volle Breite ein */
-     #uniliga-content #uniliga-data-area {
-         max-width: 800px; /* Beispiel-Max-Breite für Uniliga-Inhalt */
-         margin-left: auto;
-         margin-right: auto;
-     }
+    #saverabi-content #player-detail-card-container { max-width: 650px; width: 100%; position: static; margin-bottom: var(--gap); }
+    #saverabi-content #player-list-container { max-height: none; overflow: visible; }
+    #saverabi-content ol#player-list { overflow-y: visible; }
+    /* Uniliga Ansicht */
+    #uniliga-content #uniliga-data-area { max-width: 800px; margin-left: auto; margin-right: auto; }
 }
 
 @media (max-width: 600px) {
-    header h1 {
-        font-size: 1.5rem;
-    }
+    header h1 { font-size: 1.5rem; }
+    .toggle-button { padding: 0.5rem 0.8rem; font-size: 0.85rem; }
 
-    .toggle-button {
-        padding: 0.5rem 0.8rem;
-        font-size: 0.85rem;
-    }
+    /* SaverAbi Detailkarte Anpassungen */
+    .player-card-hltv .card-header { flex-direction: column; text-align: center; }
+    .player-card-hltv .avatar { width: 70px; height: 70px; }
+    .player-card-hltv .player-name { font-size: 1.6rem; }
 
-    /* SaverAbi Detailkarte Anpassungen (unverändert) */
-    .player-card-hltv .card-header {
-        flex-direction: column;
-        text-align: center;
+    /* Neues Layout auf kleinen Schirmen */
+    .player-card-hltv.new-layout .stats-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 Spalten auf kleinen Schirmen */
+        gap: 1rem 0.5rem; /* Kleinere Gaps */
     }
-    .player-card-hltv .avatar {
-        width: 70px;
-        height: 70px;
-    }
-    .player-card-hltv .player-name {
-        font-size: 1.6rem;
-    }
-     .player-card-hltv .stats-grid {
-        grid-template-columns: repeat(2, 1fr); /* Nur 2 Spalten auf kleinen Schirmen */
-        gap: 1rem;
-    }
-     .player-card-hltv .stat-item .value {
-        font-size: 1.6rem;
-    }
+     .player-card-hltv.new-layout .stat-item .value { font-size: 1.7rem; } /* Wert etwas kleiner */
+     .player-card-hltv.new-layout .stat-item .label { font-size: 0.7rem; } /* Label etwas kleiner */
+     .player-card-hltv.new-layout .stat-progress-container { max-width: 120px; } /* Bars schmaler */
+
 
     /* Uniliga Ansicht Anpassungen */
-    #uniliga-content h2 {
-        font-size: 1.3rem;
-    }
-}
-
-/* Body Scrollen wieder erlauben, wenn nötig */
-body {
-    overflow-y: auto; /* Erlaubt vertikales Scrollen */
-    overflow-x: hidden; /* Verhindert horizontales Scrollen */
+    #uniliga-content h2 { font-size: 1.3rem; }
 }
