@@ -11,8 +11,6 @@ const thresholds = {
     kpr: { bad: 0.5, okay: 0.6, good: 0.8, max: 1.2 },
     impact: { bad: 0.8, okay: 1.0, good: 1.2, max: 1.6 },
     elo: { bad: 1800, okay: 2000, good: 2900, max: 3500 },
-    // hsp wird nicht mehr angezeigt, aber Schwellen könnten bleiben
-    hsp: { bad: 15, okay: 20, good: 25, max: 50 }
 };
 
 // Hilfsfunktion zum sicheren Formatieren von Zahlen
