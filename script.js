@@ -169,7 +169,6 @@ function displayDetailCard(player) {
             </a>
             <div>
               <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer" class="player-name">${player.nickname}</a>
-              <div class="stats-label">${matchesText}${lastUpdatedText}</div>
             </div>
             </div>
           <div class="stats-grid">
