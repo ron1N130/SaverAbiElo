@@ -146,7 +146,6 @@ function displayDetailCard(player) {
 
     const faceitUrl = player.faceitUrl || `https://faceit.com/en/players/${encodeURIComponent(player.nickname)}`;
     const matchesText = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
-    const lastUpdatedText = player.lastUpdated ? ` | Stand: ${new Date(player.lastUpdated).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} Uhr` : '';
 
     detailCardContainer.innerHTML = `
         <div class="player-card-hltv new-layout">
@@ -154,7 +153,6 @@ function displayDetailCard(player) {
             <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer"><img src="${player.avatar}" class="avatar" alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" /></a>
             <div>
               <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer" class="player-name">${player.nickname}</a>
-              <div class="stats-label">${matchesText}${lastUpdatedText}</div>
             </div>
           </div>
           <div class="stats-grid">
