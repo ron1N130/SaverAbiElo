@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SaverAbi Skibidi Tracker</title>
-    <link rel="stylesheet" href="style.css">
+    <title>SaverAbi & Uniliga Tracker</title> <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
@@ -14,19 +13,35 @@
 <body>
 <header>
     <h1>Faceit Elo & Stats Tracker</h1>
+    <div id="view-toggle-buttons" class="view-toggle">
+        <button id="btn-toggle-saverabi" class="toggle-button active" data-view="saverabi">SaverAbi Tracker</button>
+        <button id="btn-toggle-uniliga" class="toggle-button" data-view="uniliga">Uniliga Stats</button>
+    </div>
 </header>
 <main>
-    <div id="loading-indicator">Lade Spielerdaten...</div>
-    <div id="error-message" style="display: none;"></div>
+    <div id="saverabi-content" class="view-content active">
+        <div id="loading-indicator-saverabi" class="loading-indicator">Lade Spielerdaten...</div>
+        <div id="error-message-saverabi" class="error-message" style="display: none;"></div>
 
-    <div id="main-content-area" class="layout-list-centered">
-        <div id="player-list-container">
-            <h2>Ranking</h2>
-            <ol id="player-list" class="player-list-sorted">
-            </ol>
+        <div id="main-content-area" class="layout-list-centered">
+            <div id="player-list-container">
+                <h2>Ranking</h2>
+                <ol id="player-list" class="player-list-sorted">
+                    </ol>
+            </div>
+            <div id="player-detail-card-container">
+                </div>
         </div>
+    </div>
 
-        <div id="player-detail-card-container">
+    <div id="uniliga-content" class="view-content">
+        <div id="loading-indicator-uniliga" class="loading-indicator" style="display: none;">Lade Uniliga Daten...</div>
+        <div id="error-message-uniliga" class="error-message" style="display: none;"></div>
+
+        <h2>Uniliga Statistiken (CS2)</h2>
+        <div id="uniliga-data-area">
+            <p>Uniliga Statistiken werden hier bald angezeigt.</p>
+            <p>Faceit Turnier ID: c1fcd6a9-34ef-4e18-8e92-b57af0667a40</p>
         </div>
     </div>
 </main>
