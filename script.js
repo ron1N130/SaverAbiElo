@@ -23,9 +23,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const thresholds = {
         rating: {bad: 0.85, okay: 1.05, good: 1.25, max: 1.8},
-        dpr: {bad: 0.75, okay: 0.7, good: 0.6, max: 1},
+        dpr: {bad: 0.8, okay: 0.7, good: 0.62, max: 1},
         kast: {bad: 50, okay: 60, good: 70, max: 100},
-        kd: {bad: 0.8, okay: 1.0, good: 1.2, max: 2.0},
+        impact: {bad: 0.8, okay: 1.05, good: 1.2, max: 2.0},
         adr: {bad: 65, okay: 70, good: 85, max: 120},
         kpr: {bad: 0.5, okay: 0.6, good: 0.8, max: 1.2},
         elo: {bad: 1800, okay: 2000, good: 2900, max: 3500}
@@ -103,7 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
             p.rating = toNum(p.rating ?? p.calculatedRating);
             p.dpr = toNum(p.dpr);
             p.kast = toNum(p.kast);
-            p.kd = toNum(p.kd);
+            p.impact = toNum(p.impact);
             p.adr = toNum(p.adr);
             p.kpr = toNum(p.kpr);
             return p;
@@ -178,9 +178,9 @@ document.addEventListener("DOMContentLoaded", () => {
                <div class="stat-progress-container"><div class="stat-progress-bar"></div></div>
                <span class="stat-indicator-label"></span>
              </div>
-             <div class="stat-item" data-stat="kd">
-               <div class="label">K/D</div>
-               <div class="value">${safe(player.kd, 2)}</div>
+             <div class="stat-item" data-stat="impact">
+               <div class="label">Impact</div>
+               <div class="value">${safe(player.impact, 2)}</div>
                <div class="stat-progress-container"><div class="stat-progress-bar"></div></div>
                <span class="stat-indicator-label"></span>
              </div>
