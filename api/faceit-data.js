@@ -146,7 +146,7 @@ function calculateAverageStats(matches) {
         -0.5329 * dpr_avg +       // DPR Avg (pro Runde)
         0.2372 * impact_new +     // <<<< NEUER Impact Wert
         0.0032 * adr_avg_simple + // <<<< Einfacher ADR Avg Wert
-        0.2087
+        0.2287
     );
     const rating_final = Math.max(0, ratingRaw);
 
