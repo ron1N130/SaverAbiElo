@@ -12,7 +12,7 @@ import path from "path";
 import { calculateAverageStats } from './utils/stats.js';
 
 // --- Cache Version (muss mit anderen Dateien übereinstimmen!) ---
-const CACHE_VERSION = 6; // Erhöht wegen Refactoring
+const CACHE_VERSION = 7; // Erhöht wegen Refactoring
 
 // --- Helpers -------------------------------------------------------------
 /** simple async sleep */

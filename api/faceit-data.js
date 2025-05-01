@@ -11,7 +11,7 @@ import { calculateAverageStats } from './utils/stats.js';
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL      = process.env.REDIS_URL;
 const API_BASE_URL   = "https://open.faceit.com/data/v4";
-const CACHE_VERSION  = 6; // <<<< Cache-Version erhöht auf 6
+const CACHE_VERSION  = 7; // <<<< Cache-Version erhöht auf 6
 
 // --- Hilfs‑Fetch mit Error‑Throw ---
 async function fetchJson(url, headers) {
