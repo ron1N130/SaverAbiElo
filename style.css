@@ -475,3 +475,110 @@ footer {
     .player-card-hltv .stat-progress-container { max-width: 120px; }
     #uniliga-content h2 { font-size: 1.3rem; }
 }
+/* ... (vorheriges CSS unverändert bis zum Ende) ... */
+
+/* ==========================================================================
+   Uniliga Content Area Styles (ANGEPASST für Tabellen)
+   ========================================================================== */
+   #uniliga-content h2 { text-align: center; margin-bottom: var(--gap); color: var(--text-primary); }
+   #uniliga-content h3 { text-align: left; margin-bottom: 0.8rem; color: var(--text-primary); border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem; }
+   
+   #uniliga-data-area {
+       background: rgba(var(--card-bg-rgb), 0.75); backdrop-filter: blur(var(--glass-blur));
+       border: var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+       padding: var(--gap); color: var(--text-secondary);
+   }
+   #uniliga-data-area p { margin-bottom: 0.5rem; }
+   #uniliga-data-area code { background-color: rgba(0,0,0,0.3); padding: 0.1em 0.4em; border-radius: 4px; font-size: 0.9em; }
+   
+   .table-container {
+       overflow-x: auto; /* Ermöglicht horizontales Scrollen auf kleinen Bildschirmen */
+       margin-bottom: 1rem;
+   }
+   
+   .stats-table {
+       width: 100%;
+       border-collapse: collapse;
+       font-size: 0.9rem;
+       min-width: 600px; /* Mindestbreite, um Umbruch zu erzwingen */
+   }
+   
+   .stats-table th,
+   .stats-table td {
+       padding: 0.6rem 0.5rem; /* Padding angepasst */
+       text-align: left;
+       border-bottom: 1px solid var(--glass-border);
+       white-space: nowrap; /* Verhindert Umbruch in Zellen */
+   }
+   
+   .stats-table th {
+       background-color: rgba(var(--card-bg-rgb), 0.5);
+       color: var(--text-primary);
+       font-weight: 700;
+       text-transform: uppercase;
+       font-size: 0.75rem;
+       position: sticky; /* Header bleibt beim Scrollen sichtbar */
+       top: 0;
+       z-index: 10;
+   }
+   
+   .stats-table tbody tr:hover {
+       background-color: rgba(var(--card-bg-rgb), 0.8);
+   }
+   
+   .stats-table td:nth-child(1), /* Rank */
+   .stats-table th:nth-child(1) {
+       text-align: right;
+       padding-right: 1rem;
+       width: 30px; /* Feste Breite für Rank */
+   }
+   
+   .stats-table td:not(:nth-child(1)):not(:nth-child(2)), /* Alle außer Rank und Name */
+   .stats-table th:not(:nth-child(1)):not(:nth-child(2)) {
+       text-align: right; /* Zahlen rechtsbündig */
+       font-feature-settings: "tnum"; /* Tabellarische Ziffern */
+       font-variant-numeric: tabular-nums;
+   }
+   
+   
+   .table-avatar {
+       width: 24px;
+       height: 24px;
+       border-radius: 50%;
+       margin-right: 0.5rem;
+       vertical-align: middle;
+       border: 1px solid rgba(255,255,255,0.1);
+   }
+   
+   .player-cell {
+       display: flex;
+       align-items: center;
+       white-space: nowrap;
+       overflow: hidden;
+       text-overflow: ellipsis;
+       max-width: 150px; /* Maximale Breite für Spielernamen */
+   }
+   .player-cell span {
+       overflow: hidden;
+       text-overflow: ellipsis;
+   }
+   
+   
+   .last-updated {
+       font-size: 0.8rem;
+       color: var(--text-secondary);
+       text-align: right;
+       margin-top: 0.5rem;
+   }
+   
+   /* Farbklassen für Winrate (optional) */
+   .text-good { color: var(--bar-good); font-weight: bold; }
+   .text-okay { color: var(--bar-okay); font-weight: bold; }
+   .text-bad { color: var(--bar-bad); font-weight: bold; }
+   
+   
+   /* ==========================================================================
+      Responsive (unverändert)
+      ========================================================================== */
+   @media (max-width: 1250px) { /* ... */ }
+   @media (max-width: 600px) { /* ... */ }
