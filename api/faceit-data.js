@@ -1,22 +1,27 @@
 // api/faceit-data.js – robust gegen 503, nur 15 Matches, mit Cache‑Versionierung
-// *** MIT NEUER IMPACT BERECHNUNG ***
+// -------------------------------------------------
+// ◼ Rating-Berechnung näher am Original, NEUE Impact-Formel beibehalten
+// ◼ Cache Version erhöht (v3)
+// ◼ KAST Berechnung vereinheitlicht
+// -------------------------------------------------
 import Redis from "ioredis";
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL      = process.env.REDIS_URL;
 const API_BASE_URL   = "https://open.faceit.com/data/v4";
-// Cache‑Version hochzählen, wenn du das Shape von statsObj änderst (z.B. wegen neuer Impact-Berechnung):
-const CACHE_VERSION  = 2; // <<<< Cache-Version erhöht
+// Cache‑Version hochzählen (muss mit update-stats.js übereinstimmen!)
+const CACHE_VERSION  = 3; // <<<< Cache-Version erhöht auf 3
 
 // --- Hilfs‑Fetch mit Error‑Throw ----------------------------------------
 async function fetchJson(url, headers) {
     const res = await fetch(url, { headers });
-    if (!res.ok) throw new Error(`Workspace ${url} → ${res.status}`);
+    if (!res.ok) throw new Error(`Fetch ${url} → ${res.status}`);
     return res.json();
 }
 
 // ============================================================
 // NEUE HILFSFUNKTION zur Berechnung des Impact Scores
+// (Identisch zu update-stats.js)
 // ============================================================
 /**
  * Berechnet einen neuen "Proxy" Impact Score basierend auf KPR, ADR und KAST.
@@ -24,36 +29,28 @@ async function fetchJson(url, headers) {
  * angepasst durch ihre Rundenkonstanz (KAST).
  *
  * @param {number} kpr_avg - Durchschnittliche Kills pro Runde
- * @param {number} adr_avg - Durchschnittlicher Schaden pro Runde
- * @param {number} kast_avg - KAST Rate in Prozent (z.B. 70 für 70%)
+ * @param {number} adr_avg - Durchschnittlicher Schaden pro Runde (einfacher Durchschnitt pro Match)
+ * @param {number} kast_avg - KAST Rate in Prozent (Durchschnitt pro Match)
  * @returns {number} Der berechnete Impact Score
  */
 function calculateNewImpact(kpr_avg, adr_avg, kast_avg) {
     // --- Definiere Baselines (Passe diese ggf. an die Durchschnittswerte deiner Spieler an!) ---
-    const baseline_kpr = 0.70; // Geschätzter Durchschnitts-KPR
-    const baseline_adr = 75.0; // Geschätzter Durchschnitts-ADR
-    const baseline_kast = 68.0; // Geschätzter Durchschnitts-KAST (%)
+    const baseline_kpr = 0.70;
+    const baseline_adr = 75.0; // Basis für einfachen Match-ADR Durchschnitt
+    const baseline_kast = 68.0;
 
     // --- Berechne normalisierte Komponenten ---
-    // norm_kpr > 1 bedeutet überdurchschnittlicher KPR
-    const norm_kpr = kpr_avg / baseline_kpr;
-    // norm_adr > 1 bedeutet überdurchschnittlicher ADR
-    const norm_adr = adr_avg / baseline_adr;
+    const norm_kpr = baseline_kpr !== 0 ? kpr_avg / baseline_kpr : kpr_avg;
+    const norm_adr = baseline_adr !== 0 ? adr_avg / baseline_adr : adr_avg;
 
     // --- Berechne Konsistenz-Modifikator basierend auf KAST ---
-    // Ziel: Modifikator ~1.0 bei avg KAST, >1.0 bei überdurchschnittlichem, <1.0 bei unterdurchschnittlichem KAST
     const consistency_modifier = 1.0 + (kast_avg - baseline_kast) * 0.01;
-    // Begrenze den Modifikator, um extreme Ausschläge zu verhindern (z.B. zwischen 0.7 und 1.3)
     const clamped_modifier = Math.max(0.7, Math.min(1.3, consistency_modifier));
 
     // --- Kombiniere Komponenten ---
-    // Gewichteter Durchschnitt aus normalisiertem KPR (60%) und ADR (40%)
     const core_impact = (norm_kpr * 0.6) + (norm_adr * 0.4);
-
-    // Wende den Konsistenz-Modifikator an
     const final_impact = core_impact * clamped_modifier;
 
-    // Stelle sicher, dass das Ergebnis nicht negativ ist und gib es zurück
     return Math.max(0, final_impact);
 }
 // ============================================================
@@ -61,116 +58,161 @@ function calculateNewImpact(kpr_avg, adr_avg, kast_avg) {
 // ============================================================
 
 
+// --- Stat Berechnung (Rating näher am Original, Impact neu) ----
 /**
- * Berechnet alle Kennzahlen aus einem Match‑Array.
- * Verwendet jetzt calculateNewImpact für den Impact Score.
+ * Berechnet Durchschnittsstatistiken aus einer Liste von Matches.
+ * Verwendet die ursprüngliche Rating-Formelstruktur mit dem neuen Impact-Wert.
+ * ADR wird als einfacher Durchschnitt pro Match berechnet.
+ * KAST wird als einfacher Durchschnitt pro Match berechnet.
  */
 function calculateAverageStats(matches) {
-    const DMG_PER_KILL = 105;
-    const TRADE_PERCENT = 0.2;
-    const KAST_FACTOR = 0.45; // Faktor aus alter KAST-Berechnung
-    const weight = matches.length; // Anzahl der Matches
-
-    if (weight === 0) {
+    const totalMatches = matches.length;
+    if (totalMatches === 0) {
         // Standard-Nullwerte zurückgeben
         return {
-            kills: 0, deaths: 0, kd: 0, dpr: 0, kpr: 0, adr: 0, hs: 0, hsp: 0,
-            apr: 0, kast: 0, impact: 0, rating: 0, weight: 0
+            kd: 0, dpr: 0, kpr: 0, adr: 0, hsp: 0, winRate: 0, apr: 0,
+            kast: 0, impact: 0, rating: 0, weight: 0,
+            // Füge auch Rohwerte hinzu, falls benötigt
+            kills: 0, deaths: 0, hs: 0, assists: 0
         };
     }
 
-    // Extrahieren der relevanten Rohdaten pro Match
-    const matchStats = matches.map(m => {
-        const kills     = +m.Kills        || 0;
-        const deaths    = +m.Deaths       || 0;
-        const rounds    = Math.max(1, +m.Rounds || 1); // Mindestens 1 Runde
-        const kpr_match = kills / rounds; // KPR für DIESES Match (für ADR Fallback)
-        const adr       = +m.ADR          || (kpr_match * DMG_PER_KILL); // ADR für DIESES Match
-        const headshots = +m.Headshots    || 0;
-        const assists   = +m.Assists      || 0;
-        return { kills, deaths, rounds, adr, headshots, assists };
+    // Konstanten für Berechnungen
+    const DMG_PER_KILL = 105;
+    const TRADE_PERCENT = 0.2;
+    const KAST_FACTOR = 0.45;
+
+    // Summen initialisieren
+    let totalKills = 0;
+    let totalDeaths = 0;
+    let totalAssists = 0;
+    let totalHeadshots = 0;
+    let totalWins = 0; // Annahme: Win-Info ist nicht direkt in `matches` hier, wird nicht berechnet
+    let totalRounds = 0;
+    let simpleTotalAdrSum = 0; // Summe der ADR-Werte pro Match
+    let totalKastPercentSum = 0; // Summe der KAST-Prozente pro Match
+
+    // Daten extrahieren und Summen bilden
+    matches.forEach(m => {
+        const kills = +m.Kills || 0;
+        const deaths = +m.Deaths || 0;
+        const rounds = Math.max(1, +m.Rounds || 1);
+        const kpr_match = kills / rounds;
+        // ADR für dieses Match (aus Daten oder Fallback)
+        const adr_match = +m.ADR || (kpr_match * DMG_PER_KILL);
+        const headshots = +m.Headshots || 0;
+        const assists = +m.Assists || 0;
+        // const win = +m.Win || 0; // Win-Info fehlt hier standardmäßig
+
+        totalKills += kills;
+        totalDeaths += deaths;
+        totalAssists += assists;
+        totalHeadshots += headshots;
+        // totalWins += win; // Kann nicht berechnet werden ohne Win-Info
+        totalRounds += rounds;
+        simpleTotalAdrSum += adr_match; // Addiere Match-ADR
+
+        // KAST % für dieses Match berechnen
+        const survived = rounds - deaths;
+        const traded = TRADE_PERCENT * rounds;
+        const kastRaw = (kills + assists + survived + traded) * KAST_FACTOR;
+        const kast_match_percent = rounds > 0 ? Math.min((kastRaw / rounds) * 100, 100) : 0;
+        totalKastPercentSum += kast_match_percent;
     });
 
-    // Berechne Summen und einfache Durchschnitte über alle Matches
-    const totalKills  = matchStats.reduce((s, x) => s + x.kills, 0);
-    const totalDeaths = matchStats.reduce((s, x) => s + x.deaths, 0);
-    const totalAssists = matchStats.reduce((s, x) => s + x.assists, 0);
-    const totalHeadshots = matchStats.reduce((s, x) => s + x.headshots, 0);
-    const totalRounds = matchStats.reduce((s, x) => s + x.rounds, 0);
-    const totalAdrSum = matchStats.reduce((s, x) => s + x.adr, 0); // Einfache Summe für ADR-Avg
+    // --- Berechne durchschnittliche Statistiken ---
+    // Durchschnitt pro Runde
+    const kpr_avg = totalRounds > 0 ? totalKills / totalRounds : 0;
+    const dpr_avg = totalRounds > 0 ? totalDeaths / totalRounds : 0;
+    const apr_avg = totalRounds > 0 ? totalAssists / totalRounds : 0;
 
-    // Berechne durchschnittliche Statistiken (Pro Runde oder Gesamt)
-    // WICHTIG: Diese Funktion verwendet (anders als die zuvor diskutierte gewichtete Version)
-    // weiterhin einfache Durchschnitte über die Matches für KPR, DPR, APR, ADR.
-    const kpr = totalRounds > 0 ? totalKills / totalRounds : 0;
-    const dpr = totalRounds > 0 ? totalDeaths / totalRounds : 0;
-    const apr = totalRounds > 0 ? totalAssists / totalRounds : 0;
-    const adr = totalRounds > 0 ? totalAdrSum / totalRounds : 0; // ADR als Durchschnitt pro Runde
+    // ADR als einfacher Durchschnitt pro Match
+    const adr_avg_simple = simpleTotalAdrSum / totalMatches;
+
+    // Gesamt oder Durchschnitt pro Match
     const kd = totalDeaths === 0 ? totalKills : totalKills / totalDeaths; // Gesamt K/D
     const hsp = totalKills === 0 ? 0 : (totalHeadshots / totalKills) * 100; // Gesamt HS%
+    // const winRate = (totalWins / totalMatches) * 100; // WinRate nicht verfügbar
+    const kast_avg = totalKastPercentSum / totalMatches; // KAST % (Avg pro Match)
 
-    // KAST-Berechnung (wie vorher in dieser Datei, einfacher Durchschnitt pro Match)
-    const kast = matchStats.reduce((sum, x) => {
-        const survived = x.rounds - x.deaths;
-        const traded = TRADE_PERCENT * x.rounds;
-        const raw = (x.kills + x.assists + survived + traded) * KAST_FACTOR;
-        // Stelle sicher, dass x.rounds > 0 ist
-        const kast_match_percent = x.rounds > 0 ? Math.min((raw / x.rounds) * 100, 100) : 0;
-        return sum + kast_match_percent;
-    }, 0) / weight; // Durchschnitt über die Anzahl der Matches
+    // *** NEUE IMPACT BERECHNUNG (verwendet einfachen ADR-Avg) ***
+    const impact_new = calculateNewImpact(kpr_avg, adr_avg_simple, kast_avg);
 
-    // *** NEUE IMPACT BERECHNUNG ***
-    const impact_new = calculateNewImpact(kpr, adr, kast); // Aufruf der neuen Funktion
+    // *** Rating Berechnung: Original-Formelstruktur mit akt. Avg-Werten & NEUEM Impact ***
+    const ratingRaw = Math.max(
+        0,
+        0.0073 * kast_avg +       // KAST Avg (pro Match)
+        0.3591 * kpr_avg +      // KPR Avg (pro Runde)
+        -0.5329 * dpr_avg +       // DPR Avg (pro Runde)
+        0.2372 * impact_new +     // <<<< NEUER Impact Wert
+        0.0032 * adr_avg_simple + // <<<< Einfacher ADR Avg Wert
+        0.1587
+    );
+    const rating_final = Math.max(0, ratingRaw);
 
-    // Rating 2.0 Berechnung (verwendet den *neuen* Impact-Wert)
-    const ratingRaw =
-        0.0073 * kast +
-        0.3591 * kpr +
-        -0.5329 * dpr +
-        0.2372 * impact_new + // <<<< Neuer Impact hier verwendet
-        0.0032 * adr +
-        0.1587;
-    const rating = Math.max(0, ratingRaw); // Sicherstellen, dass Rating nicht negativ ist
-
-    // Rückgabe der berechneten Werte
+    // Gib berechnete Stats zurück (inkl. Rohwerte)
     return {
-        // Beachte: avgk wurde entfernt, da es nur kills/weight war und nicht sehr aussagekräftig
         kills: totalKills,
         deaths: totalDeaths,
         hs: totalHeadshots,
-        kd:      +kd.toFixed(2),    // Gesamt K/D
-        dpr:     +dpr.toFixed(2),    // Deaths pro Runde (Avg)
-        kpr:     +kpr.toFixed(2),    // Kills pro Runde (Avg)
-        adr:     +adr.toFixed(1),    // ADR (Avg pro Runde)
-        hsp:     +hsp.toFixed(1),    // HS % (Gesamt)
-        apr:     +apr.toFixed(2),    // Assists pro Runde (Avg)
-        kast:    +kast.toFixed(1),   // KAST % (Avg pro Match)
-        impact:  +impact_new.toFixed(2), // <<<< Neuer Impact Wert
-        rating:  +rating.toFixed(2), // Rating (basiert auf neuem Impact)
-        weight: weight             // Anzahl der berücksichtigten Matches
+        assists: totalAssists,
+        kd:      +kd.toFixed(2),
+        dpr:     +dpr_avg.toFixed(2),
+        kpr:     +kpr_avg.toFixed(2),
+        adr:     +adr_avg_simple.toFixed(1), // ADR (Avg pro Match)
+        hsp:     +hsp.toFixed(1),
+        apr:     +apr_avg.toFixed(2),
+        kast:    +kast_avg.toFixed(1),
+        impact:  +impact_new.toFixed(2),    // Impact (NEU)
+        rating:  +rating_final.toFixed(2), // Rating (Original-Struktur, neue Inputs)
+        weight:  totalMatches               // Anzahl berücksichtigter Matches
+        // winRate: +winRate.toFixed(1) // Nicht verfügbar
     };
 }
+
 
 /**
  * Wählt die letzten 15 Matches (nach CreatedAt) und berechnet die Stats
  */
 function calculateCurrentFormStats(matches) {
+    // Sortiere Matches nach Startzeit (neueste zuerst)
     const recent = matches
-        .slice()
-        .sort((a,b)=> new Date(b.CreatedAt) - new Date(a.CreatedAt))
-        .slice(0, 15); // Nimmt die letzten 15 Matches
+        .slice() // Erstelle Kopie, um Original nicht zu ändern
+        .sort((a,b)=> {
+            // Sicherstellen, dass CreatedAt Zahlen sind
+            const timeA = new Date(a.CreatedAt).getTime() || 0;
+            const timeB = new Date(b.CreatedAt).getTime() || 0;
+            return timeB - timeA; // Jüngstes zuerst
+        })
+        .slice(0, 15); // Nimm die neuesten 15
     return {
         // Ruft die (jetzt angepasste) calculateAverageStats Funktion auf
         stats: calculateAverageStats(recent),
-        matchesCount: recent.length
+        matchesCount: recent.length // Anzahl der tatsächlich verwendeten Matches (max 15)
     };
 }
 
 // --- Redis‑Init (optional) --------------------------------------------
 let redis = null;
 if (REDIS_URL) {
-    redis = new Redis(REDIS_URL, { lazyConnect: true });
-    redis.on("error", () => { redis = null; });
+    try {
+        redis = new Redis(REDIS_URL, {
+            lazyConnect: true,
+            connectTimeout: 10000, // Kürzerer Timeout für Frontend?
+            maxRetriesPerRequest: 2
+        });
+        redis.on("error", (err) => {
+            console.error("[Redis] Connection error in faceit-data:", err.message);
+            redis = null; // Bei Fehler Verbindung als nicht verfügbar markieren
+        });
+         // Kein initialer Connect hier, da lazyConnect=true
+        console.log("[Redis] Client initialized for faceit-data.");
+    } catch(e) {
+        console.error("[Redis] Initialization failed in faceit-data:", e);
+        redis = null;
+    }
+} else {
+     console.warn("[Redis] REDIS_URL not set for faceit-data. Caching disabled.");
 }
 
 // --- Haupt‑Handler ----------------------------------------------------
@@ -179,176 +221,202 @@ export default async function handler(req, res) {
     if (!nickname) {
         return res.status(400).json({ error: "nickname fehlt" });
     }
+    // console.log(`[API faceit-data] Request for: ${nickname}`); // Optional: Logging
 
     try {
         const headers = { Authorization: `Bearer ${FACEIT_API_KEY}` };
-        // 1) Basis‑Daten von Faceit
+        // 1) Basis‑Daten von Faceit holen
         const details = await fetchJson(
             `${API_BASE_URL}/players?nickname=${encodeURIComponent(nickname)}`,
             headers
         );
+        const playerId = details?.player_id;
+        if (!playerId) {
+             throw new Error(`Player ${nickname} not found or player_id missing.`);
+        }
 
-        // 2) Grund‑Antwort (Struktur bleibt gleich)
+        // 2) Grund‑Antwort vorbereiten
         const resp = {
             nickname: details.nickname,
             avatar: details.avatar || "default_avatar.png",
-            faceitUrl: details.faceit_url?.replace("{lang}", "en") ?? "#",
+            faceitUrl: details.faceit_url?.replace("{lang}", "en") ?? `https://faceit.com/en/players/${details.nickname}`,
             elo: details.games?.cs2?.faceit_elo ?? "N/A",
             level: details.games?.cs2?.skill_level ?? "N/A",
             sortElo: parseInt(details.games?.cs2?.faceit_elo, 10) || 0,
-            // Diese Felder werden später aus statsObj befüllt
+            // Felder für berechnete Stats (werden aus Cache oder Live-Berechnung befüllt)
             calculatedRating: null,
             kd: null,
             dpr: null,
             kpr: null,
             adr: null,
-            hsPercent: null,
+            hsPercent: null, // Name muss konsistent sein mit dem, was im Cache steht
             kast: null,
-            impact: null, // Wird jetzt mit neuem Wert befüllt
+            impact: null,
             matchesConsidered: 0,
-            lastUpdated: null
+            lastUpdated: null,
+            cacheStatus: 'miss' // Standardmäßig Cache-Miss
         };
 
-        // 3) Versuch, aus Cache zu laden – aber nur, wenn Version stimmt
+        // 3) Versuch, aus Cache zu laden
         let statsObj = null;
         if (redis) {
-            const cacheKey = `player_stats:${details.player_id}`;
-            const raw = await redis.get(cacheKey);
-            if (raw) {
-                try {
+            const cacheKey = `player_stats:${playerId}`;
+            try {
+                const raw = await redis.get(cacheKey);
+                if (raw) {
                     const parsed = JSON.parse(raw);
                     // Prüfe die Cache-Version
                     if (parsed.version === CACHE_VERSION) {
                         statsObj = parsed;
-                        console.log(`[Cache] HIT for ${nickname}`);
+                        resp.cacheStatus = 'hit'; // Cache-Hit
+                        // console.log(`[Cache] HIT for ${nickname} (v${CACHE_VERSION})`);
                     } else {
+                        resp.cacheStatus = 'stale'; // Veralteter Cache
                         console.log(`[Cache] Version mismatch for ${nickname} (found ${parsed.version}, expected ${CACHE_VERSION})`);
+                        // Fahre fort, um Live-Daten zu holen
                     }
-                } catch (e) {
-                    console.error(`[Cache] Failed to parse cache for ${nickname}:`, e);
-                    // Cache ist korrupt, ignoriere ihn
+                } else {
+                     resp.cacheStatus = 'miss'; // Cache-Miss
+                     // console.log(`[Cache] MISS for ${nickname}`);
                 }
-            } else {
-                console.log(`[Cache] MISS for ${nickname}`);
+            } catch (e) {
+                console.error(`[Cache] Error reading/parsing cache for ${nickname}:`, e);
+                resp.cacheStatus = 'error'; // Fehler beim Cache-Zugriff
+                // Fahre fort, um Live-Daten zu holen
             }
+        } else {
+             resp.cacheStatus = 'disabled'; // Redis nicht verfügbar
         }
 
-        // 4) Live‑Fallback, falls kein valider Cache
-        if (!statsObj) {
-            console.log(`[API] Fetching live data for ${nickname}`);
-            // History holen (max 15, 503s ignorieren)
+        // 4) Live‑Fallback, falls kein gültiger Cache-Hit
+        if (resp.cacheStatus !== 'hit') {
+            console.log(`[API faceit-data] Cache status for ${nickname}: ${resp.cacheStatus}. Fetching live data...`);
+            // History holen (max 15 Matches)
             let items = [];
             try {
-                // Nur die letzten 15 Matches holen, wie vorher
                 const hist = await fetchJson(
-                    `${API_BASE_URL}/players/${details.player_id}/history?game=cs2&limit=15`,
+                    `${API_BASE_URL}/players/${playerId}/history?game=cs2&limit=15`,
                     headers
                 );
-                items = hist.items || [];
-            } catch(e) {
-                console.warn(`[API] History fetch failed for ${nickname}:`, e.message);
-                items = []; // Fahre ohne Matches fort, wenn History fehlschlägt
+                items = hist?.items || []; // Sicherer Zugriff
+            } catch (histErr) {
+                console.warn(`[API faceit-data] History fetch failed for ${nickname}:`, histErr.message);
+                // Wenn History fehlschlägt, können keine Stats berechnet werden
+                // Gib bisherige Daten zurück (nur Basis-Infos) oder Fehler?
+                // Hier geben wir bisherige Daten zurück, Stats bleiben null.
+                items = [];
             }
 
-            // Pro‑Match Detail-Stats holen (503s ignorieren)
-            const matchDataPromises = items.map(async h => {
-                try {
-                    const stat = await fetchJson(
-                        `${API_BASE_URL}/matches/${h.match_id}/stats`,
-                        headers
-                    );
-                    const round = stat.rounds?.[0];
-                    if (!round) return null; // Runde nicht gefunden
-                    const teamData = round.teams.find(team => team.players.some(p => p.player_id === details.player_id));
-                    if (!teamData) return null; // Spieler im Match nicht gefunden?
-                    const p = teamData.players.find(p => p.player_id === details.player_id);
-                    if (!p) return null; // Spieler in Team nicht gefunden?
+            // Pro‑Match Stats holen (nur wenn History erfolgreich war)
+            let matchData = [];
+            if (items.length > 0) {
+                const matchDataPromises = items.map(async h => {
+                    try {
+                        const stat = await fetchJson(
+                            `${API_BASE_URL}/matches/${h.match_id}/stats`,
+                            headers
+                        );
+                        const round = stat?.rounds?.[0];
+                        if (!round) return null;
 
-                    // Sammle Rohdaten für die Berechnung
-                    return {
-                        Kills:      +p.player_stats.Kills,
-                        Deaths:     +p.player_stats.Deaths,
-                        Assists:    +p.player_stats.Assists,
-                        Headshots:  +p.player_stats.Headshots,
-                        "K/R Ratio":+p.player_stats["K/R Ratio"], // Wird für ADR Fallback gebraucht
-                        ADR:        +(p.player_stats.ADR ?? p.player_stats["Average Damage per Round"]),
-                        Rounds:     +(round.round_stats.Rounds || 1), // Rundenanzahl
-                        Win:        round.round_stats.Winner === teamData.team_id ? 1 : 0, // Sieg?
-                        CreatedAt:  h.started_at // Für Sortierung in calculateCurrentFormStats
-                    };
-                } catch (matchErr) {
-                    // Ignoriere Fehler beim Holen einzelner Match-Stats (z.B. 503)
-                    console.warn(`[API] Failed to fetch stats for match ${h.match_id}:`, matchErr.message);
-                    return null;
+                        const teamData = round.teams?.find(team => team.players?.some(p => p.player_id === playerId));
+                        if (!teamData) return null;
+                        const p = teamData.players.find(p => p.player_id === playerId);
+                        if (!p || !p.player_stats) return null;
+
+                        // Sammle Rohdaten für die Berechnung
+                        return {
+                            Kills:      +p.player_stats.Kills,
+                            Deaths:     +p.player_stats.Deaths,
+                            Assists:    +p.player_stats.Assists,
+                            Headshots:  +p.player_stats.Headshots,
+                            "K/R Ratio":+p.player_stats["K/R Ratio"], // Für ADR Fallback
+                            ADR:        +(p.player_stats.ADR ?? p.player_stats["Average Damage per Round"]),
+                            Rounds:     +(round.round_stats?.Rounds || 1),
+                            // Win-Info wird hier nicht benötigt für calculateAverageStats
+                            CreatedAt:  h.started_at // Für Sortierung
+                        };
+                    } catch (matchErr) {
+                        // Ignoriere Fehler bei einzelnen Matches stillschweigend im Frontend-API
+                        // console.warn(`[API faceit-data] Failed fetch match ${h.match_id} for ${nickname}: ${matchErr.message}`);
+                        return null;
+                    }
+                });
+                // Warte auf alle Abfragen und filtere fehlgeschlagene raus
+                matchData = (await Promise.all(matchDataPromises)).filter(Boolean);
+            }
+
+            // Stats berechnen, nur wenn gültige Match-Daten vorhanden sind
+            if (matchData.length > 0) {
+                const { stats, matchesCount } = calculateCurrentFormStats(matchData);
+                // Erstelle das Objekt mit den berechneten Stats
+                statsObj = {
+                    version:          CACHE_VERSION, // Wichtig für Cache-Schreiben
+                    calculatedRating: stats.rating,
+                    kd:               stats.kd,
+                    dpr:              stats.dpr,
+                    kpr:              stats.kpr,
+                    adr:              stats.adr,
+                    hsPercent:        stats.hsp, // Name konsistent!
+                    kast:             stats.kast,
+                    impact:           stats.impact, // Neuer Impact Wert
+                    matchesConsidered: matchesCount,
+                    lastUpdated:      new Date().toISOString()
+                };
+
+                // Optional: Versuche, die neu berechneten Daten zu cachen
+                if (redis && resp.cacheStatus !== 'disabled') {
+                    try {
+                        await redis.set(
+                            `player_stats:${playerId}`,
+                            JSON.stringify(statsObj),
+                            "EX",
+                            7 * 24 * 60 * 60 // 1 Woche
+                        );
+                        // console.log(`[Cache] Stored freshly calculated stats for ${nickname}`);
+                    } catch (cacheWriteErr) {
+                        console.error(`[Cache] Failed to write updated cache for ${nickname}:`, cacheWriteErr);
+                    }
                 }
+            } else {
+                // Keine gültigen Match-Daten gefunden, Stats bleiben null
+                 console.log(`[API faceit-data] No valid match data found for ${nickname} to calculate live stats.`);
+            }
+        } // Ende if (resp.cacheStatus !== 'hit')
+
+        // 5) Berechnete oder gecachte Stats in die Antwort übernehmen (falls vorhanden)
+        if (statsObj) {
+            Object.assign(resp, {
+                calculatedRating: statsObj.calculatedRating,
+                kd: statsObj.kd,
+                dpr: statsObj.dpr,
+                kpr: statsObj.kpr,
+                adr: statsObj.adr,
+                hsPercent: statsObj.hsPercent, // Name muss konsistent sein!
+                kast: statsObj.kast,
+                impact: statsObj.impact,
+                matchesConsidered: statsObj.matchesConsidered,
+                lastUpdated: statsObj.lastUpdated
             });
+        }
 
-            // Warte auf alle Match-Stat-Abfragen und filtere fehlgeschlagene raus
-            const matchData = (await Promise.all(matchDataPromises)).filter(Boolean);
-
-            // Berechne Stats basierend auf den erfolgreichen Matches
-            // calculateCurrentFormStats ruft die angepasste calculateAverageStats auf
-            const { stats, matchesCount } = calculateCurrentFormStats(matchData);
-
-            // Erstelle das Objekt zum Speichern/Zurückgeben
-            // Beachte: Die Feldnamen (impact, rating, kd etc.) müssen mit denen in `resp` übereinstimmen
-            statsObj = {
-                version:          CACHE_VERSION,      // Wichtig für Cache-Invalidierung
-                calculatedRating: stats.rating,      // Rating (basiert auf neuem Impact)
-                kd:               stats.kd,
-                dpr:              stats.dpr,
-                kpr:              stats.kpr,
-                adr:              stats.adr,
-                hsPercent:        stats.hsp,          // hsPercent = hsp
-                kast:             stats.kast,
-                impact:           stats.impact,       // <<<< Neuer Impact Wert
-                matchesConsidered: matchesCount,      // Anzahl der tatsächlich berücksichtigten Matches
-                lastUpdated:      new Date().toISOString() // Zeitstempel der Berechnung
-            };
-
-            // In Redis cachen (1 Woche), wenn Redis verfügbar ist
-            if (redis) {
-                try {
-                    await redis.set(
-                        `player_stats:${details.player_id}`,
-                        JSON.stringify(statsObj),
-                        "EX", // Setze Ablaufzeit
-                        7 * 24 * 60 * 60 // 1 Woche in Sekunden
-                    );
-                    console.log(`[Cache] Stored updated stats for ${nickname}`);
-                } catch (redisErr) {
-                    console.error(`[Cache] Failed to set cache for ${nickname}:`, redisErr);
-                    // Fahre ohne Caching fort, wenn Speichern fehlschlägt
-                }
-            }
-        } // Ende if (!statsObj)
-
-        // 5) In die Antwort übernehmen und senden
-        // Überschreibe die Null-Werte in resp mit den Werten aus statsObj
-        Object.assign(resp, {
-            calculatedRating: statsObj.calculatedRating,
-            kd: statsObj.kd,
-            dpr: statsObj.dpr,
-            kpr: statsObj.kpr,
-            adr: statsObj.adr,
-            hsPercent: statsObj.hsPercent,
-            kast: statsObj.kast,
-            impact: statsObj.impact, // Stelle sicher, dass das Feld hier auch impact heisst
-            matchesConsidered: statsObj.matchesConsidered,
-            lastUpdated: statsObj.lastUpdated
-        });
-
-        // Setze Cache-Header für Vercel Edge/CDN
-        res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate");
+        // 6) Antwort senden
+        // Setze Cache-Header für CDN/Browser (kurze s-maxage für CDN, keine Client-Cache)
+        res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300, max-age=0");
         return res.status(200).json(resp);
 
     } catch (err) {
-        // Allgemeiner Fehler-Handler
-        console.error(`[api/faceit-data] Error processing ${nickname}:`, err);
-        // Gib trotzdem 200 zurück, aber mit Fehlerinfo, damit Frontend dies anzeigen kann
+        // Allgemeiner Fehler-Handler für diesen Request
+        console.error(`[API faceit-data] Error processing ${nickname}:`, err);
+        // Gib einen generischen Fehler zurück, aber mit Status 200,
+        // damit das Frontend die Fehlermeldung anzeigen kann.
         return res.status(200).json({
           nickname: nickname || req.query.nickname, // Versuche Nickname zu bekommen
-          error: err.message || "Unbekannter Fehler bei der Datenverarbeitung"
+          error: err.message || "Unbekannter Serverfehler bei der Datenabfrage.",
+          // Setze Stats auf null/N/A, wenn ein Fehler auftritt
+          calculatedRating: null, kd: null, dpr: null, kpr: null, adr: null,
+          hsPercent: null, kast: null, impact: null, matchesConsidered: 0, lastUpdated: null,
+          cacheStatus: 'error'
         });
     }
 }
