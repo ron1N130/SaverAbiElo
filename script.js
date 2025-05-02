@@ -192,12 +192,206 @@ function handlePlayerListClick(e) {
 // -------------------------------------------------------------
 // Funktionen für die Uniliga-Ansicht
 // -------------------------------------------------------------
+
 let uniligaDataLoaded = false;
 let currentUniligaData = null;
-async function loadUniligaView() { /* ... (unverändert) ... */ }
-function displayUniligaData(data) { /* ... (unverändert) ... */ }
-function getTeamWinrateClass(winRate) { /* ... (unverändert) ... */ }
 
+async function loadUniligaView() {
+
+    console.log("loadUniligaView called");
+    if (uniligaDataLoaded) {
+        console.log("Uniliga data already loaded, skipping fetch.");
+        // Optional: Ggf. Anzeige aktualisieren, falls erforderlich
+        // displayUniligaData(currentUniligaData);
+        return;
+    }
+
+    if (!loadingIndicatorUniliga || !errorMessageUniliga || !uniligaDataArea) {
+        console.error("FEHLER: Benötigte Elemente für Uniliga View fehlen!");
+        if (errorMessageUniliga) {
+            errorMessageUniliga.textContent = "Fehler: UI-Elemente nicht initialisiert.";
+            errorMessageUniliga.style.display = 'block';
+        }
+        return;
+    }
+
+    loadingIndicatorUniliga.style.display = 'block';
+    errorMessageUniliga.style.display = 'none';
+    uniligaDataArea.innerHTML = ''; // Bereich leeren, während geladen wird
+
+    try {
+        console.log("Fetching Uniliga stats from /api/uniliga-stats...");
+        const response = await fetch('/api/uniliga-stats');
+        console.log("Uniliga API response status:", response.status);
+
+        if (!response.ok) {
+            let errorMsg = `Fehler beim Laden der Uniliga-Daten (${response.status})`;
+            try {
+                const errData = await response.json();
+                errorMsg = errData.error || errData.message || errorMsg;
+            } catch (parseError) { /* ignore parsing error */ }
+            throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+        console.log("Uniliga data received:", data);
+
+        if (!data || !data.teams || !data.players) {
+             throw new Error("Ungültiges Datenformat von der API empfangen.");
+        }
+
+        currentUniligaData = data; // Daten speichern
+        uniligaDataLoaded = true; // Flag setzen
+
+        displayUniligaData(currentUniligaData); // Anzeige-Funktion aufrufen
+
+    } catch (err) {
+        console.error("Fehler in loadUniligaView:", err);
+        if (errorMessageUniliga) {
+            errorMessageUniliga.textContent = `Fehler: ${err.message}`;
+            errorMessageUniliga.style.display = 'block';
+        }
+        uniligaDataArea.innerHTML = '<p>Daten konnten nicht geladen werden.</p>'; // Fallback-Inhalt
+        uniligaDataLoaded = false; // Bei Fehler zurücksetzen
+        currentUniligaData = null;
+
+    } finally {
+        console.log("loadUniligaView finally block reached.");
+        if (loadingIndicatorUniliga) {
+            loadingIndicatorUniliga.style.display = 'none';
+            console.log("Uniliga loading indicator hidden.");
+        } else {
+            console.warn("loadingIndicatorUniliga nicht gefunden im finally block.");
+        }
+    }
+}
+
+function displayUniligaData(data) {
+    console.log("displayUniligaData called with data:", data);
+    if (!uniligaDataArea) {
+        console.error("FEHLER: uniligaDataArea ist null in displayUniligaData!");
+        return;
+    }
+    if (!data || !data.teams || !data.players) {
+        console.warn("Keine gültigen Uniliga-Daten zum Anzeigen vorhanden.");
+        uniligaDataArea.innerHTML = '<p>Keine Daten zum Anzeigen gefunden.</p>';
+        return;
+    }
+
+    // --- Team-Tabelle erstellen ---
+    let teamTableHtml = `
+        <h3>Team Rangliste</h3>
+        <div class="table-container">
+            <table class="stats-table team-ranking-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Team</th>
+                        <th>Spiele</th>
+                        <th>S</th>
+                        <th>N</th>
+                        <th>WR %</th>
+                        <th>Avg. R.</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    if (data.teams.length > 0) {
+        // Sortiere Teams nach Winrate (höchste zuerst), dann nach Avg. Rating
+        const sortedTeams = [...data.teams].sort((a, b) => {
+             const wrDiff = (b.winRate ?? 0) - (a.winRate ?? 0);
+             if (wrDiff !== 0) return wrDiff;
+             return (b.avgRating ?? 0) - (a.avgRating ?? 0);
+        });
+
+        sortedTeams.forEach((team, index) => {
+            teamTableHtml += `
+                <tr data-team-id="${team.id}">
+                    <td>${index + 1}</td>
+                    <td class="player-cell"> <span>${team.name || 'Unbekanntes Team'}</span>
+                    </td>
+                    <td>${team.matchesPlayed ?? '0'}</td>
+                    <td>${team.wins ?? '0'}</td>
+                    <td>${team.losses ?? '0'}</td>
+                    <td class="${getTeamWinrateClass(team.winRate)}">${safe(team.winRate, 1)}</td>
+                    <td>${safe(team.avgRating, 2)}</td>
+                </tr>
+            `;
+        });
+    } else {
+        teamTableHtml += `<tr><td colspan="7">Keine Teamdaten verfügbar.</td></tr>`;
+    }
+
+    teamTableHtml += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    // --- Spieler-Tabelle erstellen (TODO: Ausführliche Implementierung in Schritt 3) ---
+    // Hier könnten wir eine ähnliche Tabelle für Spieler einfügen,
+    // basierend auf data.players
+    let playerTableHtml = `
+        <h3>Spieler Rangliste (Rating)</h3>
+        <div class="table-container">
+            <table class="stats-table player-ranking-table">
+                 <thead>
+                    <tr>
+                         <th>#</th>
+                         <th>Spieler</th>
+                         <th>Spiele</th>
+                         <th>Rating</th>
+                         <th>K/D</th>
+                         <th>ADR</th>
+                         <th>KAST%</th>
+                         <th>HS%</th>
+                         <th>WR%</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+     `;
+
+     if (data.players.length > 0) {
+         // Spieler bereits nach Rating sortiert vom Backend
+         data.players.forEach((player, index) => {
+             playerTableHtml += `
+                 <tr>
+                      <td>${index + 1}</td>
+                      <td class="player-cell">
+                           <img src="${player.avatar || 'default_avatar.png'}" class="table-avatar" alt="Avatar" onerror="this.src='default_avatar.png'"/>
+                           <span>${player.nickname || 'Unbekannt'}</span>
+                      </td>
+                      <td>${player.matchesPlayed ?? '0'}</td>
+                      <td>${safe(player.rating, 2)}</td>
+                      <td>${safe(player.kd, 2)}</td>
+                      <td>${safe(player.adr, 1)}</td>
+                      <td>${safe(player.kast, 1)}</td>
+                      <td>${safe(player.hsp, 1)}</td>
+                      <td class="${getTeamWinrateClass(player.winRate)}">${safe(player.winRate, 1)}</td>
+                 </tr>
+             `;
+         });
+     } else {
+         playerTableHtml += `<tr><td colspan="9">Keine Spielerdaten verfügbar.</td></tr>`;
+     }
+
+     playerTableHtml += `
+                 </tbody>
+            </table>
+        </div>
+    `;
+
+
+    // --- Letztes Update anzeigen ---
+    const lastUpdatedHtml = data.lastUpdated
+        ? `<div class="last-updated">Stand: ${new Date(data.lastUpdated).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} Uhr</div>`
+        : '';
+
+    // --- HTML zusammensetzen und einfügen ---
+    uniligaDataArea.innerHTML = teamTableHtml + playerTableHtml + lastUpdatedHtml;
+    console.log("Uniliga tables rendered.");
+}
 // -------------------------------------------------------------
 // Umschaltlogik für Ansichten
 // -------------------------------------------------------------
