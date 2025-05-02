@@ -153,7 +153,7 @@ function displayDetailCard(player) {
             <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer"><img src="${player.avatar}" class="avatar" alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" /></a>
             <div>
               <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer" class="player-name">${player.nickname}</a>
-              <div class="stats-label">${matchesText}$</div>
+              <div class="stats-label">${matchesText}</div>
             </div>
           </div>
           <div class="stats-grid">
