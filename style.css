@@ -373,7 +373,7 @@ ol#player-list li::before {
     height: 8px;        /* Höhe der Bar */
     background-color: var(--bar-bg); /* Gesamter Hintergrund */
     border-radius: 4px;
-    /*overflow: hidden;   /* Verhindert, dass Bar überläuft */
+    overflow: clip;   /* Verhindert, dass Bar überläuft */
     margin-bottom: 0.4rem; /* Abstand zum Label darunter */
 }
 
@@ -384,7 +384,7 @@ ol#player-list li::before {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 3px; /* Breite der Linie */
+    width: 2px; /* Breite der Linie */
     background-color: rgba(255, 255, 255, 0.849); /* Helle, dezente Linie */
     z-index: 1; /* Über dem Hintergrund, unter der farbigen Bar */
 }
