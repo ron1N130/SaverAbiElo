@@ -398,7 +398,7 @@ ol#player-list li::before {
     height: 100%;
     background-color: var(--bar-bad); /* Standardfarbe */
     border-radius: 0; /* Kein Radius mehr, füllt Drittel */
-    box-shadow: 0 0 12px transparent; /* Glow */
+    box-shadow: 0 0 25px transparent; /* Glow */
     transition: left 0.3s ease-out, width 0.3s ease-out, background-color 0.3s, box-shadow 0.3s;
     z-index: 2; /* Über den Trennlinien */
     /* left und width werden per JS gesetzt (z.B. left: 33.333%; width: 33.333%;) */
