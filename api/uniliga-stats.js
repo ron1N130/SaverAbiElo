@@ -2,28 +2,26 @@
 // -------------------------------------------------
 // ◼ Nutzt zentrale Statistik-Berechnung aus /api/utils/stats.js
 // ◼ Cache Version 7
+// ◼ Detailliertes Logging für Teamnamen hinzugefügt
 // -------------------------------------------------
 
 import Redis from "ioredis";
-// *** NEU: Importiere Berechnungsfunktionen ***
-import { calculateAverageStats } from './utils/stats.js';
+import { calculateAverageStats } from './utils/stats.js'; // Pfad prüfen!
 
 // --- Konfiguration & Konstanten ---
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL = process.env.REDIS_URL;
 const API_BASE_URL = "https://open.faceit.com/data/v4";
 const UNILIGA_CHAMPIONSHIP_ID = "c1fcd6a9-34ef-4e18-8e92-b57af0667a40";
-const CACHE_VERSION = 7; // <<<< Cache-Version (ggf. anpassen, falls andere Struktur)
+const CACHE_VERSION = 7;
 const CACHE_TTL_SECONDS = 4 * 60 * 60; // 4 Stunden
-const API_DELAY = 500; // Ggf. leicht erhöhen, wenn Rate Limits auftreten (z.B. 600)
+const API_DELAY = 500;
 const MATCH_DETAIL_BATCH_SIZE = 10;
-const MAX_MATCHES_TO_FETCH = 500; // Ausreichend für die meisten Turniere
+const MAX_MATCHES_TO_FETCH = 500;
 
 // --- Hilfsfunktionen ---
-/** simple async sleep */
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Fetch Faceit API (unverändert zur letzten Version dieser Datei) */
 async function fetchFaceitApi(endpoint, retries = 3) {
     await delay(API_DELAY);
     const url = `${API_BASE_URL}${endpoint}`;
@@ -31,7 +29,7 @@ async function fetchFaceitApi(endpoint, retries = 3) {
         const res = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${FACEIT_API_KEY}`, 'Accept': 'application/json' } });
         if (res.status === 429) {
             console.warn(`[API Uniliga] Rate limit hit (429) for ${endpoint} – sleeping...`);
-            await delay(API_DELAY * 15); // Länger warten bei Rate Limit
+            await delay(API_DELAY * 15);
             if (retries > 0) return fetchFaceitApi(endpoint, retries - 1);
             else throw new Error(`API Rate limit exceeded for ${endpoint}`);
         }
@@ -42,25 +40,19 @@ async function fetchFaceitApi(endpoint, retries = 3) {
     } catch (error) {
         console.error(`[API Uniliga] Fetch error for ${endpoint}: ${error.message}`);
         if (retries > 0) { await delay(API_DELAY * 5); return fetchFaceitApi(endpoint, retries - 1); }
-        else throw error; // Fehler nach Retries weiterwerfen
+        else throw error;
     }
 }
 
-// --- Redis‑Initialisierung (unverändert) ---
+// --- Redis‑Initialisierung ---
 let redis = null;
 if (REDIS_URL) {
     try {
-        redis = new Redis(REDIS_URL, {
-            lazyConnect: true,          // Wichtig!
-            connectTimeout: 10000,      // 10 Sekunden Timeout
-            maxRetriesPerRequest: 2,    // Weniger Retries
-            showFriendlyErrorStack: true
-        });
-        redis.on("error", (err) => { console.error("[Redis Uniliga] Connection error:", err.message); redis = null; }); // Bei Fehler Verbindung als "weg" markieren
+        redis = new Redis(REDIS_URL, { lazyConnect: true, connectTimeout: 10000, maxRetriesPerRequest: 2, showFriendlyErrorStack: true });
+        redis.on("error", (err) => { console.error("[Redis Uniliga] Connection error:", err.message); redis = null; });
         console.log("[Redis Uniliga] Client initialized (lazy).");
     } catch (e) { console.error("[Redis Uniliga] Initialization failed:", e); redis = null; }
 } else { console.warn("[Redis Uniliga] REDIS_URL not set. Caching disabled."); }
-
 
 // --- Haupt‑Handler ---
 export default async function handler(req, res) {
@@ -69,7 +61,7 @@ export default async function handler(req, res) {
     const cacheKey = `uniliga_stats:${championshipId}`;
 
     // 1. Cache prüfen
-    if (redis) {
+    if (redis && redis.status === 'ready') { // Nur prüfen, wenn Redis verbunden
         try {
             const cachedData = await redis.get(cacheKey);
             if (cachedData) {
@@ -77,16 +69,16 @@ export default async function handler(req, res) {
                 if (parsedData.version === CACHE_VERSION) {
                     console.log(`[API Uniliga] Cache HIT (v${CACHE_VERSION}). Returning cached data.`);
                     res.setHeader("X-Cache-Status", "HIT");
-                    res.setHeader("Cache-Control", `public, max-age=${CACHE_TTL_SECONDS}`); // Cache im Browser/CDN erlauben
+                    res.setHeader("Cache-Control", `public, max-age=${CACHE_TTL_SECONDS}`);
                     return res.status(200).json(parsedData);
                 } else { console.log(`[API Uniliga] Cache STALE (v${parsedData.version}, expected v${CACHE_VERSION}).`); res.setHeader("X-Cache-Status", "STALE"); }
             } else { console.log("[API Uniliga] Cache MISS."); res.setHeader("X-Cache-Status", "MISS"); }
         } catch (err) {
             console.error("[API Uniliga] Redis GET error:", err);
             res.setHeader("X-Cache-Status", "ERROR");
-            redis = null; // Bei Redis-Fehler Caching für diesen Request deaktivieren
+            // redis = null; // Nicht global deaktivieren, nur für diesen Request ggf. problematisch
         }
-    } else { res.setHeader("X-Cache-Status", "DISABLED"); }
+    } else { res.setHeader("X-Cache-Status", redis ? `DISABLED (Status: ${redis.status})` : "DISABLED"); }
 
     // 2. Live-Daten holen und verarbeiten
     try {
@@ -98,224 +90,163 @@ export default async function handler(req, res) {
         while (fetchMore && allMatches.length < MAX_MATCHES_TO_FETCH) {
             const matchResponse = await fetchFaceitApi(`/championships/${championshipId}/matches?type=past&offset=${offset}&limit=${limit}`);
             if (!matchResponse?.items?.length) {
-                fetchMore = false; // Keine Matches mehr gefunden
+                fetchMore = false;
             } else {
                 allMatches.push(...matchResponse.items);
-                offset += matchResponse.items.length; // Inkrementiere um die tatsächliche Anzahl
-                if (matchResponse.items.length < limit) {
-                    fetchMore = false; // Letzte Seite erreicht
-                }
+                offset += matchResponse.items.length;
+                if (matchResponse.items.length < limit) fetchMore = false;
             }
         }
         console.log(`[API Uniliga] Total matches found: ${allMatches.length}. Fetching details...`);
 
-        // b) Match-Details holen und Daten sammeln
-        const playerMatchStats = {};
-        const teamStats = {};
-        const playerDetails = {};
-        let processedMatchCount = 0; // Zähler für verarbeitete Matches
-        let skippedMatchCount = 0;  // Zähler für übersprungene Matches
+        const playerMatchStats = {}; // { playerId: [matchStat1, matchStat2, ...] }
+        const teamStats = {};        // { teamId: { name: string, wins: number, ... } }
+        const playerDetails = {};    // { playerId: { nickname: string, avatar: string } }
+        let processedMatchCount = 0;
+        let skippedMatchCount = 0;
 
         for (let i = 0; i < allMatches.length; i += MATCH_DETAIL_BATCH_SIZE) {
             const batchMatchIds = allMatches.slice(i, i + MATCH_DETAIL_BATCH_SIZE).map(m => m.match_id);
-            // DEBUG: Logge die Batch-IDs (optional, kann viele Logs erzeugen)
-            // console.log(`[API Uniliga DEBUG] Processing Batch Match IDs: ${batchMatchIds.join(', ')}`);
-
             const batchPromises = batchMatchIds.map(async (matchId) => {
-                 try { // Füge try-catch pro Match hinzu
+                try {
                     const stats = await fetchFaceitApi(`/matches/${matchId}/stats`);
-
-                    // Striktere Prüfung: Gibt es Runden-Daten UND Team-Daten?
                     if (!stats?.rounds?.[0]?.teams || stats.rounds[0].teams.length === 0) {
-                        // DEBUG: Logge übersprungene Matches wegen fehlender Rundendaten/Teams
                         console.warn(`[API Uniliga DEBUG] Skipping Match ${matchId}: No stats.rounds[0].teams found or teams array empty.`);
-                        skippedMatchCount++;
-                        return null; // Wichtig: Gehe zum nächsten Match
+                        skippedMatchCount++; return null;
                     }
-
                     const roundData = stats.rounds[0];
-                    const winningTeamId = roundData.round_stats?.["Winner"]; // Kann null sein bei Unentschieden/Abbruch
+                    const winningTeamId = roundData.round_stats?.["Winner"];
                     const matchRounds = parseInt(roundData.round_stats?.["Rounds"], 10);
-
-                    // Prüfe ob Rundenanzahl gültig ist
                     if (isNaN(matchRounds) || matchRounds <= 0) {
                         console.warn(`[API Uniliga DEBUG] Skipping Match ${matchId}: Invalid or zero rounds (${roundData.round_stats?.["Rounds"]}).`);
-                        skippedMatchCount++;
-                        return null;
+                        skippedMatchCount++; return null;
                     }
-
-                    // DEBUG: Logge erfolgreiche Verarbeitung eines Matches (optional)
-                    // console.log(`[API Uniliga DEBUG] Processing stats for Match ${matchId} (${matchRounds} rounds)`);
-                    processedMatchCount++; // Erfolgreich verarbeitet bis hierhin
+                    processedMatchCount++;
 
                     for (const team of roundData.teams) {
                         const teamId = team.team_id;
-                        const teamName = team.nickname;
-                        // Team-Stats sammeln (unverändert)
-                        // Innerhalb der Spieler-Schleife, wo playerDetails gesetzt wird:
-                        if (!playerDetails[playerId]) {
-                            // DEBUG: Logge die Avatar-URL beim ersten Mal
-                            // console.log(`[API Uniliga DEBUG] Player <span class="math-inline">\{playerId\} \(</span>{player.nickname}) initial avatar URL: ${player.avatar}`);
-                            playerDetails[playerId] = { nickname: player.nickname, avatar: player.avatar || '/default_avatar.png' }; // Pfad anpassen falls nötig
-                        } else {
-                            // ... Update Nickname ...
-                            if (player.avatar && playerDetails[playerId].avatar !== player.avatar) {
-                                // DEBUG: Logge Avatar-Änderung
-                                // console.log(`[API Uniliga DEBUG] Player <span class="math-inline">\{playerId\} \(</span>{player.nickname}) updated avatar URL: ${player.avatar}`);
-                                playerDetails[playerId].avatar = player.avatar;
-                            }
-                            // Sicherstellen, dass ein Fallback existiert, falls der Avatar später entfernt wird
-                            if (!playerDetails[playerId].avatar) {
-                                playerDetails[playerId].avatar = '/default_avatar.png'; // Pfad anpassen falls nötig
-                            }
-                        }
-                        
+                        const teamName = team.nickname; // <<<<<< HIER WIRD DER NAME GEHOLT
+
+                        // +++ NEUES LOGGING (1): Namen direkt beim Auslesen loggen +++
+                        console.log(`[API Uniliga DEBUG] Match ${matchId}, Team ID ${teamId}, Found Name: '${teamName}'`);
+
                         if (!teamStats[teamId]) teamStats[teamId] = { name: teamName, wins: 0, losses: 0, matchesPlayed: 0, players: new Set() };
-                        teamStats[teamId].name = teamName; // Immer Namen aktualisieren, falls er sich ändert
-                        teamStats[teamId].matchesPlayed += 1 / team.players.length; // Teilen durch Spielerzahl für korrekte Zählung
+                        if (teamName) { // Nur updaten, wenn ein Name vorhanden ist
+                           teamStats[teamId].name = teamName;
+                        } else if (!teamStats[teamId].name) { // Setze Fallback, falls noch kein Name gespeichert wurde
+                           teamStats[teamId].name = `Team ID ${teamId}`; // Fallback, falls Name nie kommt
+                           console.warn(`[API Uniliga DEBUG] Match ${matchId}, Team ID ${teamId}: Missing team nickname from API. Using fallback name.`);
+                        }
+
+                        // Zählung korrigiert, um pro Match nur einmal zu zählen
+                        // Wird später beim Aggregieren der Teams finalisiert
+                        teamStats[teamId].matchesPlayed += 1 / roundData.teams.length; // Teile durch Anzahl Teams im Match (meist 2)
                         const isWinner = teamId === winningTeamId;
                          if (winningTeamId) { // Nur zählen wenn es einen Gewinner gab
-                            if (isWinner) teamStats[teamId].wins += 1 / team.players.length;
-                            else teamStats[teamId].losses += 1 / team.players.length;
-                        }
+                             if (isWinner) teamStats[teamId].wins += 1 / roundData.teams.length;
+                             else teamStats[teamId].losses += 1 / roundData.teams.length;
+                         }
 
                         for (const player of team.players) {
                             const playerId = player.player_id;
                             const playerStats = player.player_stats;
-
-                            // **Striktere Prüfung:** Hat der Spieler überhaupt Stats?
                             if (!playerStats || Object.keys(playerStats).length === 0) {
-                                // DEBUG: Logge fehlende Spielerstats
                                 console.warn(`[API Uniliga DEBUG] Skipping Player ${playerId} (${player.nickname}) in Match ${matchId}: Missing or empty player_stats.`);
-                                continue; // Gehe zum nächsten Spieler
+                                continue;
                             }
-
-                            // Spielerdetails speichern/aktualisieren
                             if (!playerDetails[playerId]) playerDetails[playerId] = { nickname: player.nickname, avatar: player.avatar || 'default_avatar.png' };
-                            else { // Update Avatar falls geändert
-                                playerDetails[playerId].nickname = player.nickname; // Update Nickname falls geändert
+                            else {
+                                playerDetails[playerId].nickname = player.nickname;
                                 if (player.avatar) playerDetails[playerId].avatar = player.avatar;
+                                if (!playerDetails[playerId].avatar) playerDetails[playerId].avatar = 'default_avatar.png';
                             }
-                            teamStats[teamId].players.add(playerId); // Spieler zum Team hinzufügen
-
-                            // Spieler-Match-Statistik initialisieren
+                            teamStats[teamId].players.add(playerId);
                             if (!playerMatchStats[playerId]) playerMatchStats[playerId] = [];
-
-                             // DEBUG: Logge, wenn ein Stat für einen bestimmten Spieler hinzugefügt wird (Nickname anpassen!)
-                              if (player.nickname === 'ron1N') { // Beispiel: Nur für ron1N loggen
-                                 console.log(`[API Uniliga DEBUG] Adding Match ${matchId} stats for Player ${playerId} (${player.nickname})`);
-                              }
-
-                            // Statistik für DIESES Match hinzufügen
                             playerMatchStats[playerId].push({
-                                // Explizit in Zahlen umwandeln und Fallbacks für fehlende Werte
-                                Kills: +(playerStats["Kills"] ?? 0),
-                                Deaths: +(playerStats["Deaths"] ?? 0),
-                                Assists: +(playerStats["Assists"] ?? 0),
-                                Headshots: +(playerStats["Headshots"] ?? 0),
-                                "K/R Ratio": +(playerStats["K/R Ratio"] ?? 0), // Wird von calculateAverageStats nicht direkt verwendet
+                                Kills: +(playerStats["Kills"] ?? 0), Deaths: +(playerStats["Deaths"] ?? 0),
+                                Assists: +(playerStats["Assists"] ?? 0), Headshots: +(playerStats["Headshots"] ?? 0),
+                                KR_Ratio: +(playerStats["K/R Ratio"] ?? 0), // Keep K/R if needed by calc
+                                KD_Ratio: +(playerStats["K/D Ratio"] ?? 0), // Keep K/D if needed by calc
                                 ADR: +(playerStats["ADR"] ?? playerStats["Average Damage per Round"] ?? 0),
-                                Rounds: matchRounds, // Schon oben geprüft und geparst
-                                Win: winningTeamId ? (isWinner ? 1 : 0) : 0, // 0 bei keinem Gewinner
-                                MatchId: matchId // Zur Nachverfolgung
+                                Rounds: matchRounds, Win: winningTeamId ? (isWinner ? 1 : 0) : 0, MatchId: matchId
                             });
                         }
                     }
-                    return true; // Erfolgreich verarbeitet
-                 } catch (matchError) {
-                     // DEBUG: Logge Fehler beim Verarbeiten eines einzelnen Matches
-                     console.error(`[API Uniliga DEBUG] Error processing Match ${matchId}: ${matchError.message}`);
-                     skippedMatchCount++;
-                     return null; // Wichtig: Gehe zum nächsten Match bei Fehler
-                 }
+                    return true;
+                } catch (matchError) {
+                    console.error(`[API Uniliga DEBUG] Error processing Match ${matchId}: ${matchError.message}`);
+                    skippedMatchCount++;
+                    return null;
+                }
             });
-            // Warte bis alle Promises im Batch fertig sind
             await Promise.all(batchPromises);
         }
-
-        // DEBUG: Logge Gesamtanzahl verarbeiteter/übersprungener Matches
         console.log(`[API Uniliga DEBUG] Finished processing details. Processed: ${processedMatchCount}, Skipped: ${skippedMatchCount}, Total Found: ${allMatches.length}`);
 
         // c) Spielerstatistiken aggregieren
         console.log("[API Uniliga] Aggregating player statistics...");
         const aggregatedPlayerStats = {};
         for (const playerId in playerMatchStats) {
-            // DEBUG: Logge die Anzahl der Matches pro Spieler VOR der Berechnung
             const matchCount = playerMatchStats[playerId].length;
-            // Beispiel: Nur für bestimmte Spieler oder alle loggen
-            // if (playerDetails[playerId]?.nickname === 'ron1N' || matchCount < 2) {
-                console.log(`[API Uniliga DEBUG] Calculating stats for Player ${playerId} (${playerDetails[playerId]?.nickname ?? 'Unknown Nickname'}) based on ${matchCount} valid matches found.`);
-            // }
-
-            // Rufe zentrale Berechnungsfunktion auf
-            const calculatedStats = calculateAverageStats(playerMatchStats[playerId]);
-
-            if (calculatedStats && calculatedStats.matchesPlayed > 0) { // Stelle sicher, dass Stats berechnet wurden UND Matches vorhanden sind
-                 aggregatedPlayerStats[playerId] = {
-                     ...playerDetails[playerId], // Nickname, Avatar
-                     ...calculatedStats         // rating, kpr, adr, kast, etc. & matchesPlayed
-                 };
-                 // DEBUG: Logge die berechnete Anzahl Matches (sollte mit matchCount übereinstimmen)
-                 // if (playerDetails[playerId]?.nickname === 'ron1N') {
-                      if (calculatedStats.matchesPlayed !== matchCount) {
-                          console.error(`[API Uniliga DEBUG] Mismatch for ${playerId} (${playerDetails[playerId]?.nickname}): Found ${matchCount} matches, but calculatedStats has ${calculatedStats.matchesPlayed}`);
-                      }
-                 //      console.log(`[API Uniliga DEBUG] Player ${playerId} calculated stats: Matches Played = ${calculatedStats.matchesPlayed}`);
-                 // }
+            // console.log(`[API Uniliga DEBUG] Calculating stats for Player ${playerId} (${playerDetails[playerId]?.nickname ?? 'Unknown Nickname'}) based on ${matchCount} valid matches found.`);
+            const calculatedStats = calculateAverageStats(playerMatchStats[playerId]); // Uses central function
+            if (calculatedStats && calculatedStats.matchesPlayed > 0) {
+                aggregatedPlayerStats[playerId] = {
+                    ...playerDetails[playerId],
+                    ...calculatedStats
+                };
+                // Optional: Konsistenzcheck
+                // if (calculatedStats.matchesPlayed !== matchCount) { console.error(`[API Uniliga DEBUG] Mismatch for ${playerId}: Found ${matchCount} matches, calc has ${calculatedStats.matchesPlayed}`); }
             } else {
-                 console.warn(`[API Uniliga DEBUG] Stats calculation returned null or 0 matches for Player ${playerId} (${playerDetails[playerId]?.nickname ?? 'Unknown Nickname'}) with ${matchCount} raw matches found.`);
+                console.warn(`[API Uniliga DEBUG] Stats calculation returned null or 0 matches for Player ${playerId} (${playerDetails[playerId]?.nickname ?? 'Unknown Nickname'}) with ${matchCount} raw matches found.`);
             }
         }
-        // Sortiere Spieler nach Rating (höchstes zuerst)
         const sortedPlayerStats = Object.values(aggregatedPlayerStats).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 
         // d) Teamstatistiken aggregieren
         console.log("[API Uniliga] Aggregating team statistics...");
         const aggregatedTeamStats = {};
-         for (const teamId in teamStats) {
-             const team = teamStats[teamId];
-             // Runde die geteilten Werte wieder auf ganze Zahlen
-             const matchesPlayedCorrected = Math.round(team.matchesPlayed);
-             const winsCorrected = Math.round(team.wins);
-             const lossesCorrected = Math.round(team.losses);
-             // Berechne Winrate nur, wenn Spiele vorhanden sind
-             const winRate = matchesPlayedCorrected > 0 ? (winsCorrected / matchesPlayedCorrected) * 100 : 0;
+        for (const teamId in teamStats) {
+            const team = teamStats[teamId]; // team object from intermediate aggregation
 
-             // Berechne Durchschnittsrating des Teams
-             let avgTeamRating = 0; let playerCount = 0; let totalTeamMatches = 0;
-             team.players.forEach(playerId => {
-                 if (aggregatedPlayerStats[playerId]?.rating) {
-                     avgTeamRating += aggregatedPlayerStats[playerId].rating;
-                     playerCount++;
-                     // Summiere die gespielten Matches der Spieler für eine alternative Zählung
-                     totalTeamMatches += (aggregatedPlayerStats[playerId].matchesPlayed || 0);
-                 }
-             });
-             avgTeamRating = playerCount > 0 ? avgTeamRating / playerCount : 0;
+            // +++ NEUES LOGGING (2): Logge das Team-Objekt VOR der Finalisierung +++
+            console.log(`[API Uniliga DEBUG] Aggregating final stats for Team ID: ${teamId}, Intermediate Data:`, JSON.stringify(team, null, 2));
 
-             // Konsistenzprüfung der Team-Matches
-             // const avgMatchesPerPlayer = playerCount > 0 ? totalTeamMatches / playerCount : 0;
-             // if (Math.abs(matchesPlayedCorrected - avgMatchesPerPlayer) > 1 && playerCount > 0) { // Toleranz von 1
-             //     console.warn(`[API Uniliga DEBUG] Team ${team.name} (${teamId}): Mismatch in matches played. Calculated: ${matchesPlayedCorrected}, Avg from players: ${avgMatchesPerPlayer.toFixed(1)}`);
-             // }
+            // Runde die geteilten Werte auf ganze Zahlen
+            const matchesPlayedCorrected = Math.round(team.matchesPlayed * 2); // Korrektur: Multipliziere mit 2, da durch 2 geteilt wurde
+            const winsCorrected = Math.round(team.wins * 2);
+            const lossesCorrected = Math.round(team.losses * 2);
+            const winRate = matchesPlayedCorrected > 0 ? (winsCorrected / matchesPlayedCorrected) * 100 : 0;
 
+            let avgTeamRating = 0; let playerCount = 0;
+            team.players.forEach(playerId => {
+                if (aggregatedPlayerStats[playerId]?.rating) {
+                    avgTeamRating += aggregatedPlayerStats[playerId].rating;
+                    playerCount++;
+                }
+            });
+            avgTeamRating = playerCount > 0 ? avgTeamRating / playerCount : 0;
 
-             aggregatedTeamStats[teamId] = {
+            // Erstelle das finale Objekt für die Antwort
+            aggregatedTeamStats[teamId] = {
                  id: teamId,
-                 name: team.name,
-                 matchesPlayed: matchesPlayedCorrected, // Gerundeter Wert
-                 wins: winsCorrected,                   // Gerundeter Wert
-                 losses: lossesCorrected,               // Gerundeter Wert
-                 winRate: +winRate.toFixed(1),          // Auf eine Dezimalstelle
-                 avgRating: +avgTeamRating.toFixed(2),    // Auf zwei Dezimalstellen
-                 // playerIds: Array.from(team.players) // Optional: Spieler-IDs hinzufügen
+                 name: team.name, // Hole den Namen aus dem zwischengespeicherten Objekt
+                 matchesPlayed: matchesPlayedCorrected,
+                 wins: winsCorrected,
+                 losses: lossesCorrected,
+                 winRate: +winRate.toFixed(1),
+                 avgRating: +avgTeamRating.toFixed(2),
+                 // points: team.points // Füge Punkte hinzu, sobald die Logik dafür da ist
              };
+
+             // +++ NEUES LOGGING (3): Logge das finale Objekt für dieses Team +++
+             console.log(`[API Uniliga DEBUG] Final object for Team ID ${teamId}:`, JSON.stringify(aggregatedTeamStats[teamId], null, 2));
          }
-        // Sortiere Teams nach Winrate (höchste zuerst), dann nach Avg. Rating
+        // Sortiere Teams (hier nach alter Logik Winrate/Rating, später ggf. nach Punkten)
         const sortedTeamStats = Object.values(aggregatedTeamStats).sort((a, b) => {
-             const wrDiff = (b.winRate ?? 0) - (a.winRate ?? 0);
-             if (wrDiff !== 0) return wrDiff;
-             return (b.avgRating ?? 0) - (a.avgRating ?? 0);
+            const wrDiff = (b.winRate ?? 0) - (a.winRate ?? 0);
+            if (wrDiff !== 0) return wrDiff;
+            return (b.avgRating ?? 0) - (a.avgRating ?? 0);
         });
 
         // e) Finale Antwort vorbereiten
@@ -323,37 +254,25 @@ export default async function handler(req, res) {
             version: CACHE_VERSION,
             lastUpdated: new Date().toISOString(),
             championshipId: championshipId,
-            players: sortedPlayerStats, // Spieler nach Rating sortiert
-            teams: sortedTeamStats      // Teams nach WinRate/Rating sortiert
+            players: sortedPlayerStats,
+            teams: sortedTeamStats // Enthält jetzt hoffentlich die Namen
         };
 
-        // f) Im Cache speichern (Nur wenn Redis verfügbar ist)
-        if (redis) {
+        // f) Im Cache speichern
+        if (redis && redis.status === 'ready') {
             try {
                 await redis.set(cacheKey, JSON.stringify(responseData), "EX", CACHE_TTL_SECONDS);
                 console.log(`[API Uniliga] Stored aggregated stats in Redis (Key: ${cacheKey}).`);
-            }
-            catch (err) {
-                console.error("[API Uniliga] Redis SET error:", err);
-                // Fehler beim Schreiben ist nicht kritisch für die Antwort, nur loggen
-            }
+            } catch (err) { console.error("[API Uniliga] Redis SET error:", err); }
         }
 
         // g) Senden
         console.log("[API Uniliga] Sending freshly calculated data.");
-        res.setHeader("Cache-Control", `public, max-age=${CACHE_TTL_SECONDS}`); // Erlaube Caching
+        res.setHeader("Cache-Control", `public, max-age=${CACHE_TTL_SECONDS}`);
         return res.status(200).json(responseData);
 
     } catch (error) {
         console.error("[API Uniliga] Unhandled error in handler:", error);
-        // Sende generische Fehlermeldung oder spezifischere Infos, falls sicher
-        return res.status(500).json({
-             error: "Fehler beim Verarbeiten der Uniliga-Daten.",
-             details: error.message // Sende Fehlermeldung nur im Entwicklungsmodus?
-        });
-    } finally {
-        // Optional: Redis Verbindung schließen, wenn nicht lazyConnect?
-        // Normalerweise nicht nötig mit ioredis und lazyConnect
-        // if(redis) { redis.disconnect(); }
+        return res.status(500).json({ error: "Fehler beim Verarbeiten der Uniliga-Daten.", details: error.message });
     }
 }
