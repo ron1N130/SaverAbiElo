@@ -3,15 +3,15 @@
 // -------------------------------------------------------------
 const thresholds = {
     // Schwellenwerte bleiben wie zuvor definiert
-    rating: { bad: 0.85, okay: 1.05, good: 1.25, max: 1.8 },
-    dpr: { bad: 0.75, okay: 0.7, good: 0.6, max: 1 }, // Niedriger ist besser
-    kast: { bad: 50, okay: 60, good: 70, max: 100 },
+    rating: { bad: 0.85, okay: 1.05, good: 1.2, max: 1.8 },
+    dpr: { bad: 0.8, okay: 0.7, good: 0.63, max: 1 }, // Niedriger ist besser
+    kast: { bad: 58, okay: 66, good: 75, max: 100 },
     kd: { bad: 0.8, okay: 1.0, good: 1.2, max: 2.0 }, // KD wieder relevant für Anzeige
     adr: { bad: 65, okay: 70, good: 85, max: 120 },
     kpr: { bad: 0.5, okay: 0.6, good: 0.8, max: 1.2 },
-    impact: { bad: 0.8, okay: 1.0, good: 1.2, max: 2.5 }, // Bleibt intern für Berechnung
+    impact: { bad: 0.8, okay: 1.0, good: 1.2, max: 1.8 }, // Bleibt intern für Berechnung
     elo: { bad: 1800, okay: 2000, good: 2900, max: 3500 },
-    hsp: { bad: 15, okay: 25, good: 35, max: 60 },
+    hsp: { bad: 15, okay: 35, good: 44, max: 60 },
     winRate: { bad: 40, okay: 50, good: 60, max: 100 }
 };
 
@@ -153,7 +153,7 @@ function displayDetailCard(player) {
             <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer"><img src="${player.avatar}" class="avatar" alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" /></a>
             <div>
               <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer" class="player-name">${player.nickname}</a>
-              <div class="stats-label">${matchesText}${lastUpdatedText}</div>
+              <div class="stats-label">${matchesText}$</div>
             </div>
           </div>
           <div class="stats-grid">
