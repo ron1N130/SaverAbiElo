@@ -373,7 +373,7 @@ ol#player-list li::before {
     height: 8px;        /* Höhe der Bar */
     background-color: var(--bar-bg); /* Gesamter Hintergrund */
     border-radius: 4px;
-    overflow: auto;   /* Verhindert, dass Bar überläuft */
+    /*overflow: hidden;   /* Verhindert, dass Bar überläuft */
     margin-bottom: 0.4rem; /* Abstand zum Label darunter */
 }
 
