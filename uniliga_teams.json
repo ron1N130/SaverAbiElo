@@ -1,0 +1,42 @@
+[
+  {
+    "name": "AIX",
+    "icon": "aix.png"
+  },
+  {
+    "name": "MUC",
+    "icon": "muc.png"
+  },
+  {
+    "name": "OSGG",
+    "icon": "osgg.png"
+  },
+  {
+    "name": "ECO",
+    "icon": "eco.png"
+  },
+  {
+    "name": "DG One",
+    "icon": "dg_one.png"
+  },
+  {
+    "name": "Uni Bielefeld",
+    "icon": "uni_bielefeld.png"
+  },
+  {
+    "name": "UED Wolves",
+    "icon": "ued_wolves.png"
+  },
+  {
+    "name": "FlensburgUnited",
+    "icon": "flensburgunited.png"
+  },
+  {
+    "name": "RheinSpeer",
+    "icon": "rheinspeer.png"
+  },
+  {
+    "name": "RUB Serpents S",
+    "icon": "rub_serpents_s.png"
+  }
+]
