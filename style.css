@@ -198,6 +198,8 @@ main {
     color: var(--text-primary);
 }
 ol#player-list {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     list-style: none;
     margin: 0;
     padding: 0;
@@ -205,6 +207,12 @@ ol#player-list {
     overflow-y: auto; /* Scrollen innerhalb der Liste */
     max-height: 100%;
 }
+#player-list::-webkit-scrollbar {
+    display: none; /* Versteckt den Scrollbalken komplett */
+    /* Alternativ, wenn du nur die Breite auf 0 setzen willst: */
+    /* width: 0; */
+    /* height: 0; */
+  }
 ol#player-list li {
     display: flex;
     align-items: center;
