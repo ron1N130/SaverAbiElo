@@ -360,7 +360,6 @@ function displayUniligaData(data) {
 
             // Korrigierter HTML-Block (ohne die {/* ... */} Kommentare)
             teamTableHtml += `
-                 <tr data-team-id="<span class="math-inline">\{team\.id\}"\>
                 <tr data-team-id="${team.id}">
                     <td>${index + 1}</td>
                     <td class="player-cell team-cell">
@@ -368,7 +367,7 @@ function displayUniligaData(data) {
                         <span>${teamName}</span>
                     </td>
                     <td>${team.matchesPlayed ?? '0'}</td>
-                    <td>${team.points ?? '0'}</td> {/* NEUE ZELLE für Punkte */}
+                    <td>${team.points ?? '0'}</td>
                     <td>${team.wins ?? '0'}</td>
                     <td>${team.losses ?? '0'}</td>
                     <td class="${getTeamWinrateClass(team.winRate)}">${safe(team.winRate, 1)}</td>
