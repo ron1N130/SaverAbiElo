@@ -16,7 +16,7 @@ const REDIS_URL      = process.env.REDIS_URL;
 const API_BASE_URL   = "https://open.faceit.com/data/v4";
 const CACHE_VERSION  = 7; // Version erhöht wegen geänderter Logik
 const MATCHES_MAX    = 10; // Anzahl der zu berücksichtigenden Matches << HIER ANPASSEN FALLS NÖTIG
-const CACHE_TTL_SECONDS = 24 * 60 * 60; // Cache-Ablaufzeit: 1 Tag (als Fallback)
+const CACHE_TTL_SECONDS = 7 * 24 * 60 * 60; // Cache-Ablaufzeit: 7 Tage (als Fallback)
 
 // --- Hilfs‑Fetch mit Error‑Throw ---
 async function fetchJson(url, headers) {
