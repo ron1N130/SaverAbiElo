@@ -233,7 +233,7 @@ ol#player-list li::before {
 .player-info {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
+    gap: 1.8rem;
     overflow: hidden;
     flex-grow: 1;
 }
