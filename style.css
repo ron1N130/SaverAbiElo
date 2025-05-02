@@ -263,7 +263,7 @@ ol#player-list li::before {
     font-size: 0.95em;
 }
 .elo-progress-container {
-    width: 60px;
+    width: 90px;
     height: 6px;
     background: var(--bar-bg);
     border-radius: 3px;
