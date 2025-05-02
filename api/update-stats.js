@@ -26,18 +26,30 @@ const MATCH_COUNT = 20; // Holt Historie für Berechnung
 const API_DELAY = 600;
 const BATCH_SIZE = 5;
 
-// --- Redis‑Initialisierung (unverändert) ---
+// --- Redis‑Initialisierung ---
 let redis = null;
 if (REDIS_URL) {
     try {
         redis = new Redis(REDIS_URL, {
-            lazyConnect: true, connectTimeout: 20000, maxRetriesPerRequest: 3,
+            lazyConnect: true,          // Beibehalten!
+            connectTimeout: 15000,      // Evtl. leicht reduzieren (z.B. 15s)?
+            maxRetriesPerRequest: 2,    // 3 ist ok, 2 reicht vielleicht auch
+            showFriendlyErrorStack: true // Hilfreich für Debugging
         });
-        redis.on("error", (err) => { console.error("[Redis Update] Connection error:", err.message); });
-        redis.connect().catch(err => { console.error("[Redis Update] Initial connection failed:", err.message); redis = null; });
-        console.log("[Redis Update] Client initialized.");
-    } catch (e) { console.error("[Redis Update] Initialization failed:", e); redis = null; }
-} else { console.warn("[Redis Update] REDIS_URL not set. Caching disabled."); }
+        redis.on("error", (err) => {
+            console.error("[Redis Update] Connection error:", err.message);
+            // Wichtig: Bei Fehler hier null setzen, damit nicht versucht wird, redis zu nutzen
+            redis = null;
+        });
+        // redis.connect().catch(err => { console.error("[Redis Update] Initial connection failed:", err.message); redis = null; }); // <-- DIESE ZEILE ENTFERNEN ODER AUSKOMMENTIEREN
+        console.log("[Redis Update] Client initialized (lazy)."); // Angepasste Log-Nachricht
+    } catch (e) {
+        console.error("[Redis Update] Initialization failed:", e);
+        redis = null;
+    }
+} else {
+    console.warn("[Redis Update] REDIS_URL not set. Caching disabled.");
+}
 
 // --- Hilfs‑Fetch (unverändert) ---
 async function fetchFaceitApi(endpoint, retries = 3) {
