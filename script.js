@@ -354,11 +354,12 @@ function displayUniligaData(data) {
                              : 'default_team_icon.png'; // Fallback-Icon (lege diese Datei an!)
             const altText = iconFilename ? `Logo ${teamName}` : 'Standard Team Icon';
 
+            // KORRIGIERTER HTML-Block (ohne die {/* ... */} Kommentare)
             teamTableHtml += `
                 <tr data-team-id="${team.id}">
                     <td>${index + 1}</td>
-                    <td class="player-cell team-cell"> {/* Füge ggf. CSS für team-cell hinzu */}
-                        <img src="${iconPath}" class="table-avatar team-avatar" alt="${altText}" onerror="this.style.display='none'; this.onerror=null;"/> {/* onerror zum Verstecken bei Ladefehler */}
+                    <td class="player-cell team-cell">
+                        <img src="${iconPath}" class="table-avatar team-avatar" alt="${altText}" onerror="this.style.display='none'; this.onerror=null;"/>
                         <span>${teamName}</span>
                     </td>
                     <td>${team.matchesPlayed ?? '0'}</td>
