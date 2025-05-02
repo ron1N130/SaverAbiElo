@@ -20,7 +20,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL = process.env.REDIS_URL;
 const API_BASE_URL = "https://open.faceit.com/data/v4";
-const MATCH_COUNT = 10; // Max. History für Berechnung holen
+const MATCH_COUNT = 15; // Max. History für Berechnung holen
 const API_DELAY = 600;  // Verzögerung zwischen API-Aufrufen
 const BATCH_SIZE = 5;   // Match-Details Batch-Größe
 
