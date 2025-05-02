@@ -46,16 +46,30 @@ async function fetchFaceitApi(endpoint, retries = 3) {
     }
 }
 
-// --- Redis‑Initialisierung (unverändert) ---
+// --- Redis‑Initialisierung ---
 let redis = null;
 if (REDIS_URL) {
     try {
-        redis = new Redis(REDIS_URL, { lazyConnect: true, connectTimeout: 10000, maxRetriesPerRequest: 2, showFriendlyErrorStack: true });
-        redis.on("error", (err) => { console.error("[Redis Uniliga] Connection error:", err.message); });
-        console.log("[Redis Uniliga] Client initialized.");
-    } catch (e) { console.error("[Redis Uniliga] Initialization failed:", e); redis = null; }
-} else { console.warn("[Redis Uniliga] REDIS_URL not set. Caching disabled."); }
-
+        redis = new Redis(REDIS_URL, {
+            lazyConnect: true,          // Beibehalten!
+            connectTimeout: 15000,      // Evtl. leicht reduzieren (z.B. 15s)?
+            maxRetriesPerRequest: 2,    // 3 ist ok, 2 reicht vielleicht auch
+            showFriendlyErrorStack: true // Hilfreich für Debugging
+        });
+        redis.on("error", (err) => {
+            console.error("[Redis Update] Connection error:", err.message);
+            // Wichtig: Bei Fehler hier null setzen, damit nicht versucht wird, redis zu nutzen
+            redis = null;
+        });
+        // redis.connect().catch(err => { console.error("[Redis Update] Initial connection failed:", err.message); redis = null; }); // <-- DIESE ZEILE ENTFERNEN ODER AUSKOMMENTIEREN
+        console.log("[Redis Update] Client initialized (lazy)."); // Angepasste Log-Nachricht
+    } catch (e) {
+        console.error("[Redis Update] Initialization failed:", e);
+        redis = null;
+    }
+} else {
+    console.warn("[Redis Update] REDIS_URL not set. Caching disabled.");
+}
 
 // --- Haupt‑Handler ---
 export default async function handler(req, res) {
