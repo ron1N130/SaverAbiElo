@@ -34,8 +34,8 @@
     /* Layout */
     --font: 'Roboto', sans-serif;
     --gap: 1.5rem;
-    --max-list: 450px;
-    --max-card: 700px;
+    --max-list: 600px;
+    --max-card: 1200px;
 }
 
 /* ==========================================================================
