@@ -1,4 +1,3 @@
-// *** THRESHOLDS BEREINIGT, ZEIGT K/D STATT IMPACT ***
 // -------------------------------------------------------------
 // Globale Variablen und Hilfsfunktionen
 // -------------------------------------------------------------
@@ -235,7 +234,8 @@ function handlePlayerListClick(e) {
 let currentUniligaData = null;
 
 async function loadUniligaView() {
-    console.log("loadUniligaView called");
+    // +++ NEUES LOG (1) +++
+    console.log("[FRONTEND-DEBUG] loadUniligaView WURDE AUFGERUFEN!");
 
     if (!loadingIndicatorUniliga || !errorMessageUniliga || !uniligaDataArea) {
         console.error("FEHLER: Benötigte Elemente für Uniliga View fehlen!");
@@ -253,6 +253,8 @@ async function loadUniligaView() {
     try {
         // Lade API-Daten UND die Icon Map parallel
         console.log("Fetching Uniliga stats and Team Icons concurrently...");
+        // +++ NEUES LOG (2) +++
+        console.log("[FRONTEND-DEBUG] VERSUCHE FETCH /api/uniliga-stats...");
         const [apiResponse] = await Promise.all([
             fetch('/api/uniliga-stats'), // Dein API-Aufruf
             loadTeamIconMap()           // Lade die Icon Map (stellt sicher, dass sie vor display verfügbar ist)
@@ -269,11 +271,8 @@ async function loadUniligaView() {
         }
 
         const data = await apiResponse.json();
-        // LOG der kompletten API Daten (kann sehr groß sein!)
-        // Besser gezielt loggen, was gebraucht wird, z.B. data.teams
         console.log("[LOG] Uniliga API data received (teams):", JSON.stringify(data.teams, null, 2));
         console.log("[LOG] Uniliga API data received (players):", JSON.stringify(data.players, null, 2));
-
 
         if (!data || !data.teams || !data.players) {
             throw new Error("Ungültiges Datenformat von der API empfangen.");
@@ -358,7 +357,7 @@ function displayUniligaData(data) {
             const altText = iconFilename ? `Logo ${teamName}` : 'Standard Team Icon';
             console.log(`[LOG] Generated icon path: '${iconPath}'`); // LOG Icon Pfad
 
-            // Korrigierter HTML-Block (ohne die {/* ... */} Kommentare)
+            // Korrigierter HTML-Block
             teamTableHtml += `
                 <tr data-team-id="${team.id}">
                     <td>${index + 1}</td>
