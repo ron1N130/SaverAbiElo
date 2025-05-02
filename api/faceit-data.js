@@ -12,6 +12,7 @@ const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL      = process.env.REDIS_URL;
 const API_BASE_URL   = "https://open.faceit.com/data/v4";
 const CACHE_VERSION  = 6;
+const MATCHES_MAX    = 10;
 
 // --- Hilfs‑Fetch mit Error‑Throw ---
 async function fetchJson(url, headers) {
@@ -25,7 +26,8 @@ function calculateCurrentFormStats(matches) {
     const recent = matches
         .slice()
         .sort((a,b)=> (new Date(b.CreatedAt).getTime() || 0) - (new Date(a.CreatedAt).getTime() || 0))
-        .slice(0, 15);
+        // Verwende die Konstante MATCHES_MAX für das Slice
+        .slice(0, MATCHES_MAX);
     const statsResult = calculateAverageStats(recent);
     return {
         stats: statsResult,
@@ -83,9 +85,10 @@ export default async function handler(req, res) {
         if (resp.cacheStatus !== 'hit') {
             let items = [];
             try {
-                const hist = await fetchJson(`${API_BASE_URL}/players/${playerId}/history?game=cs2&limit=15`, headers);
+                // Verwende die Konstante MATCHES_MAX im Limit-Parameter
+                const hist = await fetchJson(`${API_BASE_URL}/players/${playerId}/history?game=cs2&limit=${MATCHES_MAX}`, headers);
                 items = hist?.items || [];
-            } catch (histErr) { console.warn(`[API FD] History fetch failed for ${nickname}:`, histErr.message); items = []; }
+            } catch (histErr) { console.warn(`[API FD] History fetch failed for ${nickname}:`, histErr.message); items = []; } 
 
             let matchData = [];
             let skippedMatchCount = 0; // Zähler für übersprungene Matches
