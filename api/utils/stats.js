@@ -76,7 +76,7 @@ function calculateAverageStats(matches) {
         -0.5329 * dpr_avg +
         0.2372 * impact_original + // <<<< Original Impact hier verwendet
         0.0032 * adr_avg_simple +
-        0.2287 // Basis V5 (leicht erhöht)
+        0.1587 // Basis V5 (leicht erhöht)
     );
     const rating_final = Math.max(0, ratingRaw);
 
