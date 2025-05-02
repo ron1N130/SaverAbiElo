@@ -152,6 +152,24 @@ export default async function handler(req, res) {
                         const teamId = team.team_id;
                         const teamName = team.nickname;
                         // Team-Stats sammeln (unverändert)
+                        // Innerhalb der Spieler-Schleife, wo playerDetails gesetzt wird:
+                        if (!playerDetails[playerId]) {
+                            // DEBUG: Logge die Avatar-URL beim ersten Mal
+                            // console.log(`[API Uniliga DEBUG] Player <span class="math-inline">\{playerId\} \(</span>{player.nickname}) initial avatar URL: ${player.avatar}`);
+                            playerDetails[playerId] = { nickname: player.nickname, avatar: player.avatar || '/default_avatar.png' }; // Pfad anpassen falls nötig
+                        } else {
+                            // ... Update Nickname ...
+                            if (player.avatar && playerDetails[playerId].avatar !== player.avatar) {
+                                // DEBUG: Logge Avatar-Änderung
+                                // console.log(`[API Uniliga DEBUG] Player <span class="math-inline">\{playerId\} \(</span>{player.nickname}) updated avatar URL: ${player.avatar}`);
+                                playerDetails[playerId].avatar = player.avatar;
+                            }
+                            // Sicherstellen, dass ein Fallback existiert, falls der Avatar später entfernt wird
+                            if (!playerDetails[playerId].avatar) {
+                                playerDetails[playerId].avatar = '/default_avatar.png'; // Pfad anpassen falls nötig
+                            }
+                        }
+                        
                         if (!teamStats[teamId]) teamStats[teamId] = { name: teamName, wins: 0, losses: 0, matchesPlayed: 0, players: new Set() };
                         teamStats[teamId].name = teamName; // Immer Namen aktualisieren, falls er sich ändert
                         teamStats[teamId].matchesPlayed += 1 / team.players.length; // Teilen durch Spielerzahl für korrekte Zählung
