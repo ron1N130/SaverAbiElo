@@ -317,23 +317,23 @@ function displayUniligaData(data) {
 
     // --- Team-Tabelle erstellen ---
     let teamTableHtml = `
-        <h3>Team Rangliste</h3>
-        <div class="table-container">
-            <table class="stats-table team-ranking-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Team</th>
-                        <th>Spiele</th>
-                        <th>Pkt</th>  {/* NEUE SPALTE für Punkte */}
-                        <th>S</th>
-                        <th>N</th>
-                        <th>WR %</th>
-                        <th>Avg. R.</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
+    <h3>Team Rangliste</h3>
+    <div class="table-container">
+        <table class="stats-table team-ranking-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Team</th>
+                    <th>Spiele</th>
+                    <th>Pkt</th>
+                    <th>S</th>
+                    <th>N</th>
+                    <th>WR %</th>
+                    <th>Avg. R.</th>
+                </tr>
+            </thead>
+            <tbody>
+`;
 
     if (data.teams.length > 0) {
         // Sortiere Teams: Primär nach Punkten (absteigend), sekundär nach Avg. Rating (absteigend)
@@ -360,6 +360,7 @@ function displayUniligaData(data) {
 
             // Korrigierter HTML-Block (ohne die {/* ... */} Kommentare)
             teamTableHtml += `
+                 <tr data-team-id="<span class="math-inline">\{team\.id\}"\>
                 <tr data-team-id="${team.id}">
                     <td>${index + 1}</td>
                     <td class="player-cell team-cell">
