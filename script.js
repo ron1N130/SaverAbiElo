@@ -392,6 +392,16 @@ function displayUniligaData(data) {
     uniligaDataArea.innerHTML = teamTableHtml + playerTableHtml + lastUpdatedHtml;
     console.log("Uniliga tables rendered.");
 }
+
+function getTeamWinrateClass(winRate) {
+    const val = parseFloat(winRate);
+    if (isNaN(val)) return ''; // Keine Klasse, wenn keine Zahl
+    const cfg = thresholds.winRate;
+    if (val >= cfg.good) return 'text-good';
+    if (val >= cfg.okay) return 'text-okay';
+    return 'text-bad';
+}
+
 // -------------------------------------------------------------
 // Umschaltlogik für Ansichten
 // -------------------------------------------------------------
