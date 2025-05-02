@@ -10,7 +10,7 @@ const thresholds = {
     adr: { bad: 65, okay: 70, good: 85, max: 120 },
     kpr: { bad: 0.5, okay: 0.6, good: 0.8, max: 1.2 },
     impact: { bad: 0.8, okay: 1.0, good: 1.2, max: 1.8 }, // Bleibt intern für Berechnung
-    elo: { bad: 1800, okay: 2000, good: 2900, max: 3500 },
+    elo: { bad: 1800, okay: 2000, good: 2900, max: 4000 },
     hsp: { bad: 15, okay: 35, good: 44, max: 60 },
     winRate: { bad: 40, okay: 50, good: 60, max: 100 }
 };
