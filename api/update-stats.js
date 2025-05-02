@@ -32,7 +32,7 @@ if (REDIS_URL) {
     try {
         redis = new Redis(REDIS_URL, {
             lazyConnect: true,          // Beibehalten!
-            connectTimeout: 15000,      // Evtl. leicht reduzieren (z.B. 15s)?
+            connectTimeout: 10000,      // 10s
             maxRetriesPerRequest: 2,    // 3 ist ok, 2 reicht vielleicht auch
             showFriendlyErrorStack: true // Hilfreich für Debugging
         });
