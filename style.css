@@ -4,7 +4,7 @@
    :root {
     /* Farbschema */
     --bg-gradient-start: #1f1f29;
-    --bg-gradient-end: #2a2a3d;
+    --bg-gradient-end: #292937;
     --bg-color: #1e1e24;
     --card-bg-rgb: 38, 38, 46;
     --glass-bg: rgba(255, 255, 255, 0.04);
@@ -23,7 +23,7 @@
     --bar-bg: #404050; /* Hintergrund der leeren Bar */
     --button-bg: #3a3a4a;
     --button-hover-bg: #4a4a5a;
-    --button-active-bg: #212121;
+    --button-active-bg: #292937;
     --button-active-text: #cd891b;
 
     /* Rahmen & Schatten */
