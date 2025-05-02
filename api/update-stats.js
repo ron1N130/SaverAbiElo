@@ -1,5 +1,6 @@
-// api/update-stats.js
+// api/update-stats.js – Stateful Cron Job (Komplett & Bereinigt)
 // -------------------------------------------------
+// ◼ Verarbeitet Spieler in Batches, um Timeout zu vermeiden
 // ◼ Prüft Timestamp des letzten Matches vor Update
 // ◼ Nutzt zentrale Statistik-Berechnung aus /api/utils/stats.js
 // ◼ Cache Version 7
@@ -23,6 +24,10 @@ const API_BASE_URL = "https://open.faceit.com/data/v4";
 const MATCH_COUNT = 20; // Max. History für Berechnung holen (relevant für calculateCurrentFormStats)
 const API_DELAY = 600; // Verzögerung zwischen API-Aufrufen in ms
 const BATCH_SIZE = 5;  // Wie viele Match-Details gleichzeitig abrufen
+
+// --- NEUE KONSTANTEN für Stateful Cron ---
+const PLAYERS_PER_RUN = 3; // WIE VIELE SPIELER MAXIMAL PRO CRON-AUFRUF? (Anpassen!)
+const CRON_STATE_KEY = 'cron_update_stats_state'; // Redis Key für den Job-Status
 
 // --- Redis‑Initialisierung ---
 let redis = null;
@@ -95,138 +100,174 @@ function calculateCurrentFormStats(matches) {
 }
 
 
-// --- Cron Job Handler ---
+// --- Cron Job Handler (Stateful) ---
 export default async function handler(req, res) {
-    console.log(`[CRON][${new Date().toISOString()}] Starting optimized stats update job...`);
+    const startTime = Date.now();
+    console.log(`[CRON][${new Date().toISOString()}] Starting STATEFUL stats update job...`);
 
     // Spielerliste laden
     const jsonPath = path.resolve(process.cwd(), "players.json");
     let playerList = [];
     try {
-      playerList = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-      if (!Array.isArray(playerList)) throw new Error("players.json is not a valid JSON array.");
-      console.log(`[CRON] Loaded ${playerList.length} players.`);
+        playerList = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+        if (!Array.isArray(playerList) || playerList.length === 0) throw new Error("players.json is empty or not a valid JSON array.");
+        console.log(`[CRON] Loaded ${playerList.length} players.`);
     } catch (e) {
-       console.error("[CRON] Failed to read/parse players.json:", e.message);
-       // Wichtig: Hier abbrechen, da ohne Spielerliste nichts getan werden kann
-       return res.status(500).json({ success: 0, failed: 0, skipped: 0, error: "Could not read/parse player list." });
+        console.error("[CRON] Failed to read/parse players.json:", e.message);
+        return res.status(500).json({ message: "Could not read/parse player list." });
     }
 
-    if (!redis) {
-        console.warn("[CRON] Redis not available. Stats will not be cached or checked for updates. Full update for all players will be attempted.");
+    // --- Status aus Redis lesen ---
+    let lastProcessedIndex = -1;
+    let stateReadError = false;
+    if (redis) {
+        try {
+            const stateRaw = await redis.get(CRON_STATE_KEY);
+            if (stateRaw) {
+                const state = JSON.parse(stateRaw);
+                if (typeof state?.lastProcessedIndex === 'number') {
+                    lastProcessedIndex = state.lastProcessedIndex;
+                }
+            }
+            console.log(`[CRON] Read state: lastProcessedIndex = ${lastProcessedIndex}`);
+        } catch (e) {
+            console.error(`[CRON] Failed to read or parse state from Redis key '${CRON_STATE_KEY}':`, e.message);
+            // Fehler ist nicht kritisch, wir fangen einfach vorne an und loggen Warnung
+            lastProcessedIndex = -1;
+            stateReadError = true; // Merken, dass Lesen fehlschlug
+        }
+    } else {
+        console.warn("[CRON] Redis not available. Cannot read state. Starting from index 0.");
+        lastProcessedIndex = -1;
     }
 
     let success = 0;
     let failed = 0;
-    let skipped = 0; // Zähler für übersprungene (aktuell) Spieler
+    let skipped = 0;
+    let processedInThisRun = 0;
+    let lastIndexProcessedInThisRun = -1; // Merken, bis wohin wir *in diesem Lauf* kamen
 
-    // Schleife über alle Spieler
-    for (const nickname of playerList) {
-        console.log(`[CRON] Processing player: ${nickname}`);
-        let playerNeedsUpdate = true; // Standard: Update nötig
-        let lastKnownMatchTimestamp = null; // Timestamp aus Redis
-        let latestMatchTimestamp = null;    // Timestamp des neuesten Matches von Faceit API
-        let playerId = null;                // Spieler-ID
-        let existingData = null;            // Daten aus Redis
+    const startIndex = (lastProcessedIndex + 1); // Berechne Startindex (kein Modulo hier nötig, da wir nur einen Teil bearbeiten)
+    // Stelle sicher, dass der Startindex nicht außerhalb der Liste liegt
+    if (startIndex >= playerList.length) {
+        console.log("[CRON] Last run finished the list. Starting from index 0 again.");
+        lastProcessedIndex = -1; // Setze zurück, damit der nächste Lauf von vorne beginnt
+         // Speichere den zurückgesetzten Zustand sofort, falls dieser Lauf nichts tut
+         if (redis && !stateReadError) {
+             try {
+                 await redis.set(CRON_STATE_KEY, JSON.stringify({ lastProcessedIndex: -1 }));
+             } catch (e) { console.error(`[CRON] Failed to save reset state to Redis:`, e.message); }
+         }
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        console.log(`[CRON][${new Date().toISOString()}] Job finished immediately in ${duration}ms as list was completed previously.`);
+        return res.status(200).json({ message: "Cron job cycle completed in previous run. Starting new cycle next time.", success: 0, failed: 0, skipped: 0, processedThisRun: 0, durationMs: duration });
+    }
+
+    console.log(`[CRON] Starting processing from index ${startIndex}. Max players this run: ${PLAYERS_PER_RUN}.`);
+
+    // Schleife über einen Teil der Spielerliste
+    for (let i = startIndex; i < playerList.length; i++) {
+        // Aktuellen Index merken
+        lastIndexProcessedInThisRun = i;
+        const nickname = playerList[i];
+
+        // Abbruchbedingung: Genug Spieler für diesen Lauf verarbeitet?
+        if (processedInThisRun >= PLAYERS_PER_RUN) {
+            console.log(`[CRON] Reached processing limit (${PLAYERS_PER_RUN}). Stopping loop.`);
+            // Wichtig: Den Index des *vorherigen* Spielers als letzten merken
+            lastIndexProcessedInThisRun = i - 1;
+            break;
+        }
+
+        console.log(`[CRON] [${processedInThisRun + 1}/${PLAYERS_PER_RUN}] Processing player at index ${i}: ${nickname}`);
+
+        // Variablen für diesen Spieler zurücksetzen
+        let playerNeedsUpdate = true;
+        let currentLastKnownTimestamp = null; // Renamed to avoid conflict
+        let latestMatchTimestamp = null;
+        let playerId = null;
+        let existingData = null;
 
         try {
-            // Schritt a) Spieler-ID holen
+            // a) Spieler-Details holen
             const details = await fetchFaceitApi(`/players?nickname=${encodeURIComponent(nickname)}`);
             playerId = details?.player_id;
             if (!playerId) {
                 console.warn(`[CRON] Could not find player_id for ${nickname}. Skipping.`);
                 failed++;
-                continue; // Nächster Spieler
+                processedInThisRun++; // Zählen als verarbeitet für Batch-Fortschritt
+                continue; // Nächster Spieler in der Schleife
             }
 
-            // Schritt b) Letzten bekannten Stand aus Redis holen
+            // b) Letzten Stand aus Redis lesen
             if (redis) {
                 const cacheKey = `player_stats:${playerId}`;
                 try {
                     const raw = await redis.get(cacheKey);
                     if (raw) {
                         existingData = JSON.parse(raw);
-                        // Prüfe Version und ob Timestamp vorhanden ist
                         if (existingData?.version === CACHE_VERSION && typeof existingData?.lastMatchTimestamp === 'number') {
-                            lastKnownMatchTimestamp = existingData.lastMatchTimestamp;
+                            currentLastKnownTimestamp = existingData.lastMatchTimestamp;
                         } else {
                             console.log(`[CRON] Cache data for ${nickname} (ID: ${playerId}) is old version or missing timestamp. Forcing update.`);
-                            lastKnownMatchTimestamp = null; // Update erzwingen
+                            currentLastKnownTimestamp = null;
                         }
                     }
                 } catch (redisError) {
                     console.error(`[CRON] Failed Redis GET for ${nickname} (ID: ${playerId}): ${redisError.message}. Assuming update needed.`);
-                    // Bei Lesefehler Caching für diesen Request überspringen, aber Update trotzdem versuchen
-                    lastKnownMatchTimestamp = null;
-                    // redis = null; // Optional: Redis komplett deaktivieren bei Fehler? Eher nicht.
+                    currentLastKnownTimestamp = null;
                 }
             } else {
-                lastKnownMatchTimestamp = null; // Kein Redis -> Update immer nötig
+                currentLastKnownTimestamp = null;
             }
 
-            // Schritt c) Nur das *letzte* Match aus der History holen
+            // c) Letztes Match holen
             const latestHistory = await fetchFaceitApi(`/players/${playerId}/history?game=cs2&limit=1`);
 
-            // Schritt d) Zeitstempel vergleichen
+            // d) Zeitstempel vergleichen
             if (latestHistory?.items?.[0]?.started_at) {
-                latestMatchTimestamp = latestHistory.items[0].started_at; // Unix Timestamp in Sekunden
-
-                // Wenn Redis verfügbar ist UND wir einen alten Zeitstempel haben UND der neueste Zeitstempel nicht neuer ist
-                if (redis && lastKnownMatchTimestamp !== null && latestMatchTimestamp <= lastKnownMatchTimestamp) {
+                latestMatchTimestamp = latestHistory.items[0].started_at;
+                if (redis && currentLastKnownTimestamp !== null && latestMatchTimestamp <= currentLastKnownTimestamp) {
                     console.log(`[CRON] Player ${nickname} (ID: ${playerId}) is up-to-date (Last match timestamp: ${latestMatchTimestamp}). Skipping full update.`);
                     playerNeedsUpdate = false;
                     skipped++;
                 } else {
-                     // Update ist nötig (entweder neueres Match, kein alter Timestamp, oder kein Redis)
-                     console.log(`[CRON] Player ${nickname} (ID: ${playerId}) needs update. Newest match ts: ${latestMatchTimestamp}. Last known ts: ${lastKnownMatchTimestamp ?? 'None'}.`);
+                    console.log(`[CRON] Player ${nickname} (ID: ${playerId}) needs update. Newest match ts: ${latestMatchTimestamp}. Last known ts: ${currentLastKnownTimestamp ?? 'None'}.`);
                 }
             } else {
-                // Keine History für den Spieler gefunden
                 console.log(`[CRON] No history found for ${nickname} (ID: ${playerId}). Skipping update.`);
                 playerNeedsUpdate = false;
-                // Skipped nur zählen, wenn es auch keine alten Daten gab (also wirklich nichts zu tun)
-                if (!existingData) {
-                    skipped++;
-                } else {
-                    // Hatte alte Daten, aber jetzt keine History? Sollte nicht passieren, aber wir zählen es nicht als Fehler.
-                    skipped++;
-                }
+                skipped++; // Zählen als übersprungen, da nichts zu tun
             }
 
-            // Schritt e) Nur wenn Update nötig ist: Volle Verarbeitung
+            // e) Volles Update, wenn nötig
             if (playerNeedsUpdate) {
                 console.log(`[CRON] Fetching full history (${MATCH_COUNT} matches) and details for ${nickname}...`);
-                // Volle Historie holen
                 const history = await fetchFaceitApi(`/players/${playerId}/history?game=cs2&limit=${MATCH_COUNT}`);
-                // Prüfen, ob History Daten enthält (könnte theoretisch leer sein, obwohl limit=1 eins fand)
                 if (!history || !Array.isArray(history.items) || history.items.length === 0) {
-                     console.warn(`[CRON] No full history found for ${nickname} (ID: ${playerId}) during update attempt, although latest match was found. Skipping.`);
-                     failed++; // Zählt als Fehler, da Update nicht durchgeführt werden konnte
-                     continue;
-                 }
+                    console.warn(`[CRON] No full history found for ${nickname} (ID: ${playerId}) during update attempt, although latest match may have been found. Skipping.`);
+                    failed++;
+                    processedInThisRun++; // Zählen für Batch-Fortschritt
+                    continue;
+                }
 
                 // Match-Details in Batches holen
                 const matchesForCalc = [];
-                for (let i = 0; i < history.items.length; i += BATCH_SIZE) {
-                    const batchItems = history.items.slice(i, i + BATCH_SIZE);
+                for (let batchStartIndex = 0; batchStartIndex < history.items.length; batchStartIndex += BATCH_SIZE) {
+                    const batchItems = history.items.slice(batchStartIndex, batchStartIndex + BATCH_SIZE);
                     const batchPromises = batchItems.map(async (h) => {
-                         try {
+                        try {
                             const statsData = await fetchFaceitApi(`/matches/${h.match_id}/stats`);
-                            if (!statsData?.rounds?.[0]?.teams) return null; // Keine Rundendaten
-
+                            if (!statsData?.rounds?.[0]?.teams) return null;
                             const roundStats = statsData.rounds[0].round_stats;
                             const winningTeamId = roundStats?.["Winner"];
                             const matchRounds = parseInt(roundStats?.["Rounds"], 10);
-
-                            // Rundenanzahl prüfen
                             if (isNaN(matchRounds) || matchRounds <= 0) {
                                 console.warn(`[CRON] Invalid rounds (${roundStats?.["Rounds"]}) for match ${h.match_id}, skipping detail fetch.`);
                                 return null;
                             }
-
-                            // Eigenen Spieler im Match finden
-                            let playerTeamData = null;
-                            let playerStatsData = null;
+                            let playerTeamData = null, playerStatsData = null;
                             for (const team of statsData.rounds[0].teams) {
                                 const player = team.players?.find((p) => p.player_id === playerId);
                                 if (player) {
@@ -235,72 +276,52 @@ export default async function handler(req, res) {
                                     break;
                                 }
                             }
-
-                            // Prüfen ob Spieler & Stats gefunden wurden
                             if (!playerTeamData || !playerStatsData) return null;
-
-                            // Statistiken extrahieren und zurückgeben
                             return {
-                                Kills: +(playerStatsData["Kills"] ?? 0),
-                                Deaths: +(playerStatsData["Deaths"] ?? 0),
-                                Assists: +(playerStatsData["Assists"] ?? 0),
-                                Headshots: +(playerStatsData["Headshots"] ?? 0),
-                                "K/R Ratio": +(playerStatsData["K/R Ratio"] ?? 0), // Nicht direkt verwendet von calculateAverageStats
+                                Kills: +(playerStatsData["Kills"] ?? 0), Deaths: +(playerStatsData["Deaths"] ?? 0),
+                                Assists: +(playerStatsData["Assists"] ?? 0), Headshots: +(playerStatsData["Headshots"] ?? 0),
+                                "K/R Ratio": +(playerStatsData["K/R Ratio"] ?? 0),
                                 ADR: +(playerStatsData["ADR"] ?? playerStatsData["Average Damage per Round"] ?? 0),
-                                Rounds: matchRounds,
-                                Win: winningTeamId ? (playerTeamData.team_id === winningTeamId ? 1 : 0) : 0, // 0 wenn kein Gewinner
-                                CreatedAt: h.started_at, // Unix Timestamp für Sortierung in calculateCurrentFormStats
+                                Rounds: matchRounds, Win: winningTeamId ? (playerTeamData.team_id === winningTeamId ? 1 : 0) : 0,
+                                CreatedAt: h.started_at,
                             };
                         } catch (matchErr) {
-                             console.warn(`[CRON] Failed fetch/process match detail ${h.match_id} for ${nickname}: ${matchErr.message}`);
-                             return null; // Bei Fehler dieses Match überspringen
+                            console.warn(`[CRON] Failed fetch/process match detail ${h.match_id} for ${nickname}: ${matchErr.message}`);
+                            return null;
                         }
                     });
-                    // Auf Batch warten und gültige Ergebnisse sammeln
                     const batchResults = (await Promise.all(batchPromises)).filter(Boolean);
                     matchesForCalc.push(...batchResults);
-                } // Ende Batch-Schleife
+                } // Ende Batch-Schleife für Match-Details
 
-                // Prüfen, ob überhaupt gültige Match-Details geholt werden konnten
                 if (matchesForCalc.length === 0) {
                     console.warn(`[CRON] No valid match details could be fetched for ${nickname} (ID: ${playerId}) during update attempt. Skipping calculation.`);
                     failed++;
+                    processedInThisRun++; // Zählen für Batch-Fortschritt
                     continue;
                 }
 
-                // Schritt f) Stats berechnen (Letzte 10 aus den geholten Details)
+                // f) Stats berechnen (Letzte 10 aus den geholten Details)
                 const { stats, matchesCount } = calculateCurrentFormStats(matchesForCalc);
                 if (!stats) {
                     console.warn(`[CRON] Stats calculation returned null for ${nickname} (ID: ${playerId}). Skipping save.`);
                     failed++;
+                    processedInThisRun++; // Zählen für Batch-Fortschritt
                     continue;
                 }
 
-                // Schritt g) Daten für Redis vorbereiten
-                // Nimm den Timestamp des absolut neuesten Matches aus der vollen History (items[0])
-                // Fallback auf den Timestamp aus der limit=1 Abfrage, falls history leer war (sollte nicht passieren wegen Check oben)
+                // g) Daten für Redis vorbereiten
                 const newestMatchTimestampInHistory = history.items[0]?.started_at ?? latestMatchTimestamp;
-
                 const dataToStore = {
                     version: CACHE_VERSION,
-                    calculatedRating: stats.rating,
-                    kd: stats.kd,
-                    adr: stats.adr,
-                    winRate: stats.winRate,
-                    hsPercent: stats.hsp,
-                    kast: stats.kast,
-                    impact: stats.impact,
-                    matchesConsidered: matchesCount, // Anzahl Matches für Form-Berechnung (max 10)
-                    lastUpdated: new Date().toISOString(),
-                    // Zusätzliche Stats
-                    kpr: stats.kpr,
-                    dpr: stats.dpr,
-                    apr: stats.apr ?? 0,
-                    // Wichtig: Zeitstempel des neuesten Matches speichern
-                    lastMatchTimestamp: newestMatchTimestampInHistory
+                    calculatedRating: stats.rating, kd: stats.kd, adr: stats.adr,
+                    winRate: stats.winRate, hsPercent: stats.hsp, kast: stats.kast,
+                    impact: stats.impact, matchesConsidered: matchesCount,
+                    lastUpdated: new Date().toISOString(), kpr: stats.kpr, dpr: stats.dpr,
+                    apr: stats.apr ?? 0, lastMatchTimestamp: newestMatchTimestampInHistory
                 };
 
-                // Schritt h) In Redis speichern
+                // h) In Redis speichern
                 if (redis) {
                     const cacheKey = `player_stats:${playerId}`;
                     try {
@@ -310,27 +331,59 @@ export default async function handler(req, res) {
                     } catch (redisError) {
                         console.error(`[CRON] Failed Redis SET for ${nickname} (ID: ${playerId}): ${redisError.message}.`);
                         failed++;
-                        // redis = null; // Optional: Redis für Rest deaktivieren bei Schreibfehler? Eher nicht.
                     }
                 } else {
-                    // Zählen als Erfolg, da Berechnung/Fetch geklappt hat, nur Caching nicht
-                    success++;
+                    success++; // Zählen als Erfolg, da Berechnung ok, nur Caching nicht
                 }
             } // Ende if(playerNeedsUpdate)
 
+             // Zählen, dass dieser Spieler-Slot im Batch abgearbeitet wurde (egal ob success, fail oder skip)
+            processedInThisRun++;
+
         } catch (e) {
             // Allgemeiner Fehler bei der Verarbeitung dieses Spielers
-            console.error(`[CRON] Processing failed unexpectedly for ${nickname} (PlayerID: ${playerId ?? 'unknown'}):`, e);
+            console.error(`[CRON] Processing failed unexpectedly for ${nickname} (PlayerID: ${playerId ?? 'unknown'}) at index ${i}:`, e);
             failed++;
+            processedInThisRun++; // Auch fehlgeschlagene als "verarbeitet" zählen für den Batch-Fortschritt
         }
-    } // Ende der Spieler-Schleife (for...of playerList)
+    } // Ende der Spieler-Schleife (for i...)
 
-    console.log(`[CRON][${new Date().toISOString()}] Job finished. Success: ${success}, Failed: ${failed}, Skipped (Up-to-date): ${skipped}`);
-    // Sende Antwort zurück an Vercel Cron
+    // --- Neuen Status in Redis speichern ---
+    // Speichere den Index des LETZTEN Spielers, der in dieser Runde GESTARTET wurde.
+    // Wenn die Schleife vorzeitig wegen PLAYERS_PER_RUN abbrach, ist dies `lastIndexProcessedInThisRun`.
+    // Wenn die Schleife normal durchlief bis zum Ende der Liste, setzen wir auf -1 für den Neustart.
+    let finalIndexToStore = lastIndexProcessedInThisRun;
+    if (lastIndexProcessedInThisRun === playerList.length - 1) {
+        finalIndexToStore = -1; // Liste komplett durchlaufen
+        console.log("[CRON] Finished processing the entire player list in this run or previous runs.");
+    }
+
+    if (redis && !stateReadError) { // Nur speichern, wenn Redis verfügbar ist und Lesen des alten Zustands ok war
+         const newState = JSON.stringify({ lastProcessedIndex: finalIndexToStore });
+        try {
+            await redis.set(CRON_STATE_KEY, newState);
+            console.log(`[CRON] Successfully saved state: lastProcessedIndex = ${finalIndexToStore}`);
+        } catch (e) {
+            console.error(`[CRON] Failed to save state to Redis key '${CRON_STATE_KEY}':`, e.message);
+        }
+    } else if (!redis) {
+         console.warn("[CRON] Could not save state because Redis is unavailable.");
+    } else if (stateReadError) {
+         console.warn("[CRON] Could not save state because reading the initial state failed.");
+    }
+
+
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.log(`[CRON][${new Date().toISOString()}] Job finished in ${duration}ms. Success: ${success}, Failed: ${failed}, Skipped: ${skipped}, Processed this run: ${processedInThisRun}`);
+
     res.status(200).json({
-        message: `Cron job finished. Updated: ${success}, Failed: ${failed}, Skipped: ${skipped}`,
+        message: `Cron job finished. Processed batch ending at index ${lastIndexProcessedInThisRun}. Updated: ${success}, Failed: ${failed}, Skipped: ${skipped}`,
         success,
         failed,
-        skipped
+        skipped,
+        processedThisRun: processedInThisRun,
+        lastIndexProcessed: lastIndexProcessedInThisRun,
+        durationMs: duration
     });
 }
