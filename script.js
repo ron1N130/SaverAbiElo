@@ -43,11 +43,12 @@ async function loadTeamIconMap() {
     try {
         console.log("Fetching /uniliga_teams.json...");
         const response = await fetch('/uniliga_teams.json'); // Pfad wie von dir angegeben
+        console.log("[LOG] uniliga_teams.json fetch status:", response.status); // LOG Status
         if (!response.ok) {
             throw new Error(`Fehler beim Laden der Team-Icons (${response.status})`);
         }
         const teamsData = await response.json();
-        console.log("uniliga_teams.json loaded:", teamsData);
+        console.log("[LOG] uniliga_teams.json raw data:", teamsData); // LOG Rohdaten
 
         // Erstelle das Mapping: { "TeamName": "icon.png", ... }
         teamIconMap = teamsData.reduce((map, team) => {
@@ -56,13 +57,10 @@ async function loadTeamIconMap() {
             }
             return map;
         }, {});
-        console.log("Team icon map created:", teamIconMap);
+        console.log("[LOG] Team icon map created:", teamIconMap); // LOG Ergebnis Map
 
     } catch (err) {
         console.error("Fehler beim Laden oder Verarbeiten von uniliga_teams.json:", err);
-        // Optional: Fehler im UI anzeigen oder Standard-Icons verwenden
-        // errorMessageUniliga.textContent = `Fehler: Team-Icons konnten nicht geladen werden (${err.message})`;
-        // errorMessageUniliga.style.display = 'block';
         teamIconMap = {}; // Sicherstellen, dass die Map leer ist bei Fehler
     }
 }
@@ -234,13 +232,10 @@ function handlePlayerListClick(e) {
 // Funktionen für die Uniliga-Ansicht
 // -------------------------------------------------------------
 
-// let uniligaDataLoaded = false; // Entfernt oder auskommentiert, da Logik angepasst
 let currentUniligaData = null;
 
 async function loadUniligaView() {
     console.log("loadUniligaView called");
-    // Entferne die Prüfung auf uniligaDataLoaded, um sicherzustellen, dass Icon Map ggf. geladen wird
-    // if (uniligaDataLoaded) { ... }
 
     if (!loadingIndicatorUniliga || !errorMessageUniliga || !uniligaDataArea) {
         console.error("FEHLER: Benötigte Elemente für Uniliga View fehlen!");
@@ -262,7 +257,7 @@ async function loadUniligaView() {
             fetch('/api/uniliga-stats'), // Dein API-Aufruf
             loadTeamIconMap()           // Lade die Icon Map (stellt sicher, dass sie vor display verfügbar ist)
         ]);
-        console.log("Uniliga API response status:", apiResponse.status);
+        console.log("[LOG] Uniliga API response status:", apiResponse.status);
 
         if (!apiResponse.ok) {
             let errorMsg = `Fehler beim Laden der Uniliga-Daten (${apiResponse.status})`;
@@ -274,15 +269,18 @@ async function loadUniligaView() {
         }
 
         const data = await apiResponse.json();
-        console.log("Uniliga data received:", data);
+        // LOG der kompletten API Daten (kann sehr groß sein!)
+        // Besser gezielt loggen, was gebraucht wird, z.B. data.teams
+        console.log("[LOG] Uniliga API data received (teams):", JSON.stringify(data.teams, null, 2));
+        console.log("[LOG] Uniliga API data received (players):", JSON.stringify(data.players, null, 2));
+
 
         if (!data || !data.teams || !data.players) {
             throw new Error("Ungültiges Datenformat von der API empfangen.");
         }
 
         currentUniligaData = data; // Daten speichern
-        // uniligaDataLoaded = true; // Flag setzen, falls doch noch benötigt
-
+        console.log("[LOG] Final teamIconMap before display:", teamIconMap); // LOG Icon Map vor Anzeige
         displayUniligaData(currentUniligaData); // Anzeige-Funktion aufrufen
 
     } catch (err) {
@@ -292,7 +290,6 @@ async function loadUniligaView() {
             errorMessageUniliga.style.display = 'block';
         }
         uniligaDataArea.innerHTML = '<p>Daten konnten nicht geladen werden.</p>'; // Fallback-Inhalt
-        // uniligaDataLoaded = false; // Bei Fehler zurücksetzen
         currentUniligaData = null;
 
     } finally {
@@ -328,6 +325,7 @@ function displayUniligaData(data) {
                         <th>#</th>
                         <th>Team</th>
                         <th>Spiele</th>
+                        <th>Pkt</th>  {/* NEUE SPALTE für Punkte */}
                         <th>S</th>
                         <th>N</th>
                         <th>WR %</th>
@@ -338,23 +336,29 @@ function displayUniligaData(data) {
     `;
 
     if (data.teams.length > 0) {
-        // Sortiere Teams nach Winrate (höchste zuerst), dann nach Avg. Rating
+        // Sortiere Teams: Primär nach Punkten (absteigend), sekundär nach Avg. Rating (absteigend)
+        // WICHTIG: Geht davon aus, dass 'team.points' von der API kommt!
         const sortedTeams = [...data.teams].sort((a, b) => {
-            const wrDiff = (b.winRate ?? 0) - (a.winRate ?? 0);
-            if (wrDiff !== 0) return wrDiff;
+            const pointsDiff = (b.points ?? -1) - (a.points ?? -1); // Primär nach Punkten sortieren (-1 für fehlende Werte)
+            if (pointsDiff !== 0) return pointsDiff;
+            // Sekundäre Sortierung bei Punktgleichheit (z.B. nach Rating)
             return (b.avgRating ?? 0) - (a.avgRating ?? 0);
         });
 
         sortedTeams.forEach((team, index) => {
-            // Finde das Icon für das aktuelle Team
             const teamName = team.name || 'Unbekanntes Team';
+            console.log(`[LOG] Processing team: Name='${team.name}', FallbackName='${teamName}', Points='${team.points}'`); // LOG Teamname & Punkte
+
             const iconFilename = teamIconMap[teamName]; // Suche im Mapping
+            console.log(`[LOG] Icon lookup for '${teamName}': Found='${iconFilename}'`); // LOG Icon-Suche
+
             const iconPath = iconFilename
                              ? `/uniliga_icons/${iconFilename}` // Pfad zum Icon
                              : 'default_team_icon.png'; // Fallback-Icon (lege diese Datei an!)
             const altText = iconFilename ? `Logo ${teamName}` : 'Standard Team Icon';
+            console.log(`[LOG] Generated icon path: '${iconPath}'`); // LOG Icon Pfad
 
-            // KORRIGIERTER HTML-Block (ohne die {/* ... */} Kommentare)
+            // Korrigierter HTML-Block (ohne die {/* ... */} Kommentare)
             teamTableHtml += `
                 <tr data-team-id="${team.id}">
                     <td>${index + 1}</td>
@@ -363,6 +367,7 @@ function displayUniligaData(data) {
                         <span>${teamName}</span>
                     </td>
                     <td>${team.matchesPlayed ?? '0'}</td>
+                    <td>${team.points ?? '0'}</td> {/* NEUE ZELLE für Punkte */}
                     <td>${team.wins ?? '0'}</td>
                     <td>${team.losses ?? '0'}</td>
                     <td class="${getTeamWinrateClass(team.winRate)}">${safe(team.winRate, 1)}</td>
@@ -371,7 +376,7 @@ function displayUniligaData(data) {
             `;
         });
     } else {
-        teamTableHtml += `<tr><td colspan="7">Keine Teamdaten verfügbar.</td></tr>`;
+        teamTableHtml += `<tr><td colspan="8">Keine Teamdaten verfügbar.</td></tr>`; // Colspan auf 8 erhöht
     }
 
     teamTableHtml += `
@@ -472,17 +477,13 @@ function switchView(viewToShow) {
     if (viewToShow === 'uniliga') {
         loadUniligaView(); // Lädt Uniliga Daten und Icon Map
     } else if (viewToShow === 'saverabi') {
-        // Optional: Hier könnte man prüfen, ob SaverAbi Daten schon geladen sind,
-        // aber aktuell lädt `loadSaverAbiView` immer neu, wenn es aufgerufen wird.
-        // loadSaverAbiView(); // Wird bereits in DOMContentLoaded für den Start aufgerufen
-        // Wenn man zwischen Views wechselt, muss man ggf. die Detailkarte neu verstecken/anzeigen
-        if(detailCardContainer && mainContentArea && mainContentArea.classList.contains('detail-visible')){
-             // Hier könnte man die Detailkarte anzeigen, wenn ein Spieler ausgewählt war
-             // oder sie standardmäßig ausblenden
-             // detailCardContainer.style.display = 'block'; // Beispiel: Wieder anzeigen
-        } else if (detailCardContainer) {
+        // Wenn man zwischen Views wechselt, Detailkarte ausblenden
+         if (detailCardContainer) {
              detailCardContainer.style.display = 'none';
+             if(mainContentArea) mainContentArea.classList.remove('detail-visible');
         }
+        // Optional: Wenn SaverAbi-Daten gecached werden sollen, hier Logik hinzufügen
+        // loadSaverAbiView(); // Wird aktuell nur beim ersten Laden ausgeführt
     }
 }
 
@@ -493,7 +494,6 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("DOMContentLoaded event fired.");
     cacheDOMElements();
     if (toggleButtons) {
-        // Korrekte Version ohne Duplikate
         toggleButtons.forEach(button => {
             button.addEventListener('click', (event) => {
                 const view = event.currentTarget.dataset.view; // currentTarget ist sicherer
