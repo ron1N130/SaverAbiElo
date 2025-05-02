@@ -385,7 +385,7 @@ ol#player-list li::before {
     top: 0;
     bottom: 0;
     width: 3px; /* Breite der Linie */
-    background-color: rgba(255, 255, 255, 0.1); /* Helle, dezente Linie */
+    background-color: rgba(255, 255, 255, 0.849); /* Helle, dezente Linie */
     z-index: 1; /* Über dem Hintergrund, unter der farbigen Bar */
 }
 .player-card-hltv .stat-progress-container::before { left: 33.333%; }
