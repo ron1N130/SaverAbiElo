@@ -11,7 +11,7 @@ import path from "path";
 import { calculateAverageStats } from './utils/stats.js'; // Pfad prüfen!
 
 // --- Cache Version ---
-const CACHE_VERSION = 7;
+const CACHE_VERSION = 10;
 
 // --- Helpers ---
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
