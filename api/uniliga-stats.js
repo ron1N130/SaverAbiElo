@@ -94,76 +94,158 @@ export default async function handler(req, res) {
             const batchPromises = batchMatchIds.map(async (matchId) => {
                 try {
                     const stats = await fetchFaceitApi(`/matches/${matchId}/stats`);
-                    const rounds = stats?.rounds; // Array der Karten
+                    const rounds = stats?.rounds;
                     const roundsFound = rounds?.length ?? 0;
 
                     if (roundsFound === 0 || !Array.isArray(rounds)) { skippedMatchCount++; return null; }
                     processedMatchCount++;
 
-                    // --- Punkteberechnung für die Begegnung ---
-                    let teamId1 = null, teamId2 = null;
-                    let team1MapWins = 0, team2MapWins = 0;
-                    let teamIdsValidForPoints = false;
-                    if (rounds[0]?.teams?.length === 2) {
-                        teamId1 = rounds[0].teams[0]?.team_id;
-                        teamId2 = rounds[0].teams[1]?.team_id;
-                        if (teamId1 && teamId2) teamIdsValidForPoints = true;
-                    }
-                    if (teamIdsValidForPoints) {
-                        for (const roundDataForPoints of rounds) {
-                            const winnerMap = roundDataForPoints?.round_stats?.["Winner"];
-                            if (winnerMap === teamId1) team1MapWins++; else if (winnerMap === teamId2) team2MapWins++;
-                        }
-                        let pointsTeam1 = 0, pointsTeam2 = 0;
-                        if (team1MapWins > team2MapWins) { pointsTeam1 = 2; pointsTeam2 = 0; }
-                        else if (team2MapWins > team1MapWins) { pointsTeam1 = 0; pointsTeam2 = 2; }
-                        else { pointsTeam1 = 1; pointsTeam2 = 1; } // Unentschieden bei 1-1 oder 0-0
-
-                        if (!teamStats[teamId1]) teamStats[teamId1] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() };
-                        if (!teamStats[teamId2]) teamStats[teamId2] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() };
-                        teamStats[teamId1].points = (teamStats[teamId1].points || 0) + pointsTeam1;
-                        teamStats[teamId2].points = (teamStats[teamId2].points || 0) + pointsTeam2;
-                    } else { console.warn(`[API Uniliga Punkte WARN] Match ${matchId}: Teams f. Punkte nicht identifiziert.`); }
+                    // --- Punkteberechnung (bleibt wie vorher) ---
+                    let teamId1 = null, teamId2 = null; let team1MapWins = 0, team2MapWins = 0; let teamIdsValidForPoints = false;
+                    if (rounds[0]?.teams?.length === 2) { teamId1 = rounds[0].teams[0]?.team_id; teamId2 = rounds[0].teams[1]?.team_id; if (teamId1 && teamId2) teamIdsValidForPoints = true; }
+                    if (teamIdsValidForPoints) { for (const roundDataForPoints of rounds) { const winnerMap = roundDataForPoints?.round_stats?.["Winner"]; if (winnerMap === teamId1) team1MapWins++; else if (winnerMap === teamId2) team2MapWins++; } let pointsTeam1 = 0, pointsTeam2 = 0; if (team1MapWins > team2MapWins) { pointsTeam1 = 2; pointsTeam2 = 0; } else if (team2MapWins > team1MapWins) { pointsTeam1 = 0; pointsTeam2 = 2; } else { pointsTeam1 = 1; pointsTeam2 = 1; } if (!teamStats[teamId1]) teamStats[teamId1] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() }; if (!teamStats[teamId2]) teamStats[teamId2] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() }; teamStats[teamId1].points = (teamStats[teamId1].points || 0) + pointsTeam1; teamStats[teamId2].points = (teamStats[teamId2].points || 0) + pointsTeam2; }
+                    else { console.warn(`[API Uniliga Punkte WARN] Match ${matchId}: Teams f. Punkte nicht identifiziert.`); }
                     // --- Ende Punkteberechnung ---
 
+
                     // --- Verarbeitung der einzelnen Karten für Stats ---
-                    for (const roundData of rounds) { // <<<< Hier ist die Schleife über ALLE Karten
-                        if (!roundData?.teams || roundData.teams.length === 0) { continue; }
+                    for (const roundData of rounds) {
+                        const currentMapIndex = rounds.indexOf(roundData); // 0 oder 1
+                        if (!roundData?.teams || roundData.teams.length === 0) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}: No team data.`); continue; }
                         const winningTeamIdMap = roundData.round_stats?.["Winner"];
                         const mapRoundsPlayed = parseInt(roundData.round_stats?.["Rounds"], 10);
-                        if (isNaN(mapRoundsPlayed) || mapRoundsPlayed <= 0) { continue; }
+                        if (isNaN(mapRoundsPlayed) || mapRoundsPlayed <= 0) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}: Invalid rounds (${mapRoundsPlayed}).`); continue; }
                         processedMapCount++;
 
                         for (const team of roundData.teams) {
                             const teamId = team.team_id;
+                            if (!teamId) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}: Found team with no team_id.`); continue; } // Team ohne ID überspringen
                             const localTeamInfo = teamInfoMap[teamId];
                             let finalTeamName;
-                            if (teamStats[teamId] && teamStats[teamId].name !== "TBD") { finalTeamName = teamStats[teamId].name; }
-                            else if (localTeamInfo) { finalTeamName = localTeamInfo.name; }
-                            else { finalTeamName = `Unbekanntes Team (ID: ${teamId.substring(0, 8)}...)`; }
+                            if (teamStats[teamId] && teamStats[teamId].name !== "TBD") { finalTeamName = teamStats[teamId].name; } else if (localTeamInfo) { finalTeamName = localTeamInfo.name; } else { finalTeamName = `Unbekanntes Team (ID: ${teamId.substring(0, 8)}...)`; }
 
-                            if (!teamStats[teamId]) { teamStats[teamId] = { name: finalTeamName, mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() }; }
-                             else { teamStats[teamId].name = finalTeamName; } // Namen ggf. nachträglich setzen
+                            // Initialisiere oder aktualisiere teamStats sicher
+                            if (!teamStats[teamId]) { teamStats[teamId] = { name: finalTeamName, mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: (teamIdsValidForPoints && (teamId === teamId1 || teamId === teamId2)) ? (teamStats[teamId]?.points || 0) : 0, players: new Set() }; } // Punkte aus Berechnung übernehmen, falls vorhanden
+                            else { teamStats[teamId].name = finalTeamName; teamStats[teamId].points = teamStats[teamId].points || 0; /* Stelle sicher, dass Punkte nicht verloren gehen */ }
 
+                            // Zähle Karten-Statistiken
                             teamStats[teamId].mapsPlayed += 1 / roundData.teams.length;
                             const isWinnerThisMap = teamId === winningTeamIdMap;
                             if (winningTeamIdMap) { if (isWinnerThisMap) teamStats[teamId].mapWins += 1 / roundData.teams.length; else teamStats[teamId].mapLosses += 1 / roundData.teams.length; }
 
+                            // *** DEBUG LOG FÜR TEAM STATS UPDATE ***
+                            // console.log(`[API DEBUG TEAM] Match ${matchId}, Map ${currentMapIndex + 1}, Team ${teamId} (${finalTeamName}): mapsPlayed=${teamStats[teamId].mapsPlayed}, mapWins=${teamStats[teamId].mapWins}, points=${teamStats[teamId].points}`);
+
                             for (const player of team.players) {
-                               const playerId = player.player_id; const playerStats = player.player_stats;
-                               if (!playerStats || Object.keys(playerStats).length === 0) { continue; }
-                               if (!playerDetails[playerId]) playerDetails[playerId] = { nickname: player.nickname, avatar: player.avatar || 'default_avatar.png' };
+                               const playerId = player.player_id;
+                               if (!playerId) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}, Team ${teamId}: Found player with no player_id.`); continue; } // Spieler ohne ID überspringen
+                               const playerStats = player.player_stats;
+                               if (!playerStats || Object.keys(playerStats).length === 0) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}, Player ${playerId}: No player_stats.`); continue; }
+
+                               // Initialisiere Spielerdetails sicher
+                               if (!playerDetails[playerId]) playerDetails[playerId] = { nickname: player.nickname || '?', avatar: player.avatar || 'default_avatar.png' };
+
+                               // Füge Spieler zum Team-Set hinzu
                                teamStats[teamId].players.add(playerId);
+
+                               // Initialisiere Spieler-Match-Stats-Array sicher
                                if (!playerMatchStats[playerId]) playerMatchStats[playerId] = [];
-                               playerMatchStats[playerId].push({ // Stats von DIESER KARTE hinzufügen
+
+                               // Erstelle das Stat-Objekt für diese Karte
+                               const mapStatData = {
                                     Kills: +(playerStats["Kills"] ?? 0), Deaths: +(playerStats["Deaths"] ?? 0), Assists: +(playerStats["Assists"] ?? 0), Headshots: +(playerStats["Headshots"] ?? 0),
                                     KR_Ratio: +(playerStats["K/R Ratio"] ?? 0), KD_Ratio: +(playerStats["K/D Ratio"] ?? 0), ADR: +(playerStats["ADR"] ?? playerStats["Average Damage per Round"] ?? 0),
-                                    Rounds: mapRoundsPlayed, Win: winningTeamIdMap ? (isWinnerThisMap ? 1 : 0) : 0, MatchId: matchId, MapNumber: rounds.indexOf(roundData) + 1
-                               });
-                            } // Ende Spieler
+                                    Rounds: mapRoundsPlayed, Win: winningTeamIdMap ? (isWinnerThisMap ? 1 : 0) : 0, MatchId: matchId, MapNumber: currentMapIndex + 1
+                               };
+
+                               // *** DEBUG LOG FÜR SPIELER STATS PUSH ***
+                               // console.log(`[API DEBUG PLAYER] Match ${matchId}, Map ${currentMapIndex + 1}, Player ${playerId}: Pushing stats. Kills=${mapStatData.Kills}, Rounds=${mapStatData.Rounds}`);
+
+                               // Füge die Karten-Stats zum Array des Spielers hinzu
+                               playerMatchStats[playerId].push(mapStatData);
+
+                           } // Ende Spieler
                         } // Ende Team (pro Karte)
-                    } // Ende Runden/Karten-Schleife <<<< Diese Schleife ist entscheidend
-                    return true;
+                    } // Ende Runden/Karten-Schleife
+                    return true; // Match-ID erfolgreich verarbeitet
+                } catch (matchError) { console.error(`[API Uniliga ERROR] Processing Match ${matchId}: ${matchError.message}`); skippedMatchCount++; return null; }
+            }); // Ende batchPromises.mapconst batchPromises = batchMatchIds.map(async (matchId) => {
+                try {
+                    const stats = await fetchFaceitApi(`/matches/${matchId}/stats`);
+                    const rounds = stats?.rounds;
+                    const roundsFound = rounds?.length ?? 0;
+
+                    if (roundsFound === 0 || !Array.isArray(rounds)) { skippedMatchCount++; return null; }
+                    processedMatchCount++;
+
+                    // --- Punkteberechnung (bleibt wie vorher) ---
+                    let teamId1 = null, teamId2 = null; let team1MapWins = 0, team2MapWins = 0; let teamIdsValidForPoints = false;
+                    if (rounds[0]?.teams?.length === 2) { teamId1 = rounds[0].teams[0]?.team_id; teamId2 = rounds[0].teams[1]?.team_id; if (teamId1 && teamId2) teamIdsValidForPoints = true; }
+                    if (teamIdsValidForPoints) { for (const roundDataForPoints of rounds) { const winnerMap = roundDataForPoints?.round_stats?.["Winner"]; if (winnerMap === teamId1) team1MapWins++; else if (winnerMap === teamId2) team2MapWins++; } let pointsTeam1 = 0, pointsTeam2 = 0; if (team1MapWins > team2MapWins) { pointsTeam1 = 2; pointsTeam2 = 0; } else if (team2MapWins > team1MapWins) { pointsTeam1 = 0; pointsTeam2 = 2; } else { pointsTeam1 = 1; pointsTeam2 = 1; } if (!teamStats[teamId1]) teamStats[teamId1] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() }; if (!teamStats[teamId2]) teamStats[teamId2] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() }; teamStats[teamId1].points = (teamStats[teamId1].points || 0) + pointsTeam1; teamStats[teamId2].points = (teamStats[teamId2].points || 0) + pointsTeam2; }
+                    else { console.warn(`[API Uniliga Punkte WARN] Match ${matchId}: Teams f. Punkte nicht identifiziert.`); }
+                    // --- Ende Punkteberechnung ---
+
+
+                    // --- Verarbeitung der einzelnen Karten für Stats ---
+                    for (const roundData of rounds) {
+                        const currentMapIndex = rounds.indexOf(roundData); // 0 oder 1
+                        if (!roundData?.teams || roundData.teams.length === 0) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}: No team data.`); continue; }
+                        const winningTeamIdMap = roundData.round_stats?.["Winner"];
+                        const mapRoundsPlayed = parseInt(roundData.round_stats?.["Rounds"], 10);
+                        if (isNaN(mapRoundsPlayed) || mapRoundsPlayed <= 0) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}: Invalid rounds (${mapRoundsPlayed}).`); continue; }
+                        processedMapCount++;
+
+                        for (const team of roundData.teams) {
+                            const teamId = team.team_id;
+                            if (!teamId) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}: Found team with no team_id.`); continue; } // Team ohne ID überspringen
+                            const localTeamInfo = teamInfoMap[teamId];
+                            let finalTeamName;
+                            if (teamStats[teamId] && teamStats[teamId].name !== "TBD") { finalTeamName = teamStats[teamId].name; } else if (localTeamInfo) { finalTeamName = localTeamInfo.name; } else { finalTeamName = `Unbekanntes Team (ID: ${teamId.substring(0, 8)}...)`; }
+
+                            // Initialisiere oder aktualisiere teamStats sicher
+                            if (!teamStats[teamId]) { teamStats[teamId] = { name: finalTeamName, mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: (teamIdsValidForPoints && (teamId === teamId1 || teamId === teamId2)) ? (teamStats[teamId]?.points || 0) : 0, players: new Set() }; } // Punkte aus Berechnung übernehmen, falls vorhanden
+                            else { teamStats[teamId].name = finalTeamName; teamStats[teamId].points = teamStats[teamId].points || 0; /* Stelle sicher, dass Punkte nicht verloren gehen */ }
+
+                            // Zähle Karten-Statistiken
+                            teamStats[teamId].mapsPlayed += 1 / roundData.teams.length;
+                            const isWinnerThisMap = teamId === winningTeamIdMap;
+                            if (winningTeamIdMap) { if (isWinnerThisMap) teamStats[teamId].mapWins += 1 / roundData.teams.length; else teamStats[teamId].mapLosses += 1 / roundData.teams.length; }
+
+                            // *** DEBUG LOG FÜR TEAM STATS UPDATE ***
+                            // console.log(`[API DEBUG TEAM] Match ${matchId}, Map ${currentMapIndex + 1}, Team ${teamId} (${finalTeamName}): mapsPlayed=${teamStats[teamId].mapsPlayed}, mapWins=${teamStats[teamId].mapWins}, points=${teamStats[teamId].points}`);
+
+                            for (const player of team.players) {
+                               const playerId = player.player_id;
+                               if (!playerId) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}, Team ${teamId}: Found player with no player_id.`); continue; } // Spieler ohne ID überspringen
+                               const playerStats = player.player_stats;
+                               if (!playerStats || Object.keys(playerStats).length === 0) { console.warn(`[API Uniliga WARN] Match ${matchId}, Map ${currentMapIndex + 1}, Player ${playerId}: No player_stats.`); continue; }
+
+                               // Initialisiere Spielerdetails sicher
+                               if (!playerDetails[playerId]) playerDetails[playerId] = { nickname: player.nickname || '?', avatar: player.avatar || 'default_avatar.png' };
+
+                               // Füge Spieler zum Team-Set hinzu
+                               teamStats[teamId].players.add(playerId);
+
+                               // Initialisiere Spieler-Match-Stats-Array sicher
+                               if (!playerMatchStats[playerId]) playerMatchStats[playerId] = [];
+
+                               // Erstelle das Stat-Objekt für diese Karte
+                               const mapStatData = {
+                                    Kills: +(playerStats["Kills"] ?? 0), Deaths: +(playerStats["Deaths"] ?? 0), Assists: +(playerStats["Assists"] ?? 0), Headshots: +(playerStats["Headshots"] ?? 0),
+                                    KR_Ratio: +(playerStats["K/R Ratio"] ?? 0), KD_Ratio: +(playerStats["K/D Ratio"] ?? 0), ADR: +(playerStats["ADR"] ?? playerStats["Average Damage per Round"] ?? 0),
+                                    Rounds: mapRoundsPlayed, Win: winningTeamIdMap ? (isWinnerThisMap ? 1 : 0) : 0, MatchId: matchId, MapNumber: currentMapIndex + 1
+                               };
+
+                               // *** DEBUG LOG FÜR SPIELER STATS PUSH ***
+                               // console.log(`[API DEBUG PLAYER] Match ${matchId}, Map ${currentMapIndex + 1}, Player ${playerId}: Pushing stats. Kills=${mapStatData.Kills}, Rounds=${mapStatData.Rounds}`);
+
+                               // Füge die Karten-Stats zum Array des Spielers hinzu
+                               playerMatchStats[playerId].push(mapStatData);
+
+                           } // Ende Spieler
+                        } // Ende Team (pro Karte)
+                    } // Ende Runden/Karten-Schleife
+                    return true; // Match-ID erfolgreich verarbeitet
                 } catch (matchError) { console.error(`[API Uniliga ERROR] Processing Match ${matchId}: ${matchError.message}`); skippedMatchCount++; return null; }
             }); // Ende batchPromises.map
             await Promise.all(batchPromises);
