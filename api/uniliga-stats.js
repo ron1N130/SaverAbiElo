@@ -177,10 +177,13 @@ export default async function handler(req, res) {
                     processedMatchCount++;
 
                     for (const team of roundData.teams) {
-                        const teamId = team.team_id; // Team-ID aus der API
-                        const apiTeamName = team.nickname; // Teamname aus der API (für Logs/Fallback)
-                        const localTeamInfo = teamInfoMap[teamId]; // Suche in der geladenen JSON-Map
-
+                        const teamId = team.team_id;
+                        const apiTeamName = team.nickname;
+                        console.log(`[BACKEND DEBUG] Processing Team ID: ${teamId}, API Name: ${apiTeamName}`);
+                        const localTeamInfo = teamInfoMap[teamId];
+                        console.log(`[BACKEND DEBUG] Lookup result for ${teamId}:`, localTeamInfo); // Ist das undefined?
+                        let finalTeamName = localTeamInfo ? localTeamInfo.name : (apiTeamName || `Team ID ${teamId}`);
+                        console.log(`[BACKEND DEBUG] Determined finalTeamName for ${teamId}: ${finalTeamName}`);
                         let finalTeamName;
                         if (localTeamInfo) {
                             finalTeamName = localTeamInfo.name; // Nutze den Namen aus deiner JSON
