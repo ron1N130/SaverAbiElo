@@ -1,0 +1,52 @@
+[
+  {
+    "name": "AIX",
+    "icon": "aix.png",
+    "team_id": "ca962ace-3165-43cd-bddb-ddeecd6a8a29"
+  },
+  {
+    "name": "MUC",
+    "icon": "muc.png",
+    "team_id": "c82a0c07-1df5-459c-b1ac-19c5b8b31232"
+  },
+  {
+    "name": "OSGG",
+    "icon": "osgg.png",
+    "team_id": "53535a12-d35d-4549-8ec9-67c2436a3cbc"
+  },
+  {
+    "name": "ECO",
+    "icon": "eco.png",
+    "team_id": "67f2f166-6006-4fe3-954f-48c77d372da0"
+  },
+  {
+    "name": "DG One",
+    "icon": "dg_one.png",
+    "team_id": "a1714e75-33cb-4b9f-8ee8-d4ecb12d1d0d"
+  },
+  {
+    "name": "Uni Bielefeld",
+    "icon": "uni_bielefeld.png",
+    "team_id": "6cc2b819-9873-4c01-899e-f0c15c5369f2" 
+  },
+  {
+    "name": "UED Wolves",
+    "icon": "ued_wolves.png",
+    "team_id": "4ba7238f-79f6-4629-a528-4a6c7a31bfa5"
+  },
+  {
+    "name": "FlensburgUnited",
+    "icon": "flensburgunited.png",
+    "team_id": "fad05fac-5ffc-4cfb-a5c6-309dec7316e2"
+  },
+  {
+    "name": "RheinSpeer",
+    "icon": "rheinspeer.png",
+    "team_id": "14b1b44b-cbe8-4e75-a7cb-51c3d83d780d"
+  },
+  {
+    "name": "RUB Serpents S",
+    "icon": "rub_serpents_s.png",
+    "team_id": "21db7105-6917-4659-841c-1346457ecae7"
+  }
+]

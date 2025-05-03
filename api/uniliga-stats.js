@@ -62,18 +62,17 @@ if (REDIS_URL) {
     } catch (e) { console.error("[Redis Uniliga] Initialization failed:", e); redis = null; }
 } else { console.warn("[Redis Uniliga] REDIS_URL not set. Caching disabled."); }
 
-// --- Lade Team-Informationen aus JSON ---
+// --- Lade Team-Informationen aus JSON (aus dem /api Ordner) ---
 let teamInfoMap = {};
 try {
-    // --- NEUER PFAD ---
-    // Ermittle den Pfad zum aktuellen Skript (__dirname Äquivalent für ES Module)
+    // --- NEUER PFAD (wenn Datei im selben Ordner /api liegt) ---
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    // Gehe eine Ebene hoch (..) und finde die JSON-Datei
-    const jsonPath = path.join(__dirname, '..', "uniliga_teams.json");
+    // Lade JSON aus demselben Verzeichnis wie dieses Skript
+    const jsonPath = path.join(__dirname, "uniliga_teams.json");
     // --- ENDE NEUER PFAD ---
 
-    console.log(`[API Uniliga] Attempting to load JSON from: ${jsonPath}`); // Logge den Pfad zum Debuggen
+    console.log(`[API Uniliga] Attempting to load JSON from: ${jsonPath}`); // Pfad-Log beibehalten
 
     const teamsData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
     teamsData.forEach(team => {
@@ -86,7 +85,6 @@ try {
     console.log(`[API Uniliga] Loaded ${Object.keys(teamInfoMap).length} teams with IDs from uniliga_teams.json`);
 } catch (e) {
     console.error("[API Uniliga] Failed to load or parse uniliga_teams.json:", e.message);
-    // Logge den Fehler detaillierter, falls Pfad falsch ist
     if (e.code === 'ENOENT') {
         console.error(`[API Uniliga] Error details: File not found at path resolved to: ${path.resolve(jsonPath)}`);
     }
@@ -96,6 +94,7 @@ try {
 
 // --- Haupt‑Handler ---
 export default async function handler(req, res) {
+    console.log(`[API Uniliga DEBUG] Handler invoked!`); // Zusätzlicher Log am Anfang des Handlers
     console.log(`[API Uniliga] Received request at ${new Date().toISOString()}`);
     const championshipId = UNILIGA_CHAMPIONSHIP_ID;
     const cacheKey = `uniliga_stats:${championshipId}`;
