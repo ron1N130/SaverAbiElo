@@ -40,9 +40,11 @@ async function loadTeamIconMap() {
     }
 
     try {
-        console.log("Fetching /uniliga_teams.json...");
-        const response = await fetch('/uniliga_teams.json'); // Pfad wie von dir angegeben
-        console.log("[LOG] uniliga_teams.json fetch status:", response.status); // LOG Status
+        console.log("Fetching /api/uniliga_teams.json..."); // Pfad im Log anpassen
+        // --- GEÄNDERTER PFAD ---
+        const response = await fetch('/api/uniliga_teams.json');
+        // --- ENDE GEÄNDERTER PFAD ---
+        console.log("[LOG] /api/uniliga_teams.json fetch status:", response.status); // Log anpassen
         if (!response.ok) {
             throw new Error(`Fehler beim Laden der Team-Icons (${response.status})`);
         }
