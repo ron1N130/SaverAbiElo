@@ -8,6 +8,7 @@
 import Redis from "ioredis";
 import { calculateAverageStats } from './utils/stats.js'; // Pfad prüfen!
 import fs from 'fs'; // Hinzugefügt für Dateizugriff
+import { fileURLToPath } from 'url';
 import path from 'path'; // Hinzugefügt für Pfadverwaltung
 
 // --- Konfiguration & Konstanten ---
@@ -64,11 +65,18 @@ if (REDIS_URL) {
 // --- Lade Team-Informationen aus JSON ---
 let teamInfoMap = {};
 try {
-    // Stelle sicher, dass der Pfad relativ zum Projekt-Root korrekt ist
-    const jsonPath = path.resolve(process.cwd(), "uniliga_teams.json");
+    // --- NEUER PFAD ---
+    // Ermittle den Pfad zum aktuellen Skript (__dirname Äquivalent für ES Module)
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    // Gehe eine Ebene hoch (..) und finde die JSON-Datei
+    const jsonPath = path.join(__dirname, '..', "uniliga_teams.json");
+    // --- ENDE NEUER PFAD ---
+
+    console.log(`[API Uniliga] Attempting to load JSON from: ${jsonPath}`); // Logge den Pfad zum Debuggen
+
     const teamsData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
     teamsData.forEach(team => {
-        // Verwende 'team_id' als Schlüssel, wie in deiner JSON-Datei
         if (team.team_id) {
             teamInfoMap[team.team_id] = { name: team.name, icon: team.icon };
         } else {
@@ -78,7 +86,11 @@ try {
     console.log(`[API Uniliga] Loaded ${Object.keys(teamInfoMap).length} teams with IDs from uniliga_teams.json`);
 } catch (e) {
     console.error("[API Uniliga] Failed to load or parse uniliga_teams.json:", e.message);
-    teamInfoMap = {}; // Leere Map als Fallback, um Fehler zu vermeiden
+    // Logge den Fehler detaillierter, falls Pfad falsch ist
+    if (e.code === 'ENOENT') {
+        console.error(`[API Uniliga] Error details: File not found at path resolved to: ${path.resolve(jsonPath)}`);
+    }
+    teamInfoMap = {}; // Leere Map als Fallback
 }
 
 
