@@ -66,7 +66,7 @@ function calculateAverageStats(matches) {
     const winRate = (totalWins / totalMatches) * 100; // Spieler-Winrate
 
     // *** ORIGINAL IMPACT BERECHNUNG (HLTV 1.0 Stil) ***
-    const impact_original = Math.max(0, 2.13 * kpr_avg + 0.42 * apr_avg - 0.5);
+    const impact_original = Math.max(0, 2.23 * kpr_avg + 0.3 * apr_avg - 0.41);
 
     // *** Rating Berechnung (mit original Impact und leicht erhöhter Basis) ***
     const ratingRaw = Math.max(
