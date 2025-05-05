@@ -416,7 +416,7 @@ function displayUniligaData(data) {
                         <th>Spieler</th>
                         <th>Spiele</th>
                         <th>Rating</th>
-                        <th>K/D</th>
+                        <th>IMPACT</th>
                         <th>ADR</th>
                         <th>KAST%</th>
                         <th>HS%</th>
@@ -437,7 +437,7 @@ function displayUniligaData(data) {
                 </td>
                 <td>${player.matchesPlayed ?? '0'}</td>
                 <td>${safe(player.rating, 2)}</td>
-                <td>${safe(player.kd, 2)}</td>
+                <td>${safe(player.impact -0.2, 2)}</td>
                 <td>${safe(player.adr, 1)}</td>
                 <td>${safe(player.kast, 1)}</td>
                 <td>${safe(player.hsp, 1)}</td>
