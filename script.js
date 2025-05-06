@@ -3,16 +3,16 @@
 // -------------------------------------------------------------
 const thresholds = {
     // Bereinigt - letzte Definition aus deinem Code übernommen
-    rating: { bad: 0.85, okay: 1.05, good: 1.2, max: 1.8 },
-    dpr: { bad: 0.75, okay: 0.7, good: 0.63, max: 1 }, // Niedriger ist besser (letzte Definition)
-    kast: { bad: 58, okay: 66, good: 75, max: 100 },
-    kd: { bad: 0.8, okay: 1.0, good: 1.2, max: 2.0 }, // KD wieder relevant für Anzeige (letzte Definition)
-    adr: { bad: 65, okay: 70, good: 85, max: 120 },
-    kpr: { bad: 0.5, okay: 0.6, good: 0.8, max: 1.2 },
-    impact: { bad: 0.8, okay: 1.1, good: 1.25, max: 1.8 }, // Bleibt intern für Berechnung (letzte Definition)
+    rating: { bad: 0.85, okay: 1.05, good: 1.2, great: 1.3, max: 1.8 },
+    dpr: { bad: 0.75, okay: 0.7, good: 0.63, great: 0.55, max: 1 }, // Niedriger ist besser (letzte Definition)
+    kast: { bad: 58, okay: 66, good: 75, great: 80, max: 100 },
+    kd: { bad: 0.8, okay: 1.0, good: 1.2, great: 1.4, max: 2.0 }, // KD wieder relevant für Anzeige (letzte Definition)
+    adr: { bad: 65, okay: 70, good: 85, great: 90, max: 120 },
+    kpr: { bad: 0.5, okay: 0.6, good: 0.8, great: 0.9, max: 1.2 },
+    impact: { bad: 0.8, okay: 1.1, good: 1.25, great: 1.35, max: 1.8 }, // Bleibt intern für Berechnung (letzte Definition)
     elo: { bad: 1800, okay: 2000, good: 2600, great: 2900, max: 4000 },
-    hsp: { bad: 15, okay: 35, good: 44, max: 60 },
-    winRate: { bad: 40, okay: 50, good: 60, max: 100 }
+    hsp: { bad: 15, okay: 35, good: 44, great: 0.55, max: 60 },
+    winRate: { bad: 40, okay: 50, good: 60, great: 70, max: 100 }
 };
 
 let teamIconMap = {}; // Speichert das Mapping von Teamnamen zu Icon-Dateinamen
@@ -211,12 +211,14 @@ function updateStatProgressBars(card, player) {
         let category = 0; let text = 'BAD'; let color = 'var(--bar-bad)'; let barLeft = '0%'; const barWidth = '33.333%'; let borderRadiusStyle = '0';
         if (val != null && !isNaN(val)) {
             if (stat === 'dpr') { // Lower DPR is better
-                if (val <= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
+                if (val <= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
+                else if (val <= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
                 else if (val <= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
                 else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
             }
             else { // Higher is better for other stats
-                if (val >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
+                if (val >= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
+                else if (val >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
                 else if (val >= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
                 else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
             }
