@@ -17,6 +17,7 @@ const API_BASE_URL   = "https://open.faceit.com/data/v4";
 const CACHE_VERSION = 13;
 const MATCHES_MAX    = 15; // Anzahl der zu berücksichtigenden Matches << HIER ANPASSEN FALLS NÖTIG
 const TARGET_MATCHES_COUNT = 15;
+const FETCH_BUFFER = 5;
 const CACHE_TTL_SECONDS = 24 * 60 * 60; // Cache-Ablaufzeit: 24 Stunden (als Fallback)
 
 // --- Hilfs‑Fetch mit Error‑Throw ---
