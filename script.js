@@ -165,7 +165,8 @@ function updateEloProgressBarForList(containerEl) {
     if (!bar) return;
     bar.style.width = pct + '%';
     let color = 'var(--bar-bad)';
-    if (val >= cfg.good) color = 'var(--bar-good)';
+    if (val >= cfg.great) color = 'var(--bar-great)';
+    else if (val >= cfg.good) color = 'var(--bar-good)';
     else if (val >= cfg.okay) color = 'var(--bar-okay)';
     bar.style.backgroundColor = color;
 }

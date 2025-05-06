@@ -9,7 +9,7 @@
     --card-bg-rgb: 38, 38, 46;
     --glass-bg: rgba(255, 255, 255, 0.04);
     --glass-border: rgba(255, 255, 255, 0.18);
-    --glass-blur: 20px;
+    --glass-blur: 40px;
 
     /* Textfarben */
     --text-primary: #e0e0e0;
