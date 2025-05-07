@@ -65,7 +65,7 @@ function calculateAverageStats(matches) {
     const kast_avg = totalKastPercentSum / totalMatches; // KAST % (Avg pro Match)
     const winRate = (totalWins / totalMatches) * 100; // Spieler-Winrate
 
-    // *** ORIGINAL IMPACT BERECHNUNG (HLTV 1.0 Stil) ***
+    // *** ORIGINAL IMPACT BERECHNUNG ***
     const impact_original = Math.max(0, 2.23 * kpr_avg + 0.3 * apr_avg - 0.41);
 
     // *** Rating Berechnung (mit original Impact und leicht erhöhter Basis) ***
