@@ -35,8 +35,8 @@
     /* Layout */
     --font: 'Roboto', sans-serif;
     --gap: 1.5rem;
-    --max-list: 1200px;
-    --max-card: 1200px;
+    --max-list: 1200px; /* Kann ggf. erhöht werden, falls die Liste alleine sehr breit sein soll */
+    --max-card: 1200px; /* Kann ggf. erhöht werden */
 }
 
 /* ==========================================================================
@@ -147,7 +147,8 @@ footer {
    ========================================================================== */
 main {
     flex: 1;
-    max-width: calc(var(--max-list) + var(--max-card) + var(--gap) * 2);
+    /* Max-Breite von main: Liste + Karte + 2 * Gap */
+    max-width: calc(var(--max-list) + var(--max-card) + var(--gap) * 2); /* Diese Breite kann ggf. erhöht werden, wenn Liste/Karte breiter werden */
     margin: 0 auto;
     padding: 0 var(--gap);
 }
@@ -157,9 +158,12 @@ main {
     gap: var(--gap);
     justify-content: center;
     align-items: flex-start;
+    /* Erlaube main-content-area, mehr Platz einzunehmen, wenn nötig */
+    width: 100%;
 }
 #main-content-area.detail-visible {
     justify-content: flex-start;
+    /* Anpassung der Breitenverteilung, wenn die Detailkarte sichtbar ist */
 }
 /* View Content Handling */
 .view-content {
@@ -179,7 +183,7 @@ main {
    Player List (SaverAbi View)
    ========================================================================== */
 #player-list-container {
-    margin: 0 auto;
+    margin: 0 auto; /* Behalte dies für die Zentrierung, wenn die Liste alleine ist */
     background: rgba(var(--card-bg-rgb), 0.75);
     backdrop-filter: blur(var(--glass-blur));
     border: var(--border);
@@ -187,24 +191,43 @@ main {
     box-shadow: var(--shadow);
     padding: var(--gap) 0;
     width: 100%;
-    max-width: var(--max-list);
+    max-width: var(--max-list); /* Diese Begrenzung kann die Breite beeinflussen */
     display: flex;
     flex-direction: column;
     max-height: calc(80vh - 4rem); /* Höhe begrenzen */
-    overflow: hidden; /* Container fix - kann evtl. entfernt werden, aber vorsichtig */
+    overflow: hidden; /* Container fix */
+
+    /* Flex-Eigenschaften, wenn die Detailkarte sichtbar ist - NEUE REGELN */
+    /* Diese Regeln überschreiben die allgemeinen für #player-list-container, wenn .detail-visible auf #main-content-area gesetzt ist */
 }
-#player-list-container h2 {
-    margin: 0 0 var(--gap);
-    padding: 0 var(--gap);
-    text-align: center;
-    color: var(--text-primary);
+
+/* Anpassung der Breitenverteilung, wenn die Detailkarte sichtbar ist */
+#main-content-area.detail-visible #player-list-container {
+    flex-basis: 450px; /* Startbreite für die Liste. Passe diesen Wert an, falls nötig */
+    flex-grow: 1; /* Erlaube der Liste zu wachsen, wenn Platz da ist */
+    flex-shrink: 1; /* Erlaube der Liste zu schrumpfen, falls nötig */
+    max-width: none; /* **WICHTIG:** Entferne die max-width Begrenzung, wenn Flexbox die Breite steuert */
+    width: auto; /* Lass Flexbox die Breite bestimmen */
 }
-#player-list-container h3 {
-    margin: 0 0 var(--gap);
-    padding: 0 var(--gap);
-    text-align: center;
-    color: var(--text-primary);
+
+#player-detail-card-container {
+     /* ... bestehende Stile ... */
+     width: 100%;
+     max-width: var(--max-card); /* Diese Begrenzung kann die Breite beeinflussen */
+
+     /* Flex-Eigenschaften, wenn die Detailkarte sichtbar ist - NEUE REGELN */
 }
+
+/* Anpassung der Breitenverteilung der Detailkarte, wenn sie sichtbar ist */
+#main-content-area.detail-visible #player-detail-card-container {
+    flex-basis: 350px; /* Startbreite für die Detailkarte. Passe diesen Wert an, falls nötig */
+    flex-grow: 1; /* Erlaube der Detailkarte zu wachsen */
+    flex-shrink: 1; /* Erlaube der Detailkarte zu schrumpfen */
+    max-width: none; /* **WICHTIG:** Entferne die max-width Begrenzung */
+    width: auto; /* Lass Flexbox die Breite bestimmen */
+}
+
+
 ol#player-list {
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -230,7 +253,7 @@ ol#player-list li {
     border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3);
     cursor: pointer;
     transition: background-color 0.2s;
-    width: 100%; /* Stellt sicher, dass li volle Breite nutzt */
+    width: 100%; /* Stellt sicher, dass li volle Breite des Containers nutzt */
 }
 ol#player-list li:last-child {
     border-bottom: none;
@@ -253,7 +276,7 @@ ol#player-list li::before {
     display: flex; /* Macht player-info zum Flex-Container */
     align-items: center; /* Vertikale Zentrierung innerhalb von player-info */
     gap: 1.8rem; /* Abstand zwischen Avatar, Name und Icon */
-    /* overflow: hidden; /* Diese Regel wurde entfernt, um Abschneiden zu vermeiden */
+    /* overflow: hidden; /* Diese Regel wurde entfernt */
     flex-grow: 1; /* Ermöglicht player-info zu wachsen */
     min-width: 0; /* Wichtig in Flexbox, um Überlaufen bei langen Inhalten zu verhindern */
 }
@@ -273,20 +296,21 @@ ol#player-list li::before {
     text-align: left;
     flex-grow: 1; /* Erlaubt dem Namen-Span zu wachsen */
     flex-shrink: 0; /* **WICHTIG:** Verhindert, dass der Name-Span schrumpft */
-    min-width: 0;   /* **WICHTIG:** Ermöglicht dem Namen-Span, basierend auf Inhalt kleiner zu werden, statt zu überlaufen, wenn flex-shrink: 0; gesetzt ist */
-    white-space: normal; /* **GEÄNDERT:** Erlaubt Zeilenumbrüche, falls nötig */
-    overflow: visible; /* **GEÄNDERT:** Verhindert das Verstecken von Text */
-    text-overflow: clip; /* **GEÄNDERT:** Verhindert das Hinzufügen von "..." */
+    min-width: 0;   /* **WICHTIG:** Ermöglicht dem Namen-Span, basierend auf Inhalt kleiner zu werden, statt zu überlaufen */
+    white-space: normal; /* Erlaubt Zeilenumbrüche, falls nötig */
+    overflow: visible; /* Verhindert das Verstecken von Text */
+    text-overflow: clip; /* Verhindert das Hinzufügen von "..." */
     overflow-wrap: break-word; /* Stellt sicher, dass sehr lange Wörter umbrechen */
     word-break: break-word;   /* Stellt sicher, dass Wörter umbrechen */
     /* margin-right: 8px; /* Füge Abstand zum Icon hinzu, falls gewünscht */
 }
 
+/* Anpassung der Club-Icon Grösse */
 .club-icon {
-    width: 20px; /* Passe die Grösse an (reduziert von 40px für kleinere Icons) */
-    height: 20px; /* Passe die Grösse an */
+    width: 80px; /* Passe die Grösse an */
+    height: 80px; /* Passe die Grösse an */
     margin-left: 8px; /* Abstand zwischen Spielername und Icon */
-    vertical-align: middle; /* Zentriert das Icon vertikal mit dem Text */
+    /* vertical-align: middle; /* Kann je nach Layout angepasst werden, Flexbox regelt dies oft besser */
     border-radius: 4px; /* Optionale Abrundung der Ecken */
     flex-shrink: 0; /* Verhindert Schrumpfen des Icons */
     /* Weitere Styling-Optionen je nach Bedarf */
@@ -327,10 +351,7 @@ ol#player-list li::before {
 
 /* ==========================================================================
    Detail Card (SaverAbi View - Drittel-Balken-Layout)
-   ========================================================================= */
-/* ... (Rest der Datei bleibt gleich) ... */
-
-
+   ========================================================================== */
 #player-detail-card-container {
     display: none; /* Wird von JS gesteuert */
     width: 100%;
