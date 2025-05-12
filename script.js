@@ -145,6 +145,7 @@ async function getPlayerData(nickname) {
         p.hsp = toNum(p.hsPercent); // hsPercent aus API wird zu hsp
         p.impact = toNum(p.impact);
 
+        
         // *** Berechne den "Geldwert" (bleibt für Sortierung erhalten) ***
         // Stelle sicher, dass Elo, Rating und Impact als Zahlen verfügbar sind
         if (p.sortElo !== null && typeof p.rating === 'number' && typeof p.impact === 'number') {
