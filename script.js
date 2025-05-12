@@ -145,7 +145,7 @@ async function getPlayerData(nickname) {
         p.hsp = toNum(p.hsPercent); // hsPercent aus API wird zu hsp
         p.impact = toNum(p.impact);
 
-        
+
         // *** Berechne den "Geldwert" (bleibt für Sortierung erhalten) ***
         // Stelle sicher, dass Elo, Rating und Impact als Zahlen verfügbar sind
         if (p.sortElo !== null && typeof p.rating === 'number' && typeof p.impact === 'number') {
@@ -234,8 +234,12 @@ function displayPlayerList(players) {
             // *** HTML Struktur für Listenelement angepasst (span um Wert und Progressbar entfernt) ***
             li.innerHTML = `
                 <span class='player-info'>
-                    <img src='${player.avatar || 'default_avatar.png'}' class='avatar' alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" />
-                    <span class='player-name'>${player.nickname}</span>
+                <img src='${player.avatar || 'default_avatar.png'}' class='avatar' alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" />
+                <span class='player-name'>${player.nickname}</span>
+                ${player.assignedClubIcon // Prüfe, ob ein Club-Icon zugewiesen wurde
+                    ? `<img src='/icons/${player.assignedClubIcon}' class='club-icon' alt="Club Icon" onerror="this.style.display='none';"/>` // Füge das Icon hinzu
+                    : '' // Nichts hinzufügen, wenn kein Icon zugewiesen ist
+                }
                 </span>
                 <div class='player-list-right'>
                     <span class='player-value'>${displayValue}</span>
@@ -250,6 +254,70 @@ function displayPlayerList(players) {
     console.log("[displayPlayerList] Rendering abgeschlossen.");
 }
 
+// -------------------------------------------------------------
+// Club Zuweisung für Bluelock Ranking
+// -------------------------------------------------------------
+
+// Definiere die verfügbaren Club-Icons und ihre Dateinamen
+// WICHTIG: Passe die Dateinamen hier an die tatsächlichen Namen deiner Icon-Dateien an
+const clubIconMap = {
+    "Royal Madrid": "royal_madrid.png", // Passe den Dateinamen an
+    "Bastard Munchen": "bastard_munchen.png", // Passe den Dateinamen an
+    "PXG": "pxg.png", // Beispiel für andere Clubs
+    "Ubers": "ubers.png", // Beispiel für andere Clubs
+    "Barcha": "barcha.png", // Beispiel für andere Clubs
+    "Manshine City": "manshine.png", // Beispiel für andere Clubs
+};
+
+// Liste der Clubs ausser Royal Madrid und Bastard Munchen
+const otherClubs = Object.keys(clubIconMap).filter(clubName =>
+    clubName !== "Royal Madrid" && clubName !== "Bastard Munchen"
+);
+
+/**
+ * Weist Spielern Clubs basierend auf ihrem Rang im sortierten Array zu.
+ * Speichert den Dateinamen des Club-Icons im Spielerobjekt.
+ * @param {Array<object>} players - Das sortierte Array von Spielerobjekten.
+ */
+function assignClubsToPlayers(players) {
+    console.log("Beginne Club Zuweisung...");
+    if (!players || players.length === 0) {
+        console.log("Keine Spieler für Club Zuweisung vorhanden.");
+        return;
+    }
+
+    players.forEach((player, index) => {
+        const rank = index + 1; // Rang beginnt bei 1
+        let assignedClubName = null; // Temporär den Club-Namen speichern
+
+        if (rank === 1) {
+            assignedClubName = "Royal Madrid";
+        } else if (rank >= 2 && rank <= 4) {
+            // Zufällige Zuweisung: Royal Madrid oder Bastard Munchen
+            const potentialClubs = ["Royal Madrid", "Bastard Munchen"];
+            assignedClubName = potentialClubs[Math.floor(Math.random() * potentialClubs.length)];
+        } else if (rank >= 5 && rank <= 12) {
+            // Zufällige Zuweisung eines anderen Clubs
+            if (otherClubs.length > 0) {
+                assignedClubName = otherClubs[Math.floor(Math.random() * otherClubs.length)];
+            } else {
+                console.warn(`Keine "otherClubs" definiert für Rang ${rank}. Spieler ${player.nickname} erhält kein Icon.`);
+                assignedClubName = null; // Kein Club, wenn keine anderen definiert sind
+            }
+        } else {
+            // Ränge ausserhalb von 1-12 erhalten keinen Club-Icon
+            assignedClubName = null;
+        }
+
+        // Speichere den Dateinamen des zugewiesenen Icons im Spielerobjekt
+        // Der Pfad zum Icon muss später beim Anzeigen hinzugefügt werden
+        player.assignedClubIcon = assignedClubName ? clubIconMap[assignedClubName] : null;
+
+        // Optional: Logge die Zuweisung
+        // console.log(`Rang ${rank}: ${player.nickname} -> ${assignedClubName || 'Kein Club'}`);
+    });
+     console.log("Club Zuweisung abgeschlossen.");
+}
 
 // updateEloProgressBarForList (unverändert)
 function updateEloProgressBarForList(containerEl) {
@@ -413,8 +481,12 @@ function sortAndDisplayPlayers() {
     let sortedPlayers;
     if (currentSortMode === 'elo') {
         sortedPlayers = sortPlayersByElo(allPlayersData);
+        // Hier löschen wir zugewiesene Icons, wenn zur Elo-Sortierung gewechselt wird
+        sortedPlayers.forEach(player => player.assignedClubIcon = null); // Füge diese Zeile ein
     } else { // 'worth'
         sortedPlayers = sortPlayersByWorth(allPlayersData);
+        // Rufe die Funktion zur Zuweisung der Clubs basierend auf dem Rang auf
+        assignClubsToPlayers(sortedPlayers); // Füge diese Zeile ein
     }
     console.log("Sorted player data for display:", sortedPlayers);
     displayPlayerList(sortedPlayers);

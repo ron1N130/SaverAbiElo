@@ -246,6 +246,14 @@ ol#player-list li::before {
     margin-right: 0.5rem;
     font-size: 0.9em;
 }
+.club-icon {
+    width: 20px; /* Passe die Grösse an */
+    height: 20px; /* Passe die Grösse an */
+    margin-left: 8px; /* Abstand zwischen Spielername und Icon */
+    vertical-align: middle; /* Zentriert das Icon vertikal mit dem Text */
+    border-radius: 4px; /* Optionale Abrundung der Ecken */
+    /* Weitere Styling-Optionen je nach Bedarf */
+}
 .player-info {
     display: flex;
     align-items: center;
@@ -260,6 +268,7 @@ ol#player-list li::before {
     object-fit: cover;
     border: 2px solid rgba(var(--card-bg-rgb), 0.3);
     flex-shrink: 0;
+    margin-right: 8px;
 }
 .player-info .player-name {
     font-weight: bold;
