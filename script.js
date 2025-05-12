@@ -142,7 +142,7 @@ async function getPlayerData(nickname) {
         // *** NEU: Berechne den "Geldwert" ***
         // Nur berechnen, wenn Elo und Rating gültige Zahlen sind
         if (p.sortElo !== null && p.rating !== null) {
-             p.worth = p.sortElo * p.rating;
+             p.worth = p.sortElo * p.rating *1000;
         } else {
              p.worth = null; // Kein Wert, wenn Daten fehlen
         }
@@ -258,7 +258,7 @@ function displayDetailCard(player) {
     const matchesText = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
     // const lastUpdatedText = player.lastUpdated ? ` | Stand: ${new Date(player.lastUpdated).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} Uhr` : '';
      // *** NEU: Wertanzeige in der Detailkarte ***
-    const worthDisplay = `<div class="stat-item worth-item"><div class="label">Wert</div><div class="value">${safeWorth(player.worth)}</div></div>`;
+    // const worthDisplay = `<div class="stat-item worth-item"><div class="label">Wert</div><div class="value">${safeWorth(player.worth)}</div></div>`;
 
 
     detailCardContainer.innerHTML = `
