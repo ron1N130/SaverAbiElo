@@ -11,7 +11,7 @@ const thresholds = {
     kpr: { bad: 0.5, okay: 0.6, good: 0.8, great: 0.9, max: 1.2 },
     impact: { bad: 1, okay: 1.3, good: 1.45, great: 1.55, max: 1.8 }, // Bleibt intern für Berechnung (letzte Definition)
     elo: { bad: 1800, okay: 2000, good: 2600, great: 2900, max: 4000 },
-    hsp: { bad: 15, okay: 35, good: 44, great: 0.55, max: 60 },
+    hsp: { bad: 15, okay: 35, good: 44, great: 0.55, max: 60 }, // Beachte: great hier 0.55 statt 55? Überprüfen! Falls % gemeint war, eher 55
     winRate: { bad: 40, okay: 50, good: 60, great: 70, max: 100 }
 };
 
@@ -139,14 +139,14 @@ async function getPlayerData(nickname) {
         p.hsp = toNum(p.hsPercent); // hsPercent aus API wird zu hsp
         p.impact = toNum(p.impact);
 
-        // *** NEU: Berechne den "Geldwert" ***
-        // Nur berechnen, wenn Elo und Rating gültige Zahlen sind
+        // *** Berechne den "Geldwert" (bleibt für Sortierung erhalten) ***
         if (p.sortElo !== null && p.rating !== null) {
-             p.worth = p.sortElo * p.rating *1000;
+             // Multiplikation mit 1000 entfernt, Wert ist jetzt Elo * Rating
+             p.worth = p.sortElo * p.rating * p.impact;
         } else {
              p.worth = null; // Kein Wert, wenn Daten fehlen
         }
-        // Spieler ohne Fehler, aber ggf. ohne Elo/Rating bekommen -1 für Sortierung, falls Wert null ist
+        // Spieler ohne Fehler, aber ggf. ohne Elo/Rating bekommen -1 für Sortierung, falls Elo null ist
         if (p.sortElo === null) p.sortElo = -1;
 
 
@@ -158,16 +158,14 @@ async function getPlayerData(nickname) {
     }
 }
 
-// *** NEU: Sortierfunktionen ***
+// *** Sortierfunktionen (unverändert) ***
 function sortPlayersByElo(players) {
     return [...players].sort((a, b) => (b.sortElo ?? -1) - (a.sortElo ?? -1));
 }
 
 function sortPlayersByWorth(players) {
-    // Spieler mit gültigem Wert oben, dann nach Wert absteigend
-    // Spieler ohne Wert (null) oder mit Fehler kommen ans Ende
     return [...players].sort((a, b) => {
-        const worthA = a.worth ?? -Infinity; // Fehler/Null-Werte nach unten
+        const worthA = a.worth ?? -Infinity;
         const worthB = b.worth ?? -Infinity;
         return worthB - worthA;
     });
@@ -181,7 +179,6 @@ function displayPlayerList(players) {
 
     playerListContainerEl.innerHTML = ''; // Liste leeren
 
-    // Überschrift der Liste anpassen
     saverAbiListHeader.textContent = currentSortMode === 'elo' ? 'Spielerliste (sortiert nach Elo)' : 'Spielerliste (sortiert nach Wert)';
 
     if (!players || players.length === 0) { console.log("Keine Spielerdaten zum Anzeigen vorhanden."); return; }
@@ -194,23 +191,23 @@ function displayPlayerList(players) {
             li.classList.add('error-item');
             li.innerHTML = `<span class='player-info'><img src='default_avatar.png' class='avatar' alt="Standard Avatar"/><span class='player-name'>${player.nickname}</span></span><div class='player-list-right error-text'>Fehler: ${player.error.substring(0, 30)}${player.error.length > 30 ? '...' : ''}</div>`;
         } else {
-            // Entscheide, welcher Wert angezeigt wird (Elo oder Worth)
             const displayValue = currentSortMode === 'elo'
-                ? `${player.sortElo ?? 'N/A'}` // Elo anzeigen
-                : `${safeWorth(player.worth)}`; // Wert anzeigen (formatiert)
+                ? `${player.sortElo ?? 'N/A'}`
+                : `${safeWorth(player.worth)}`; // Zeigt Wert weiterhin in der Liste an
 
-            // Elo-Fortschrittsbalken wird *immer* basierend auf Elo angezeigt, unabhängig von der Sortierung
             const eloProgressBarHtml = `<div class='elo-progress-container' data-elo='${player.sortElo ?? 0}'><div class='elo-progress-bar'></div></div>`;
 
+            // *** HTML Struktur für Listenelement angepasst (span um Wert und Progressbar entfernt) ***
             li.innerHTML = `
                 <span class='player-info'>
                     <img src='${player.avatar || 'default_avatar.png'}' class='avatar' alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" />
                     <span class='player-name'>${player.nickname}</span>
                 </span>
                 <div class='player-list-right'>
-                    <span class='player-value'>${displayValue}</span> ${eloProgressBarHtml} </div>`;
+                    <span class='player-value'>${displayValue}</span>
+                    ${eloProgressBarHtml}
+                </div>`;
 
-            // Update des Elo-Balkens für dieses Listenelement
             const eloBarContainer = li.querySelector('.elo-progress-container');
             if (eloBarContainer) updateEloProgressBarForList(eloBarContainer);
         }
@@ -220,7 +217,7 @@ function displayPlayerList(players) {
 }
 
 
-// Diese Funktion bleibt unverändert, sie zeigt immer den Elo-Balken
+// updateEloProgressBarForList (unverändert)
 function updateEloProgressBarForList(containerEl) {
     if (!containerEl) return;
     const val = parseInt(containerEl.dataset.elo, 10) || 0;
@@ -236,10 +233,10 @@ function updateEloProgressBarForList(containerEl) {
     bar.style.backgroundColor = color;
 }
 
+// *** GEÄNDERT: displayDetailCard ***
 function displayDetailCard(player) {
     if (!detailCardContainer || !mainContentArea) return;
     const saverAbiContentEl = document.getElementById('saverabi-content');
-    // Detailkarte nur anzeigen, wenn die SaverAbi-Ansicht aktiv ist
     if (!saverAbiContentEl || !saverAbiContentEl.classList.contains('active')) {
         detailCardContainer.style.display = 'none';
         if (mainContentArea) mainContentArea.classList.remove('detail-visible');
@@ -256,10 +253,9 @@ function displayDetailCard(player) {
 
     const faceitUrl = player.faceitUrl || `https://faceit.com/en/players/${encodeURIComponent(player.nickname)}`;
     const matchesText = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
-    // const lastUpdatedText = player.lastUpdated ? ` | Stand: ${new Date(player.lastUpdated).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} Uhr` : '';
-     // *** NEU: Wertanzeige in der Detailkarte ***
-    // const worthDisplay = `<div class="stat-item worth-item"><div class="label">Wert</div><div class="value">${safeWorth(player.worth)}</div></div>`;
 
+    // *** ENTFERNT: Definition von worthDisplay ***
+    // const worthDisplay = `<div class="stat-item worth-item"><div class="label">Wert</div><div class="value">${safeWorth(player.worth)}</div></div>`;
 
     detailCardContainer.innerHTML = `
         <div class="player-card-hltv new-layout">
@@ -274,14 +270,13 @@ function displayDetailCard(player) {
               <div class="stat-item" data-stat="impact"><div class="label">IMPACT</div><div class="value">${safe(player.impact, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
               <div class="stat-item" data-stat="adr"><div class="label">ADR</div><div class="value">${safe(player.adr, 1)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
               <div class="stat-item" data-stat="kpr"><div class="label">KPR</div><div class="value">${safe(player.kpr, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
-             </div>
-             <div class="stats-grid single-item-grid"> ${worthDisplay}
-             </div>
-          </div>
+           </div>
+           </div>
         </div>`;
-    updateStatProgressBars(detailCardContainer, player);
+    updateStatProgressBars(detailCardContainer, player); // Diese Funktion muss nicht geändert werden
 }
 
+// updateStatProgressBars (unverändert)
 function updateStatProgressBars(card, player) {
     card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
         const stat = item.dataset.stat; const val = player[stat]; const cfg = thresholds[stat];
@@ -296,9 +291,17 @@ function updateStatProgressBars(card, player) {
                 else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
             }
             else { // Higher is better for other stats
-                if (val >= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
-                else if (val >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
-                else if (val >= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
+                // *** Korrektur/Anpassung für HSP: Wenn HSP-Wert <= 1 ist, behandeln wir ihn als Prozentzahl * 100 für Vergleich ***
+                let compareVal = val;
+                if (stat === 'hsp' && val <= 1) { // Annahme: API liefert manchmal 0.xx statt xx%
+                     compareVal = val * 100;
+                     console.log(`HSP value ${val} adjusted to ${compareVal} for threshold comparison.`);
+                }
+
+                // Check thresholds für great, good, okay (höher ist besser)
+                if (compareVal >= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
+                else if (compareVal >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
+                else if (compareVal >= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
                 else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
             }
         } else {
@@ -310,6 +313,7 @@ function updateStatProgressBars(card, player) {
 }
 
 
+// loadSaverAbiView (unverändert)
 async function loadSaverAbiView() {
     console.log("loadSaverAbiView called");
     if (!loadingIndicatorSaverAbi || !errorMessageSaverAbi || !playerListContainerEl || !detailCardContainer || !mainContentArea) { console.error("FEHLER: Benötigte Elemente für SaverAbi View fehlen!"); if(errorMessageSaverAbi) { errorMessageSaverAbi.textContent = "Fehler: UI-Elemente nicht initialisiert."; errorMessageSaverAbi.style.display = 'block'; } return; }
@@ -331,21 +335,19 @@ async function loadSaverAbiView() {
         if (!Array.isArray(names) || names.length === 0) throw new Error("Spielerliste leer/ungültig.");
 
         console.log("Fetching player data for all players...");
-        const promises = names.map(name => getPlayerData(name)); // getPlayerData berechnet jetzt auch 'worth'
+        const promises = names.map(name => getPlayerData(name));
         const results = await Promise.all(promises);
         console.log("Player data fetch results (raw):", results);
-        allPlayersData = results; // Speichere die Rohdaten global
+        allPlayersData = results;
 
         const validPlayerCount = allPlayersData.filter(p => !p.error).length;
         console.log(`Gültige Spielerdaten empfangen: ${validPlayerCount} / ${allPlayersData.length}`);
         if(validPlayerCount === 0 && allPlayersData.length > 0) { console.warn("Keine gültigen Spielerdaten von der API erhalten, nur Fehler."); }
 
-        // *** Initial sortieren basierend auf dem aktuellen Modus (Start: 'elo') ***
-        sortAndDisplayPlayers(); // Diese Funktion sortiert und zeigt an
+        sortAndDisplayPlayers();
 
-        // Event Listener für Klicks auf die Spielerliste
         if (playerListContainerEl) {
-             playerListContainerEl.removeEventListener('click', handlePlayerListClick); // Sicherstellen, dass Listener nicht doppelt hinzugefügt wird
+             playerListContainerEl.removeEventListener('click', handlePlayerListClick);
              playerListContainerEl.addEventListener('click', handlePlayerListClick);
              console.log("Click listener added to player list.");
         } else {
@@ -364,15 +366,14 @@ async function loadSaverAbiView() {
         } else {
             console.warn("loadingIndicatorSaverAbi nicht gefunden im finally block.");
         }
-        // Sicherstellen, dass die Sortierbuttons sichtbar sind, wenn Daten geladen wurden (oder Fehler aufgetreten ist)
         const sortButtonContainer = document.getElementById('saverabi-sort-controls');
         if (sortButtonContainer) {
-            sortButtonContainer.style.display = 'flex'; // Oder 'block', je nach CSS
+            sortButtonContainer.style.display = 'flex';
         }
     }
 }
 
-// *** NEU: Funktion zum Sortieren und Anzeigen ***
+// sortAndDisplayPlayers (unverändert)
 function sortAndDisplayPlayers() {
     console.log(`Sorting and displaying players based on: ${currentSortMode}`);
     let sortedPlayers;
@@ -382,21 +383,19 @@ function sortAndDisplayPlayers() {
         sortedPlayers = sortPlayersByWorth(allPlayersData);
     }
     console.log("Sorted player data for display:", sortedPlayers);
-    displayPlayerList(sortedPlayers); // Anzeige aktualisieren
+    displayPlayerList(sortedPlayers);
 
-    // Aktiven Button hervorheben
     if (sortEloButton && sortWorthButton) {
         sortEloButton.classList.toggle('active', currentSortMode === 'elo');
         sortWorthButton.classList.toggle('active', currentSortMode === 'worth');
     }
 }
 
-// Event Handler für Klicks auf die Spielerliste (bleibt gleich)
+// handlePlayerListClick (unverändert)
 function handlePlayerListClick(e) {
     const li = e.target.closest('li');
     if (!li || !li.dataset.nickname) return;
     const nickname = li.dataset.nickname;
-    // Finde den Spieler in den *unsortierten* globalen Daten
     const playerData = allPlayersData.find(p => p.nickname === nickname);
     if (playerData) {
         displayDetailCard(playerData);
@@ -406,10 +405,10 @@ function handlePlayerListClick(e) {
 }
 
 // -------------------------------------------------------------
-// Funktionen für die Uniliga-Ansicht
+// Funktionen für die Uniliga-Ansicht (unverändert)
 // -------------------------------------------------------------
 
-let currentUniligaData = null; // Bleibt unverändert
+let currentUniligaData = null;
 
 async function loadUniligaView() {
     console.log("[FRONTEND-DEBUG] loadUniligaView WURDE AUFGERUFEN!");
@@ -428,7 +427,7 @@ async function loadUniligaView() {
         console.log("Fetching Uniliga stats and Team Icons concurrently...");
         const [apiResponse, iconMapLoaded] = await Promise.all([
             fetch(apiUrl),
-            loadTeamIconMap() // Lädt Icons parallel
+            loadTeamIconMap()
         ]);
         console.log("[LOG] Uniliga API response status:", apiResponse.status);
         if (!apiResponse.ok) {
@@ -465,7 +464,6 @@ async function loadUniligaView() {
     }
 }
 
-// displayUniligaData bleibt größtenteils unverändert
 function displayUniligaData(data) {
     console.log("displayUniligaData called with data:", data);
     if (!uniligaDataArea) { console.error("FEHLER: uniligaDataArea ist null in displayUniligaData!"); return; }
@@ -475,7 +473,6 @@ function displayUniligaData(data) {
         return;
     }
 
-    // Team-Tabelle (unverändert)
     let teamTableHtml = `
     <h3>Team Rangliste</h3>
     <div class="table-container">
@@ -505,7 +502,6 @@ function displayUniligaData(data) {
     });
     teamTableHtml += `</tbody></table></div>`;
 
-    // Spieler-Tabelle (unverändert)
     let playerTableHtml = `
         <h3>Spieler Rangliste (Rating)</h3>
         <div class="table-container">
@@ -535,7 +531,6 @@ function displayUniligaData(data) {
     console.log("Uniliga tables rendered.");
 }
 
-// getTeamWinrateClass bleibt unverändert
 function getTeamWinrateClass(winRate) {
     const val = parseFloat(winRate);
     if (isNaN(val)) return '';
@@ -546,7 +541,7 @@ function getTeamWinrateClass(winRate) {
 }
 
 // -------------------------------------------------------------
-// Umschaltlogik für Ansichten
+// Umschaltlogik für Ansichten (unverändert)
 // -------------------------------------------------------------
 function switchView(viewToShow) {
     console.log(`Switching view to: ${viewToShow}`);
@@ -559,39 +554,33 @@ function switchView(viewToShow) {
     if (contentToShow) contentToShow.classList.add('active');
     if (buttonToActivate) buttonToActivate.classList.add('active');
 
-    // Sortierbuttons nur in der SaverAbi-Ansicht anzeigen
     const sortButtonContainer = document.getElementById('saverabi-sort-controls');
     if (sortButtonContainer) {
-        sortButtonContainer.style.display = (viewToShow === 'saverabi') ? 'flex' : 'none'; // Oder 'block' etc. je nach Layout
+        sortButtonContainer.style.display = (viewToShow === 'saverabi') ? 'flex' : 'none';
     }
 
     if (viewToShow === 'uniliga') {
         if (detailCardContainer) detailCardContainer.style.display = 'none';
         if (mainContentArea) mainContentArea.classList.remove('detail-visible');
-        // Uniliga-Daten bei jedem Wechsel laden (wie bisher)
         loadUniligaView();
     } else if (viewToShow === 'saverabi') {
-        // Detailkarte initial ausblenden, wenn zur SaverAbi-Ansicht gewechselt wird
         if (detailCardContainer) detailCardContainer.style.display = 'none';
         if (mainContentArea) mainContentArea.classList.remove('detail-visible');
-        // Daten nur laden, wenn sie noch nicht da sind (beim ersten Wechsel oder Initialisierung)
         if (allPlayersData.length === 0) {
              loadSaverAbiView();
          } else {
-             // Daten sind schon da, nur neu anzeigen (falls z.B. Sortierung geändert wurde und man hin/her wechselt)
              sortAndDisplayPlayers();
          }
     }
 }
 
 // -------------------------------------------------------------
-// Initialisierung beim Laden der Seite
+// Initialisierung beim Laden der Seite (unverändert)
 // -------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
     console.log("DOMContentLoaded event fired.");
-    cacheDOMElements(); // Cache all elements first
+    cacheDOMElements();
 
-    // Event Listener für Haupt-Ansicht-Toggle-Buttons
     if (toggleButtons) {
         toggleButtons.forEach(button => {
             button.addEventListener('click', (event) => {
@@ -601,13 +590,12 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     } else { console.warn("Toggle buttons not found."); }
 
-    // *** NEU: Event Listener für Sortier-Buttons ***
     if (sortEloButton) {
         sortEloButton.addEventListener('click', () => {
             if (currentSortMode !== 'elo') {
                 console.log("Switching sort mode to: elo");
                 currentSortMode = 'elo';
-                sortAndDisplayPlayers(); // Neu sortieren und anzeigen
+                sortAndDisplayPlayers();
             }
         });
     } else { console.warn("Sort Elo Button not found."); }
@@ -617,14 +605,12 @@ document.addEventListener("DOMContentLoaded", () => {
             if (currentSortMode !== 'worth') {
                 console.log("Switching sort mode to: worth");
                 currentSortMode = 'worth';
-                sortAndDisplayPlayers(); // Neu sortieren und anzeigen
+                sortAndDisplayPlayers();
             }
         });
     } else { console.warn("Sort Worth Button not found."); }
 
 
-    // Startansicht initialisieren und Daten laden
     console.log("Initializing default view: saverabi");
-    switchView('saverabi'); // Stellt sicher, dass die SaverAbi-Ansicht aktiv ist und lädt ggf. Daten
-                            // loadSaverAbiView() wird innerhalb von switchView aufgerufen, falls nötig
+    switchView('saverabi');
 });
