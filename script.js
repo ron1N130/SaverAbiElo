@@ -204,7 +204,7 @@ function displayPlayerList(players) {
                     <span class='player-name'>${player.nickname}</span>
                 </span>
                 <div class='player-list-right'>
-                    <span class='player-value'>${displayValue} Wadaw </span>
+                    <span class='player-value'>${displayValue}</span>
                     ${eloProgressBarHtml}
                 </div>`;
 
