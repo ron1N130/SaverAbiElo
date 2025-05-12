@@ -146,15 +146,42 @@ async function getPlayerData(nickname) {
         p.impact = toNum(p.impact);
 
         // *** Berechne den "Geldwert" (bleibt für Sortierung erhalten) ***
-        if (p.sortElo !== null && p.rating !== null) {
-            // Multiplikation mit 1000 entfernt, Wert ist jetzt Elo * Rating * Impact - offset
-            p.worth = p.sortElo * p.rating * (p.impact -0.2); 
+        // Stelle sicher, dass Elo, Rating und Impact als Zahlen verfügbar sind
+        if (p.sortElo !== null && typeof p.rating === 'number' && typeof p.impact === 'number') {
+            const elo = p.sortElo;
+            const rating = p.rating;
+            const impact = p.impact;
+
+            // --- Inline Berechnung des nicht-linearen Spielerwerts ---
+
+            // Konfigurationsparameter für die nicht-lineare Elo-Gewichtung
+            // Passe diese Werte an, um das Ranking-Verhalten zu tunen!
+            // Nutze Schwellenwerte aus deinem thresholds-Objekt (mit Fallbacks)
+            const bonusThreshold = thresholds?.elo?.okay ?? 2000; // Schwellenwert, ab dem Bonus wirkt
+            const bonusPower = 1.8; // Stärke des nicht-linearen Anstiegs (Potenz > 1), z.B. 1.5 bis 2.5
+            const bonusScale = 0.05; // Skalierungsfaktor für den Bonus, um die Werte im Rahmen zu halten
+
+            // Berechne den gewichteten Elo-Wert inline:
+            // Original Elo + (Bonus, falls Elo über dem Schwellenwert liegt)
+            const weightedElo = elo + (elo > bonusThreshold ? Math.pow(elo - bonusThreshold, bonusPower) * bonusScale : 0);
+
+            // Berechne den endgültigen Wert: Gewichtetes_Elo * Rating * (Impact - 0.2)
+            const impactFactor = impact - 0.2;
+            let finalWorth = weightedElo * rating * impactFactor;
+
+            // Optional: Stelle sicher, dass der Wert nicht negativ ist
+            finalWorth = Math.max(0, finalWorth);
+
+            // Weise den berechneten Wert p.worth zu
+            p.worth = finalWorth;
+
+            // --- Ende der Inline Berechnung ---
+
         } else {
-             p.worth = null; // Kein Wert, wenn Daten fehlen
+             p.worth = null; // Kein Wert, wenn notwendige Daten fehlen
         }
         // Spieler ohne Fehler, aber ggf. ohne Elo/Rating bekommen -1 für Sortierung, falls Elo null ist
         if (p.sortElo === null) p.sortElo = -1;
-
 
         return p;
     } catch (err) {
