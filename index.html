@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SaverAbi & Uniliga Tracker</title> <link rel="stylesheet" href="style.css">
+    <title>SaverAbi & Uniliga Tracker</title>
+    <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
@@ -20,16 +21,22 @@
 </header>
 <main>
     <div id="saverabi-content" class="view-content active">
-        <div id="loading-indicator-saverabi" class="loading-indicator">Lade Spielerdaten...</div>
-        <div id="error-message-saverabi" class="error-message" style="display: none;"></div>
+        <div id="saverabi-controls">
+             <div id="loading-indicator-saverabi" class="loading-indicator">Lade Spielerdaten...</div>
+             <div id="error-message-saverabi" class="error-message" style="display: none;"></div>
+             <div id="saverabi-sort-controls" style="display: none;">
+                 <button id="sort-elo-btn" class="sort-button active">Nach Elo sortieren</button>
+                 <button id="sort-worth-btn" class="sort-button">Nach Wert sortieren</button>
+             </div>
+        </div>
 
         <div id="main-content-area" class="layout-list-centered">
             <div id="player-list-container">
-                <h2>Ranking</h2>
+                <h3 id="saverabi-list-header">Spielerliste</h3>
                 <ol id="player-list" class="player-list-sorted">
                     </ol>
             </div>
-            <div id="player-detail-card-container">
+            <div id="player-detail-card-container" style="display: none;">
                 </div>
         </div>
     </div>
