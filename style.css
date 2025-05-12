@@ -601,3 +601,67 @@ ol#player-list li::before {
     .stats-table th:not(:nth-child(1)):not(:nth-child(2)) { width: auto; } /* Breite automatisch */
     .player-cell { max-width: 100px; } /* Spielername kürzer */
 }
+
+/* style.css */
+
+/* Container für die Sortierbuttons */
+#saverabi-sort-controls {
+    display: flex;          /* Buttons nebeneinander anordnen */
+    justify-content: center; /* Buttons horizontal zentrieren */
+    margin-bottom: 20px;    /* Abstand nach unten zur Liste */
+    margin-top: 10px;       /* Kleiner Abstand nach oben (nach Lade-/Fehleranzeige) */
+    gap: 10px;              /* Abstand zwischen den Buttons */
+}
+
+/* Grundlegender Stil für beide Sortierbuttons */
+.sort-button {
+    background-color: #3a3a3c; /* Ein dunkles Grau, etwas heller als der Hintergrund */
+    color: #e1e1e3;           /* Helle Textfarbe für Kontrast */
+    border: 1px solid #555;   /* Subtiler Rand statt des Standard-Randes */
+    padding: 8px 18px;        /* Innenabstand für mehr "Luft" */
+    border-radius: 6px;       /* Abgerundete Ecken */
+    cursor: pointer;          /* Mauszeiger als Hand */
+    font-size: 0.9em;         /* Etwas kleinere Schriftgröße */
+    font-weight: 500;         /* Mittlere Schriftstärke */
+    transition: background-color 0.2s ease, border-color 0.2s ease; /* Sanfter Übergang */
+    text-align: center;
+    white-space: nowrap;      /* Verhindert ungewollten Zeilenumbruch */
+}
+
+/* Stil, wenn man mit der Maus über einen Button fährt */
+.sort-button:hover {
+    background-color: #4a4a4e; /* Etwas helleres Grau beim Hover */
+    border-color: #777;
+}
+
+/* Stil für den AKTIVEN Sortierbutton */
+.sort-button.active {
+    background-color: #5c5c60; /* Nochmals etwas helleres Grau für den aktiven Zustand */
+    color: #ffffff;           /* Weißer Text für Hervorhebung */
+    border-color: #888;       /* Leicht hellerer Rand für den aktiven Button */
+    font-weight: 700;         /* Fettgedruckt */
+    box-shadow: 0 0 5px rgba(150, 150, 150, 0.1); /* Optional: Leichter Schein */
+}
+
+/* Optional: Sicherstellen, dass der Hover-Effekt auf dem aktiven Button nicht stört */
+.sort-button.active:hover {
+    background-color: #626266; /* Nur eine minimale Änderung beim Hover auf Active */
+    border-color: #999;
+}
+
+/* --- Anpassungen für kleinere Bildschirme (optional) --- */
+@media (max-width: 600px) {
+    #saverabi-sort-controls {
+        /* Unter Umständen Buttons untereinander anordnen oder zentriert lassen */
+        /* flex-direction: column; */ /* Uncomment für untereinander */
+        /* align-items: center; */   /* Uncomment für untereinander */
+        gap: 8px;
+    }
+
+    .sort-button {
+        padding: 7px 15px;
+        font-size: 0.85em;
+        /* width: 80%; */ /* Uncomment wenn untereinander für gleiche Breite */
+        /* max-width: 200px; */ /* Uncomment wenn untereinander */
+    }
+}
