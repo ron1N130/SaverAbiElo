@@ -183,7 +183,7 @@ main {
    Player List (SaverAbi View)
    ========================================================================== */
 
-/* Zentriert die Überschrift "Spielerliste" oberhalb der Liste/Karte - NEUE REGEL */
+/* Zentriert die Überschrift "Spielerliste" oberhalb der Liste/Karte */
 h3#saverabi-list-header {
     text-align: center; /* Zentriert den Text */
     margin-bottom: var(--gap); /* Füge Abstand nach unten zur Liste hinzu */
@@ -207,8 +207,7 @@ h3#saverabi-list-header {
     max-height: calc(80vh - 4rem); /* Höhe begrenzen */
     overflow: hidden; /* Container fix - kann evtl. entfernt werden, aber vorsichtig */
 
-    /* Flex-Eigenschaften, wenn die Detailkarte sichtbar ist - NEUE REGELN */
-    /* Diese Regeln überschreiben die allgemeinen für #player-list-container, wenn .detail-visible auf #main-content-area gesetzt ist */
+    /* Flex-Eigenschaften, wenn die Detailkarte sichtbar ist */
 }
 
 /* Anpassung der Breitenverteilung, wenn die Detailkarte sichtbar ist */
@@ -216,7 +215,7 @@ h3#saverabi-list-header {
     flex-basis: 450px; /* Startbreite für die Liste. Passe diesen Wert an, falls nötig */
     flex-grow: 1; /* Erlaube der Liste zu wachsen, wenn Platz da ist */
     flex-shrink: 1; /* Erlaube der Liste zu schrumpfen, falls nötig */
-    max-width: none; /* **WICHTIG:** Entferne die max-width Begrenzung, wenn Flexbox die Breite steuert */
+    max-width: none; /* Entferne die max-width Begrenzung, wenn Flexbox die Breite steuert */
     width: auto; /* Lass Flexbox die Breite bestimmen */
 }
 
@@ -225,7 +224,7 @@ h3#saverabi-list-header {
      width: 100%;
      max-width: var(--max-card); /* Diese Begrenzung kann die Breite beeinflussen */
 
-     /* Flex-Eigenschaften, wenn die Detailkarte sichtbar ist - NEUE REGELN */
+     /* Flex-Eigenschaften, wenn die Detailkarte sichtbar ist */
 }
 
 /* Anpassung der Breitenverteilung der Detailkarte, wenn sie sichtbar ist */
@@ -233,7 +232,7 @@ h3#saverabi-list-header {
     flex-basis: 350px; /* Startbreite für die Detailkarte. Passe diesen Wert an, falls nötig */
     flex-grow: 1; /* Erlaube der Detailkarte zu wachsen */
     flex-shrink: 1; /* Erlaube der Detailkarte zu schrumpfen */
-    max-width: none; /* **WICHTIG:** Entferne die max-width Begrenzung */
+    max-width: none; /* Entferne die max-width Begrenzung */
     width: auto; /* Lass Flexbox die Breite bestimmen */
 }
 
@@ -317,8 +316,8 @@ ol#player-list li::before {
 
 /* Anpassung der Club-Icon Grösse */
 .club-icon {
-    width: 40px; /* Passe die Grösse an */
-    height: 40px; /* Passe die Grösse an */
+    width: 80px; /* Passe die Grösse an */
+    height: 80px; /* Passe die Grösse an */
     margin-left: 8px; /* Abstand zwischen Spielername und Icon */
     /* vertical-align: middle; /* Kann je nach Layout angepasst werden, Flexbox regelt dies oft besser */
     border-radius: 4px; /* Optionale Abrundung der Ecken */
@@ -433,20 +432,26 @@ ol#player-list li::before {
     padding: 0.5rem 0; /* Weniger Padding */
 }
 
+/* Anpassungen für Label in der Detailkarte */
 .player-card-hltv .stat-item .label {
-    font-size: 0.8rem; /* Kleinere Schrift für Label */
+    font-size: 0.8rem;
     color: var(--text-secondary);
     margin-bottom: 0.3rem;
-    text-transform: uppercase; /* Großbuchstaben wie im Bild */
+    text-transform: uppercase;
     font-weight: 700;
+    text-align: center;
+    width: 100%; /* **NEU:** Nimmt volle Breite des Containers ein */
 }
 
+/* Anpassungen für Wert in der Detailkarte */
 .player-card-hltv .stat-item .value {
-    font-size: 2rem; /* Größere Schrift für Wert */
-    font-weight: 700; /* Fett */
+    font-size: 2rem;
+    font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 0.6rem; /* Mehr Abstand zur Bar */
+    margin-bottom: 0.6rem;
     line-height: 1.1;
+    text-align: center;
+    width: 100%; /* **NEU:** Nimmt volle Breite des Containers ein */
 }
 
 /* Progress Bar Container (Drittel-Stil) */
