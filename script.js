@@ -179,7 +179,7 @@ function displayPlayerList(players) {
 
     playerListContainerEl.innerHTML = ''; // Liste leeren
 
-    saverAbiListHeader.textContent = currentSortMode === 'elo' ? 'Spielerliste (sortiert nach Elo)' : 'Spielerliste (sortiert nach Wert)';
+    saverAbiListHeader.textContent = currentSortMode === 'elo' ? 'Spielerliste' : 'Spielerliste';
 
     if (!players || players.length === 0) { console.log("Keine Spielerdaten zum Anzeigen vorhanden."); return; }
 
