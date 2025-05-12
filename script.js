@@ -51,20 +51,20 @@ function toNum(v) {
 async function loadTeamIconMap() {
     // Nur laden, wenn die Map noch leer ist
     if (Object.keys(teamIconMap).length > 0) {
-        console.log("Team icon map already loaded.");
+        console.log("[LOG] Team icon map already loaded.");
         return;
     }
 
     try {
-        // *** Pfad zurück zum Root-Verzeichnis ***
-        console.log("Fetching /uniliga_teams.json..."); // Pfad im Log korrigiert
-        const response = await fetch('/uniliga_teams.json'); // Pfad korrigiert
-        console.log("[LOG] /uniliga_teams.json fetch status:", response.status); // Log Pfad korrigiert
+        const response = await fetch('/uniliga_teams.json');
+        console.log("[DEBUG] Fetching /uniliga_teams.json. Response status:", response.status); // DEBUG Log
         if (!response.ok) {
             throw new Error(`Fehler beim Laden der Team-Icons (${response.status}) from ${response.url}`);
         }
-        const teamsData = await response.json();
-        console.log("[LOG] uniliga_teams.json raw data:", teamsData); // LOG Rohdaten
+        const textData = await response.text(); // **NEU:** Lese als Text
+        console.log("[DEBUG] /uniliga_teams.json raw text:", textData); // **NEU:** Logge rohen Text
+        const teamsData = JSON.parse(textData); // **NEU:** Parse den Text
+        console.log("[LOG] uniliga_teams.json raw data:", teamsData); // LOG Rohdaten nach Parse
 
         teamIconMap = teamsData.reduce((map, team) => {
             if (team.name && team.icon) {
@@ -88,10 +88,11 @@ let playerListContainerEl, detailCardContainer, mainContentArea,
     loadingIndicatorSaverAbi, errorMessageSaverAbi,
     loadingIndicatorUniliga, errorMessageUniliga, uniligaDataArea,
     saverAbiContent, uniligaContent,
-    toggleButtons, sortEloButton, sortWorthButton, saverAbiListHeader; // Neue Elemente hinzugefügt
+    toggleButtons, sortEloButton, sortWorthButton, saverAbiListHeader;
 
 function cacheDOMElements() {
-    console.log("Caching DOM elements...");
+    console.log("[LOG] Caching DOM elements...");
+    // ... (keine Änderungen hier)
     playerListContainerEl = document.getElementById("player-list");
     detailCardContainer = document.getElementById("player-detail-card-container");
     mainContentArea = document.getElementById("main-content-area");
@@ -103,17 +104,15 @@ function cacheDOMElements() {
     uniligaDataArea = document.getElementById("uniliga-data-area");
     uniligaContent = document.getElementById("uniliga-content");
     toggleButtons = document.querySelectorAll(".toggle-button");
-    saverAbiListHeader = document.getElementById("saverabi-list-header"); // Cache header
+    saverAbiListHeader = document.getElementById("saverabi-list-header");
 
-    // Neue Sortierbuttons
     sortEloButton = document.getElementById("sort-elo-btn");
     sortWorthButton = document.getElementById("sort-worth-btn");
 
-
-    if (!playerListContainerEl || !loadingIndicatorSaverAbi || !saverAbiContent || !uniligaContent || !uniligaDataArea || !sortEloButton || !sortWorthButton || !saverAbiListHeader) {
-        console.error("FEHLER: Wichtige DOM-Elemente wurden nicht gefunden (inkl. Sortierbuttons/Header)!");
+    if (!playerListContainerEl || !loadingIndicatorSaverAbi || !saverAbiContent || !uniligaContent || !uniligaDataArea || !sortEloButton || !sortWorthButton || !saverAbiListHeader || !detailCardContainer || !mainContentArea) {
+        console.error("FEHLER: Wichtige DOM-Elemente wurden nicht gefunden (inkl. Sortierbuttons/Header/Card Container)!");
     } else {
-        console.log("DOM elements cached successfully.");
+        console.log("[LOG] DOM elements cached successfully.");
     }
 }
 
@@ -123,76 +122,73 @@ function cacheDOMElements() {
 async function getPlayerData(nickname) {
     try {
         const res = await fetch(`/api/faceit-data?nickname=${encodeURIComponent(nickname)}`);
+        console.log(`[DEBUG] Fetching /api/faceit-data for ${nickname}. Response status:`, res.status); // DEBUG Log
 
         if (!res.ok) {
             let errorMsg = `HTTP ${res.status}`;
-            try { const errData = await res.json(); errorMsg = errData.error || errorMsg; } catch (parseError) { /* ignore */ }
+            try {
+                 const errDataText = await res.text(); // **NEU:** Lese Fehlerantwort als Text
+                 console.error(`[DEBUG] /api/faceit-data error raw text for ${nickname}:`, errDataText); // **NEU:** Logge rohen Fehlertext
+                 const errData = JSON.parse(errDataText); // **NEU:** Versuche Text zu parsen
+                 errorMsg = errData.error || errDataText || errorMsg;
+            } catch (parseError) {
+                 // Konnte JSON nicht parsen, nutze den rohen Text oder HTTP Status
+                 errorMsg = errDataText || errorMsg;
+                 console.error(`[DEBUG] Failed to parse error response for ${nickname}:`, parseError);
+            }
             throw new Error(errorMsg);
         }
-        const p = await res.json();
+        const textData = await res.text(); // **NEU:** Lese als Text
+        console.log(`[DEBUG] /api/faceit-data raw text for ${nickname}:`, textData); // **NEU:** Logge rohen Text
+        const p = JSON.parse(textData); // **NEU:** Parse den Text
+
         if (p.error) {
-            // Spieler mit Fehler bekommen -1 Elo und keinen Wert
             return { nickname, error: p.error, sortElo: -1, worth: null };
         }
         // Konvertiere relevante Felder sicher in Zahlen
         p.sortElo = toNum(p.elo);
-        p.rating = toNum(p.calculatedRating ?? p.rating); // Nimm berechnetes Rating, wenn vorhanden
+        p.rating = toNum(p.calculatedRating ?? p.rating);
         p.dpr = toNum(p.dpr);
         p.kast = toNum(p.kast);
         p.kd = toNum(p.kd);
         p.adr = toNum(p.adr);
         p.kpr = toNum(p.kpr);
-        p.hsp = toNum(p.hsPercent); // hsPercent aus API wird zu hsp
+        p.hsp = toNum(p.hsPercent);
         p.impact = toNum(p.impact);
 
 
-        // *** Berechne den "Geldwert" (bleibt für Sortierung erhalten) ***
-        // Stelle sicher, dass Elo, Rating und Impact als Zahlen verfügbar sind
+        // Berechne den "Geldwert"
         if (p.sortElo !== null && typeof p.rating === 'number' && typeof p.impact === 'number') {
             const elo = p.sortElo;
             const rating = p.rating;
             const impact = p.impact;
 
-            // --- Inline Berechnung des nicht-linearen Spielerwerts ---
+            const bonusThreshold = thresholds?.elo?.okay ?? 2000;
+            const bonusPower = 1.8;
+            const bonusScale = 0.05;
 
-            // Konfigurationsparameter für die nicht-lineare Elo-Gewichtung
-            // Passe diese Werte an, um das Ranking-Verhalten zu tunen!
-            // Nutze Schwellenwerte aus deinem thresholds-Objekt (mit Fallbacks)
-            const bonusThreshold = thresholds?.elo?.okay ?? 2000; // Schwellenwert, ab dem Bonus wirkt
-            const bonusPower = 1.8; // Stärke des nicht-linearen Anstiegs (Potenz > 1), z.B. 1.5 bis 2.5
-            const bonusScale = 0.05; // Skalierungsfaktor für den Bonus, um die Werte im Rahmen zu halten
-
-            // Berechne den gewichteten Elo-Wert inline:
-            // Original Elo + (Bonus, falls Elo über dem Schwellenwert liegt)
             const weightedElo = elo + (elo > bonusThreshold ? Math.pow(elo - bonusThreshold, bonusPower) * bonusScale : 0);
 
-            // Berechne den endgültigen Wert: Gewichtetes_Elo * Rating * (Impact - 0.2)
             const impactFactor = impact - 0.2;
             let finalWorth = weightedElo * rating * impactFactor;
 
-            // Optional: Stelle sicher, dass der Wert nicht negativ ist
             finalWorth = Math.max(0, finalWorth);
 
-            // Weise den berechneten Wert p.worth zu
             p.worth = finalWorth;
 
-            // --- Ende der Inline Berechnung ---
-
         } else {
-             p.worth = null; // Kein Wert, wenn notwendige Daten fehlen
+             p.worth = null;
         }
-        // Spieler ohne Fehler, aber ggf. ohne Elo/Rating bekommen -1 für Sortierung, falls Elo null ist
         if (p.sortElo === null) p.sortElo = -1;
 
         return p;
     } catch (err) {
         console.error(`getPlayerData error for ${nickname}:`, err.message);
-        // Spieler mit Fetch-Fehler bekommen -1 Elo und keinen Wert
         return { nickname, error: err.message || "Netzwerkfehler", sortElo: -1, worth: null };
     }
 }
 
-// *** Sortierfunktionen (unverändert) ***
+// Sortierfunktionen (unverändert)
 function sortPlayersByElo(players) {
     return [...players].sort((a, b) => (b.sortElo ?? -1) - (a.sortElo ?? -1));
 }
@@ -205,17 +201,16 @@ function sortPlayersByWorth(players) {
     });
 }
 
-
 function displayPlayerList(players) {
-    console.log(`[displayPlayerList] Aufgerufen mit ${players?.length ?? 0} Spieler-Objekten. Sortierung: ${currentSortMode}`);
+    console.log(`[LOG] displayPlayerList Aufgerufen mit ${players?.length ?? 0} Spieler-Objekten. Sortierung: ${currentSortMode}`);
     if (!playerListContainerEl) { console.error("FEHLER: playerListContainerEl ist null in displayPlayerList!"); return; }
     if (!saverAbiListHeader) { console.error("FEHLER: saverAbiListHeader ist null!"); return;}
 
-    playerListContainerEl.innerHTML = ''; // Liste leeren
+    playerListContainerEl.innerHTML = '';
 
-    saverAbiListHeader.textContent = currentSortMode === 'elo' ? 'Spielerliste' : 'Spielerliste';
+    saverAbiListHeader.textContent = 'Spielerliste'; // Header bleibt immer gleich
 
-    if (!players || players.length === 0) { console.log("Keine Spielerdaten zum Anzeigen vorhanden."); return; }
+    if (!players || players.length === 0) { console.log("[LOG] Keine Spielerdaten zum Anzeigen vorhanden."); return; }
 
     players.forEach((player) => {
         const li = document.createElement('li');
@@ -223,23 +218,23 @@ function displayPlayerList(players) {
 
         if (player.error) {
             li.classList.add('error-item');
-            li.innerHTML = `<span class='player-info'><img src='default_avatar.png' class='avatar' alt="Standard Avatar"/><span class='player-name'>${player.nickname}</span></span><div class='player-list-right error-text'>Fehler: ${player.error.substring(0, 30)}${player.error.length > 30 ? '...' : ''}</div>`;
+            li.innerHTML = `<span class='player-info'><img src='default_avatar.png' class='avatar' alt="Standard Avatar"/><span class='player-name'>${player.nickname}</span></span><div class='player-list-right error-text'>Fehler</div>`; // Angepasste Fehlermeldung
         } else {
             const displayValue = currentSortMode === 'elo'
                 ? `${player.sortElo ?? 'N/A'}`
-                : `${safeWorth(player.worth)}`; // Zeigt Wert weiterhin in der Liste an
+                : `${safeWorth(player.worth)}`;
 
             const eloProgressBarHtml = `<div class='elo-progress-container' data-elo='${player.sortElo ?? 0}'><div class='elo-progress-bar'></div></div>`;
 
-            // *** HTML Struktur für Listenelement angepasst (span um Wert und Progressbar entfernt) ***
+            const clubIconHtml = currentSortMode !== 'elo' && player.assignedClubIcon // Icon nur im Bluelock-Modus
+                ? `<img src='/icons/${player.assignedClubIcon}' class='club-icon' alt="Club Icon" onerror="this.style.display='none';"/>`
+                : '';
+
             li.innerHTML = `
                 <span class='player-info'>
-                <img src='${player.avatar || 'default_avatar.png'}' class='avatar' alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" />
-                <span class='player-name'>${player.nickname}</span>
-                ${player.assignedClubIcon // Prüfe, ob ein Club-Icon zugewiesen wurde
-                    ? `<img src='/icons/${player.assignedClubIcon}' class='club-icon' alt="Club Icon" onerror="this.style.display='none';"/>` // Füge das Icon hinzu
-                    : '' // Nichts hinzufügen, wenn kein Icon zugewiesen ist
-                }
+                    <img src='${player.avatar || 'default_avatar.png'}' class='avatar' alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" />
+                    <span class='player-name'>${player.nickname}</span>
+                    ${clubIconHtml}
                 </span>
                 <div class='player-list-right'>
                     <span class='player-value'>${displayValue}</span>
@@ -251,72 +246,50 @@ function displayPlayerList(players) {
         }
         playerListContainerEl.appendChild(li);
     });
-    console.log("[displayPlayerList] Rendering abgeschlossen.");
+    console.log("[LOG] displayPlayerList Rendering abgeschlossen.");
 }
 
-// -------------------------------------------------------------
-// Club Zuweisung für Bluelock Ranking
-// -------------------------------------------------------------
 
-// Definiere die verfügbaren Club-Icons und ihre Dateinamen
-// WICHTIG: Passe die Dateinamen hier an die tatsächlichen Namen deiner Icon-Dateien an
+// Club Zuweisung für Bluelock Ranking (unverändert, aber stelle sicher, dass die Map korrekt geladen wird)
 const clubIconMap = {
-    "Royal Madrid": "royal_madrid.png", // Passe den Dateinamen an
-    "Bastard Munchen": "bastard_munchen.png", // Passe den Dateinamen an
-    "PXG": "pxg.png", // Beispiel für andere Clubs
-    "Ubers": "ubers.png", // Beispiel für andere Clubs
-    "Barcha": "barcha.png", // Beispiel für andere Clubs
-    "Manshine City": "manshine.png", // Beispiel für andere Clubs
+    "Royal Madrid": "royal_madrid.png",
+    "Bastard Munchen": "bastard_munchen.png",
+    "PXG": "pxg.png",
+    "Ubers": "ubers.png",
+    "Barcha": "barcha.png",
+    "Manshine City": "manshine.png",
 };
-
-// Liste der Clubs ausser Royal Madrid und Bastard Munchen
 const otherClubs = Object.keys(clubIconMap).filter(clubName =>
     clubName !== "Royal Madrid" && clubName !== "Bastard Munchen"
 );
 
-/**
- * Weist Spielern Clubs basierend auf ihrem Rang im sortierten Array zu.
- * Speichert den Dateinamen des Club-Icons im Spielerobjekt.
- * @param {Array<object>} players - Das sortierte Array von Spielerobjekten.
- */
 function assignClubsToPlayers(players) {
-    console.log("Beginne Club Zuweisung...");
+    console.log("[LOG] Beginne Club Zuweisung...");
     if (!players || players.length === 0) {
-        console.log("Keine Spieler für Club Zuweisung vorhanden.");
+        console.log("[LOG] Keine Spieler für Club Zuweisung vorhanden.");
         return;
     }
-
     players.forEach((player, index) => {
-        const rank = index + 1; // Rang beginnt bei 1
-        let assignedClubName = null; // Temporär den Club-Namen speichern
-
+        const rank = index + 1;
+        let assignedClubName = null;
         if (rank === 1) {
             assignedClubName = "Royal Madrid";
         } else if (rank >= 2 && rank <= 4) {
-            // Zufällige Zuweisung: Royal Madrid oder Bastard Munchen
             const potentialClubs = ["Royal Madrid", "Bastard Munchen"];
             assignedClubName = potentialClubs[Math.floor(Math.random() * potentialClubs.length)];
         } else if (rank >= 5 && rank <= 12) {
-            // Zufällige Zuweisung eines anderen Clubs
             if (otherClubs.length > 0) {
                 assignedClubName = otherClubs[Math.floor(Math.random() * otherClubs.length)];
             } else {
-                console.warn(`Keine "otherClubs" definiert für Rang ${rank}. Spieler ${player.nickname} erhält kein Icon.`);
-                assignedClubName = null; // Kein Club, wenn keine anderen definiert sind
+                console.warn(`[LOG] Keine "otherClubs" definiert für Rang ${rank}. Spieler ${player.nickname} erhält kein Icon.`);
+                assignedClubName = null;
             }
         } else {
-            // Ränge ausserhalb von 1-12 erhalten keinen Club-Icon
             assignedClubName = null;
         }
-
-        // Speichere den Dateinamen des zugewiesenen Icons im Spielerobjekt
-        // Der Pfad zum Icon muss später beim Anzeigen hinzugefügt werden
         player.assignedClubIcon = assignedClubName ? clubIconMap[assignedClubName] : null;
-
-        // Optional: Logge die Zuweisung
-        // console.log(`Rang ${rank}: ${player.nickname} -> ${assignedClubName || 'Kein Club'}`);
     });
-     console.log("Club Zuweisung abgeschlossen.");
+     console.log("[LOG] Club Zuweisung abgeschlossen.");
 }
 
 // updateEloProgressBarForList (unverändert)
@@ -335,11 +308,13 @@ function updateEloProgressBarForList(containerEl) {
     bar.style.backgroundColor = color;
 }
 
-// *** GEÄNDERT: displayDetailCard ***
+// displayDetailCard (unverändert - Layout-Fixes kommen via CSS)
 function displayDetailCard(player) {
-    if (!detailCardContainer || !mainContentArea) return;
+    console.log("[LOG] displayDetailCard called for player:", player?.nickname || 'N/A');
+    if (!detailCardContainer || !mainContentArea) { console.error("FEHLER: Detail Card Container oder Main Content Area nicht gefunden."); return; }
     const saverAbiContentEl = document.getElementById('saverabi-content');
     if (!saverAbiContentEl || !saverAbiContentEl.classList.contains('active')) {
+        console.log("[LOG] SaverAbi view is not active, hiding detail card.");
         detailCardContainer.style.display = 'none';
         if (mainContentArea) mainContentArea.classList.remove('detail-visible');
         return;
@@ -349,15 +324,14 @@ function displayDetailCard(player) {
     if (mainContentArea) mainContentArea.classList.add('detail-visible');
 
     if (!player || player.error) {
+        console.warn("[LOG] Displaying error card for player:", player?.nickname || 'N/A', "Error:", player?.error);
         detailCardContainer.innerHTML = `<div class='player-card-hltv error-card'>${player?.nickname || 'Spieler'} – Fehler: ${player?.error || 'Unbekannt'}</div>`;
         return;
     }
 
+    console.log("[LOG] Rendering detail card for", player.nickname);
     const faceitUrl = player.faceitUrl || `https://faceit.com/en/players/${encodeURIComponent(player.nickname)}`;
     const matchesText = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
-
-    // *** ENTFERNT: Definition von worthDisplay ***
-    // const worthDisplay = `<div class="stat-item worth-item"><div class="label">Wert</div><div class="value">${safeWorth(player.worth)}</div></div>`;
 
     detailCardContainer.innerHTML = `
         <div class="player-card-hltv new-layout">
@@ -375,12 +349,14 @@ function displayDetailCard(player) {
            </div>
            </div>
         </div>`;
-    updateStatProgressBars(detailCardContainer, player); // Diese Funktion muss nicht geändert werden
+    updateStatProgressBars(detailCardContainer, player);
+    console.log("[LOG] Detail card rendered.");
 }
 
 // updateStatProgressBars (unverändert)
 function updateStatProgressBars(card, player) {
-    card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
+    // ... (keine Änderungen hier)
+     card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
         const stat = item.dataset.stat; const val = player[stat]; const cfg = thresholds[stat];
         const bar = item.querySelector('.stat-progress-bar'); const lbl = item.querySelector('.stat-indicator-label');
         if (!cfg || !bar || !lbl) { if(lbl) lbl.textContent = '---'; if(bar) { bar.style.left = '0%'; bar.style.width = '0%'; bar.style.backgroundColor = 'transparent'; bar.style.boxShadow = 'none'; bar.style.borderRadius = '0';} return; }
@@ -393,14 +369,12 @@ function updateStatProgressBars(card, player) {
                 else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
             }
             else { // Higher is better for other stats
-                // *** Korrektur/Anpassung für HSP: Wenn HSP-Wert <= 1 ist, behandeln wir ihn als Prozentzahl * 100 für Vergleich ***
                 let compareVal = val;
-                if (stat === 'hsp' && val <= 1) { // Annahme: API liefert manchmal 0.xx statt xx%
+                if (stat === 'hsp' && val <= 1) {
                      compareVal = val * 100;
-                     console.log(`HSP value ${val} adjusted to ${compareVal} for threshold comparison.`);
+                     console.log(`[LOG] HSP value ${val} adjusted to ${compareVal} for threshold comparison.`);
                 }
 
-                // Check thresholds für great, good, okay (höher ist besser)
                 if (compareVal >= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
                 else if (compareVal >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
                 else if (compareVal >= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
@@ -415,45 +389,52 @@ function updateStatProgressBars(card, player) {
 }
 
 
-// loadSaverAbiView (unverändert)
+// loadSaverAbiView (unverändert bis auf Error Handling/Logging)
 async function loadSaverAbiView() {
-    console.log("loadSaverAbiView called");
-    if (!loadingIndicatorSaverAbi || !errorMessageSaverAbi || !playerListContainerEl || !detailCardContainer || !mainContentArea) { console.error("FEHLER: Benötigte Elemente für SaverAbi View fehlen!"); if(errorMessageSaverAbi) { errorMessageSaverAbi.textContent = "Fehler: UI-Elemente nicht initialisiert."; errorMessageSaverAbi.style.display = 'block'; } return; }
+    console.log("[LOG] loadSaverAbiView called");
+    if (!loadingIndicatorSaverAbi || !errorMessageSaverAbi || !playerListContainerEl || !detailCardContainer || !mainContentArea || !saverAbiContent || !sortEloButton || !sortWorthButton || !saverAbiListHeader) {
+        console.error("FEHLER: Benötigte Elemente für SaverAbi View fehlen!");
+        if(errorMessageSaverAbi) { errorMessageSaverAbi.textContent = "Fehler: UI-Elemente nicht initialisiert."; errorMessageSaverAbi.style.display = 'block'; }
+        return;
+    }
 
     loadingIndicatorSaverAbi.style.display = 'block';
     errorMessageSaverAbi.style.display = 'none';
     playerListContainerEl.innerHTML = '';
     detailCardContainer.style.display = 'none';
     if(mainContentArea) mainContentArea.classList.remove('detail-visible');
-    allPlayersData = []; // Reset global player data
+    allPlayersData = [];
 
     try {
-        console.log("Fetching players.json...");
+        console.log("[LOG] Fetching /players.json...");
         const namesRes = await fetch('/players.json');
-        console.log("players.json status:", namesRes.status);
+        console.log("[DEBUG] /players.json status:", namesRes.status); // DEBUG Log
         if (!namesRes.ok) throw new Error(`Fehler Laden Spielerliste (${namesRes.status})`);
-        const names = await namesRes.json();
-        console.log("Player names loaded:", names);
+        const namesText = await namesRes.text(); // **NEU:** Lese als Text
+        console.log("[DEBUG] /players.json raw text:", namesText); // **NEU:** Logge rohen Text
+        const names = JSON.parse(namesText); // **NEU:** Parse den Text
+
+        console.log("[LOG] Player names loaded:", names);
         if (!Array.isArray(names) || names.length === 0) throw new Error("Spielerliste leer/ungültig.");
 
-        console.log("Fetching player data for all players...");
+        console.log("[LOG] Fetching player data for all players...");
         const promises = names.map(name => getPlayerData(name));
         const results = await Promise.all(promises);
-        console.log("Player data fetch results (raw):", results);
+        console.log("[LOG] Player data fetch results (raw):", results);
         allPlayersData = results;
 
         const validPlayerCount = allPlayersData.filter(p => !p.error).length;
-        console.log(`Gültige Spielerdaten empfangen: ${validPlayerCount} / ${allPlayersData.length}`);
-        if(validPlayerCount === 0 && allPlayersData.length > 0) { console.warn("Keine gültigen Spielerdaten von der API erhalten, nur Fehler."); }
+        console.log(`[LOG] Gültige Spielerdaten empfangen: ${validPlayerCount} / ${allPlayersData.length}`);
+        if(validPlayerCount === 0 && allPlayersData.length > 0) { console.warn("[LOG] Keine gültigen Spielerdaten von der API erhalten, nur Fehler."); }
 
         sortAndDisplayPlayers();
 
         if (playerListContainerEl) {
              playerListContainerEl.removeEventListener('click', handlePlayerListClick);
              playerListContainerEl.addEventListener('click', handlePlayerListClick);
-             console.log("Click listener added to player list.");
+             console.log("[LOG] Click listener added to player list.");
         } else {
-             console.warn("Konnte Click listener für Spielerliste nicht hinzufügen.");
+             console.warn("[LOG] Konnte Click listener für Spielerliste nicht hinzufügen.");
         }
     } catch (err) {
         console.error("Schwerwiegender Fehler in loadSaverAbiView:", err);
@@ -461,12 +442,10 @@ async function loadSaverAbiView() {
         if(playerListContainerEl) playerListContainerEl.innerHTML = '';
     }
     finally {
-        console.log("loadSaverAbiView finally block reached.");
+        console.log("[LOG] loadSaverAbiView finally block reached.");
         if (loadingIndicatorSaverAbi) {
             loadingIndicatorSaverAbi.style.display = 'none';
-            console.log("Loading indicator hidden.");
-        } else {
-            console.warn("loadingIndicatorSaverAbi nicht gefunden im finally block.");
+            console.log("[LOG] Loading indicator hidden.");
         }
         const sortButtonContainer = document.getElementById('saverabi-sort-controls');
         if (sortButtonContainer) {
@@ -475,21 +454,21 @@ async function loadSaverAbiView() {
     }
 }
 
-// sortAndDisplayPlayers (unverändert)
+// sortAndDisplayPlayers (Club-Icon Zuweisung hinzugefügt)
 function sortAndDisplayPlayers() {
-    console.log(`Sorting and displaying players based on: ${currentSortMode}`);
+    console.log(`[LOG] Sorting and displaying players based on: ${currentSortMode}`);
     let sortedPlayers;
     if (currentSortMode === 'elo') {
         sortedPlayers = sortPlayersByElo(allPlayersData);
-        // Hier löschen wir zugewiesene Icons, wenn zur Elo-Sortierung gewechselt wird
-        sortedPlayers.forEach(player => player.assignedClubIcon = null); // Füge diese Zeile ein
-    } else { // 'worth'
+         // Icons entfernen, wenn im Elo-Modus
+        sortedPlayers.forEach(player => player.assignedClubIcon = null);
+    } else { // 'worth' (Bluelock Ranking)
         sortedPlayers = sortPlayersByWorth(allPlayersData);
-        // Rufe die Funktion zur Zuweisung der Clubs basierend auf dem Rang auf
-        assignClubsToPlayers(sortedPlayers); // Füge diese Zeile ein
+        // Icons zuweisen, wenn im Bluelock-Modus
+        assignClubsToPlayers(sortedPlayers);
     }
-    console.log("Sorted player data for display:", sortedPlayers);
-    displayPlayerList(sortedPlayers);
+    console.log("[LOG] Sorted player data for display:", sortedPlayers);
+    displayPlayerList(sortedPlayers); // Diese Funktion kümmert sich um das Rendering basierend auf assignedClubIcon
 
     if (sortEloButton && sortWorthButton) {
         sortEloButton.classList.toggle('active', currentSortMode === 'elo');
@@ -499,6 +478,7 @@ function sortAndDisplayPlayers() {
 
 // handlePlayerListClick (unverändert)
 function handlePlayerListClick(e) {
+    // ... (keine Änderungen hier)
     const li = e.target.closest('li');
     if (!li || !li.dataset.nickname) return;
     const nickname = li.dataset.nickname;
@@ -506,18 +486,18 @@ function handlePlayerListClick(e) {
     if (playerData) {
         displayDetailCard(playerData);
     } else {
-        console.warn(`Keine Daten gefunden für geklickten Spieler: ${nickname}`);
+        console.warn(`[LOG] Keine Daten gefunden für geklickten Spieler: ${nickname}`);
     }
 }
 
 // -------------------------------------------------------------
-// Funktionen für die Uniliga-Ansicht (unverändert)
+// Funktionen für die Uniliga-Ansicht
 // -------------------------------------------------------------
 
 let currentUniligaData = null;
 
 async function loadUniligaView() {
-    console.log("[FRONTEND-DEBUG] loadUniligaView WURDE AUFGERUFEN!");
+    console.log("[LOG] loadUniligaView WURDE AUFGERUFEN!");
     if (!loadingIndicatorUniliga || !errorMessageUniliga || !uniligaDataArea) {
         console.error("FEHLER: Benötigte Elemente für Uniliga View fehlen!");
         if (errorMessageUniliga) { errorMessageUniliga.textContent = "Fehler: UI-Elemente nicht initialisiert."; errorMessageUniliga.style.display = 'block'; }
@@ -529,21 +509,32 @@ async function loadUniligaView() {
 
     try {
         const apiUrl = `/api/uniliga-stats?cacheBust=${Date.now()}`;
-        console.log(`[FRONTEND-DEBUG] VERSUCHE FETCH (mit Cache Bust): ${apiUrl}...`);
-        console.log("Fetching Uniliga stats and Team Icons concurrently...");
+        console.log(`[LOG] VERSUCHE FETCH (mit Cache Bust): ${apiUrl}...`);
+
         const [apiResponse, iconMapLoaded] = await Promise.all([
             fetch(apiUrl),
-            loadTeamIconMap()
+            loadTeamIconMap() // Stellt sicher, dass die Team-Icon Map geladen ist
         ]);
-        console.log("[LOG] Uniliga API response status:", apiResponse.status);
+        console.log("[DEBUG] Uniliga API response status:", apiResponse.status); // DEBUG Log
         if (!apiResponse.ok) {
             let errorMsg = `Fehler beim Laden der Uniliga-Daten (${apiResponse.status})`;
-            try { const errData = await apiResponse.json(); errorMsg = errData.error || errData.message || errorMsg; } catch (parseError) { /* ignore */ }
+             try {
+                 const errDataText = await apiResponse.text(); // **NEU:** Lese Fehlerantwort als Text
+                 console.error(`[DEBUG] Uniliga API error raw text:`, errDataText); // **NEU:** Logge rohen Fehlertext
+                 const errData = JSON.parse(errDataText); // **NEU:** Versuche Text zu parsen
+                 errorMsg = errData.error || errData.message || errDataText || errorMsg;
+            } catch (parseError) {
+                 errorMsg = errDataText || errorMsg;
+                 console.error(`[DEBUG] Failed to parse error response for Uniliga:`, parseError);
+            }
             throw new Error(errorMsg);
         }
-        const data = await apiResponse.json();
+        const textData = await apiResponse.text(); // **NEU:** Lese als Text
+        console.log("[DEBUG] Uniliga API raw text:", textData); // **NEU:** Logge rohen Text
+        const data = JSON.parse(textData); // **NEU:** Parse den Text
+
          if (data && data.message && data.message.includes('Minimaler Test')) {
-             console.warn("[FRONTEND-DEBUG] Minimale Test-Antwort vom Backend erhalten. Echter Code wird nicht ausgeführt.");
+             console.warn("[LOG] Minimale Test-Antwort vom Backend erhalten. Echter Code wird nicht ausgeführt.");
              errorMessageUniliga.textContent = "Backend führt Test-Code aus. Bitte Backend korrigieren.";
              errorMessageUniliga.style.display = 'block';
              uniligaDataArea.innerHTML = '<p>Backend-Test aktiv.</p>';
@@ -564,17 +555,17 @@ async function loadUniligaView() {
         uniligaDataArea.innerHTML = '<p>Daten konnten nicht geladen werden.</p>';
         currentUniligaData = null;
     } finally {
-        console.log("loadUniligaView finally block reached.");
-        if (loadingIndicatorUniliga) { loadingIndicatorUniliga.style.display = 'none'; console.log("Uniliga loading indicator hidden."); }
-        else { console.warn("loadingIndicatorUniliga nicht gefunden im finally block."); }
+        console.log("[LOG] loadUniligaView finally block reached.");
+        if (loadingIndicatorUniliga) { loadingIndicatorUniliga.style.display = 'none'; console.log("[LOG] Uniliga loading indicator hidden."); }
     }
 }
 
 function displayUniligaData(data) {
-    console.log("displayUniligaData called with data:", data);
+    // ... (keine Änderungen hier)
+    console.log("[LOG] displayUniligaData called with data:", data);
     if (!uniligaDataArea) { console.error("FEHLER: uniligaDataArea ist null in displayUniligaData!"); return; }
     if (!data || !data.teams || data.teams.length === 0 || !data.players || data.players.length === 0) {
-        console.warn("Keine gültigen oder leere Uniliga-Daten zum Anzeigen vorhanden.");
+        console.warn("[LOG] Keine gültigen oder leere Uniliga-Daten zum Anzeigen vorhanden.");
         uniligaDataArea.innerHTML = '<p>Keine vollständigen Daten zum Anzeigen gefunden.</p>';
         return;
     }
@@ -634,7 +625,7 @@ function displayUniligaData(data) {
         : '';
 
     uniligaDataArea.innerHTML = teamTableHtml + playerTableHtml + lastUpdatedHtml;
-    console.log("Uniliga tables rendered.");
+    console.log("[LOG] Uniliga tables rendered.");
 }
 
 function getTeamWinrateClass(winRate) {
@@ -650,7 +641,7 @@ function getTeamWinrateClass(winRate) {
 // Umschaltlogik für Ansichten (unverändert)
 // -------------------------------------------------------------
 function switchView(viewToShow) {
-    console.log(`Switching view to: ${viewToShow}`);
+    console.log(`[LOG] Switching view to: ${viewToShow}`);
     document.querySelectorAll('.view-content').forEach(content => content.classList.remove('active'));
     if (toggleButtons) toggleButtons.forEach(button => button.classList.remove('active'));
 
@@ -675,7 +666,7 @@ function switchView(viewToShow) {
         if (allPlayersData.length === 0) {
              loadSaverAbiView();
          } else {
-             sortAndDisplayPlayers();
+             sortAndDisplayPlayers(); // Beim Wechsel zurück, einfach neu sortieren/anzeigen
          }
     }
 }
@@ -684,7 +675,7 @@ function switchView(viewToShow) {
 // Initialisierung beim Laden der Seite (unverändert)
 // -------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("DOMContentLoaded event fired.");
+    console.log("[LOG] DOMContentLoaded event fired.");
     cacheDOMElements();
 
     if (toggleButtons) {
@@ -694,29 +685,29 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (view) switchView(view);
             });
         });
-    } else { console.warn("Toggle buttons not found."); }
+    } else { console.warn("[LOG] Toggle buttons not found."); }
 
     if (sortEloButton) {
         sortEloButton.addEventListener('click', () => {
             if (currentSortMode !== 'elo') {
-                console.log("Switching sort mode to: elo");
+                console.log("[LOG] Switching sort mode to: elo");
                 currentSortMode = 'elo';
                 sortAndDisplayPlayers();
             }
         });
-    } else { console.warn("Sort Elo Button not found."); }
+    } else { console.warn("[LOG] Sort Elo Button not found."); }
 
     if (sortWorthButton) {
         sortWorthButton.addEventListener('click', () => {
             if (currentSortMode !== 'worth') {
-                console.log("Switching sort mode to: worth");
+                console.log("[LOG] Switching sort mode to: worth");
                 currentSortMode = 'worth';
                 sortAndDisplayPlayers();
             }
         });
-    } else { console.warn("Sort Worth Button not found."); }
+    } else { console.warn("[LOG] Sort Worth Button not found."); }
 
 
-    console.log("Initializing default view: saverabi");
+    console.log("[LOG] Initializing default view: saverabi");
     switchView('saverabi');
 });
