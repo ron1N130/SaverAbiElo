@@ -316,8 +316,8 @@ ol#player-list li::before {
 
 /* Anpassung der Club-Icon Grösse */
 .club-icon {
-    width: 80px; /* Passe die Grösse an */
-    height: 80px; /* Passe die Grösse an */
+    width: 50px; /* Passe die Grösse an */
+    height: 50px; /* Passe die Grösse an */
     margin-left: 8px; /* Abstand zwischen Spielername und Icon */
     /* vertical-align: middle; /* Kann je nach Layout angepasst werden, Flexbox regelt dies oft besser */
     border-radius: 4px; /* Optionale Abrundung der Ecken */
