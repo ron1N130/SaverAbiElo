@@ -30,12 +30,12 @@ function safeWorth(v) {
     const num = parseFloat(v);
     if (!Number.isFinite(num)) return "—";
 
-    // Teile durch 1.000.000, um den Wert in Millionen zu erhalten
-    const worthInMillions = num / 1000000;
+    // Teile durch 1000, um den Wert in "Tausend" zu erhalten
+    const worthInThousands = num / 1000;
 
-    // Formatiere mit 2 Dezimalstellen und füge 'M USD' hinzu
-    // Verwende 'en-US' Locale für Standard-Nummernformatierung ohne deutsche Tausendertrennzeichen
-    return worthInMillions.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 }) + ' M USD';
+    // Formatiere mit 1 Dezimalstelle und füge ' Mio USD' hinzu
+    // Verwende 'de-DE' Locale, um das Komma als Dezimaltrennzeichen zu nutzen
+    return worthInThousands.toLocaleString('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' Mio USD';
 }
 
 
