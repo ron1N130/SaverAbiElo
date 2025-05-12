@@ -215,6 +215,7 @@ ol#player-list {
     overflow-y: auto; /* Scrollen innerhalb der Liste */
     max-height: 100%;
 }
+
 /* Verhindert, dass der Spielername in der Liste abgeschnitten wird */
 .player-list-sorted .player-info .player-name {
     flex-shrink: 0; /* Verhindert, dass das Element schrumpft */
