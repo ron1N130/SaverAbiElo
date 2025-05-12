@@ -34,7 +34,7 @@
 
     /* Layout */
     --font: 'Roboto', sans-serif;
-    --gap: 1.5rem;
+    --gap: 2rem;
     --max-list: 1200px; /* Kann ggf. erhöht werden, falls die Liste alleine sehr breit sein soll */
     --max-card: 1200px; /* Kann ggf. erhöht werden */
 }
