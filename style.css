@@ -262,8 +262,8 @@ ol#player-list li::before {
     flex-shrink: 0;
 }
 .club-icon {
-    width: 40px; /* ZURÜCKGEÄNDERT auf 40px */
-    height: 40px; /* ZURÜCKGEÄNDERT auf 40px */
+    width: 30px; /* ZURÜCKGEÄNDERT auf 40px */
+    height: 30px; /* ZURÜCKGEÄNDERT auf 40px */
     margin-left: 8px;
     vertical-align: middle;
     border-radius: 4px;
