@@ -191,7 +191,7 @@ main {
     display: flex;
     flex-direction: column;
     max-height: calc(80vh - 4rem); /* Höhe begrenzen */
-    overflow: hidden; /* Container fix */
+    overflow: hidden; /* Container fix - kann evtl. entfernt werden, aber vorsichtig */
 }
 #player-list-container h2 {
     margin: 0 0 var(--gap);
@@ -216,29 +216,21 @@ ol#player-list {
     max-height: 100%;
 }
 
-/* Verhindert, dass der Spielername in der Liste abgeschnitten wird */
-.player-list-sorted .player-info .player-name {
-    flex-shrink: 0; /* Verhindert, dass das Element schrumpft */
-    min-width: 0;   /* Ermöglicht dem Inhalt, die Mindestbreite zu bestimmen */
-    /* Füge ggf. Zeilenumbrüche für sehr lange Namen hinzu, falls nötig */
-    overflow-wrap: break-word;
-    word-break: break-word;
-}
+/* Scrollbar verstecken (Webkit) */
 #player-list::-webkit-scrollbar {
-    display: none; /* Versteckt den Scrollbalken komplett */
-    /* Alternativ, wenn du nur die Breite auf 0 setzen willst: */
-    /* width: 0; */
-    /* height: 0; */
-  }
+    display: none;
+}
+
 ol#player-list li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+    display: flex; /* Macht Listeneintrag zum Flex-Container */
+    align-items: center; /* Vertikale Zentrierung der Items */
+    justify-content: space-between; /* Verteilt Platz zwischen player-info und player-list-right */
+    gap: 0.5rem; /* Abstand zwischen den beiden Hauptbereichen */
     padding: 0.8rem var(--gap);
     border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3);
     cursor: pointer;
     transition: background-color 0.2s;
+    width: 100%; /* Stellt sicher, dass li volle Breite nutzt */
 }
 ol#player-list li:last-child {
     border-bottom: none;
@@ -254,21 +246,16 @@ ol#player-list li::before {
     color: var(--text-secondary);
     margin-right: 0.5rem;
     font-size: 0.9em;
+    flex-shrink: 0; /* Verhindert, dass die Nummer schrumpft */
 }
-.club-icon {
-    width: 40px; /* Passe die Grösse an */
-    height: 40px; /* Passe die Grösse an */
-    margin-left: 8px; /* Abstand zwischen Spielername und Icon */
-    vertical-align: middle; /* Zentriert das Icon vertikal mit dem Text */
-    border-radius: 4px; /* Optionale Abrundung der Ecken */
-    /* Weitere Styling-Optionen je nach Bedarf */
-}
+
 .player-info {
-    display: flex;
-    align-items: center;
-    gap: 1.8rem;
-    overflow: hidden;
-    flex-grow: 1;
+    display: flex; /* Macht player-info zum Flex-Container */
+    align-items: center; /* Vertikale Zentrierung innerhalb von player-info */
+    gap: 1.8rem; /* Abstand zwischen Avatar, Name und Icon */
+    /* overflow: hidden; /* Diese Regel wurde entfernt, um Abschneiden zu vermeiden */
+    flex-grow: 1; /* Ermöglicht player-info zu wachsen */
+    min-width: 0; /* Wichtig in Flexbox, um Überlaufen bei langen Inhalten zu verhindern */
 }
 .player-info .avatar {
     width: 40px;
@@ -276,25 +263,54 @@ ol#player-list li::before {
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid rgba(var(--card-bg-rgb), 0.3);
-    flex-shrink: 0;
+    flex-shrink: 0; /* Verhindert Schrumpfen des Avatars */
     margin-right: 8px;
 }
-.player-info .player-name {
+
+/* Anpassungen für den Spielernamen, um vollständige Anzeige zu gewährleisten */
+.player-list-sorted .player-info .player-name {
     font-weight: bold;
-    white-space: nowrap;
-    overflow: hidden;
     text-align: left;
-    text-overflow: ellipsis;
-    flex-grow: 1;
+    flex-grow: 1; /* Erlaubt dem Namen-Span zu wachsen */
+    flex-shrink: 0; /* **WICHTIG:** Verhindert, dass der Name-Span schrumpft */
+    min-width: 0;   /* **WICHTIG:** Ermöglicht dem Namen-Span, basierend auf Inhalt kleiner zu werden, statt zu überlaufen, wenn flex-shrink: 0; gesetzt ist */
+    white-space: normal; /* **GEÄNDERT:** Erlaubt Zeilenumbrüche, falls nötig */
+    overflow: visible; /* **GEÄNDERT:** Verhindert das Verstecken von Text */
+    text-overflow: clip; /* **GEÄNDERT:** Verhindert das Hinzufügen von "..." */
+    overflow-wrap: break-word; /* Stellt sicher, dass sehr lange Wörter umbrechen */
+    word-break: break-word;   /* Stellt sicher, dass Wörter umbrechen */
+    /* margin-right: 8px; /* Füge Abstand zum Icon hinzu, falls gewünscht */
 }
+
+.club-icon {
+    width: 20px; /* Passe die Grösse an (reduziert von 40px für kleinere Icons) */
+    height: 20px; /* Passe die Grösse an */
+    margin-left: 8px; /* Abstand zwischen Spielername und Icon */
+    vertical-align: middle; /* Zentriert das Icon vertikal mit dem Text */
+    border-radius: 4px; /* Optionale Abrundung der Ecken */
+    flex-shrink: 0; /* Verhindert Schrumpfen des Icons */
+    /* Weitere Styling-Optionen je nach Bedarf */
+}
+
+
 .player-list-right {
     text-align: right;
-    flex-shrink: 0;
+    flex-shrink: 0; /* Verhindert, dass dieser Bereich schrumpft */
+    /* Du könntest hier eine min-width setzen, um sicherzustellen, dass Wert und Bar immer Platz haben */
+     min-width: 100px; /* Beispiel: Passe diesen Wert an */
+    /* width: 120px; /* Oder eine feste Breite */
 }
-.player-elo {
+.player-elo { /* Diese Klasse wird nicht direkt verwendet im aktuellen HTML */
     font-weight: bold;
     margin-bottom: 0.3rem;
     font-size: 0.95em;
+}
+.player-value { /* Die Klasse, die den Wert (Elo oder Mio USD) anzeigt */
+    font-weight: bold;
+    margin-bottom: 0.3rem;
+    font-size: 0.95em;
+    display: block; /* Damit der Wert über der Progressbar steht */
+    white-space: nowrap; /* Verhindert Umbruch des Werts */
 }
 .elo-progress-container {
     width: 90px;
@@ -311,7 +327,10 @@ ol#player-list li::before {
 
 /* ==========================================================================
    Detail Card (SaverAbi View - Drittel-Balken-Layout)
-   ========================================================================== */
+   ========================================================================= */
+/* ... (Rest der Datei bleibt gleich) ... */
+
+
 #player-detail-card-container {
     display: none; /* Wird von JS gesteuert */
     width: 100%;
@@ -627,7 +646,7 @@ ol#player-list li::before {
     .player-cell { max-width: 100px; } /* Spielername kürzer */
 }
 
-/* style.css */
+/* style.css - Untere Anpassungen (Sort Buttons etc.) */
 
 /* Container für die Sortierbuttons */
 #saverabi-sort-controls {
@@ -670,7 +689,7 @@ ol#player-list li::before {
 
 /* Optional: Sicherstellen, dass der Hover-Effekt auf dem aktiven Button nicht stört */
 .sort-button.active:hover {
-    background-color: #626266; /* Nur eine minimale Änderung beim Hover auf Active */
+    background-color: #626262; /* Nur eine minimale Änderung beim Hover auf Active */
     border-color: #999;
 }
 
