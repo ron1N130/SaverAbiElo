@@ -142,7 +142,7 @@ async function getPlayerData(nickname) {
         // *** Berechne den "Geldwert" (bleibt für Sortierung erhalten) ***
         if (p.sortElo !== null && p.rating !== null) {
              // Multiplikation mit 1000 entfernt, Wert ist jetzt Elo * Rating
-             p.worth = p.sortElo * p.rating * p.impact;
+             p.worth = p.sortElo * p.rating * (p.impact -0.2);
         } else {
              p.worth = null; // Kein Wert, wenn Daten fehlen
         }
@@ -204,7 +204,7 @@ function displayPlayerList(players) {
                     <span class='player-name'>${player.nickname}</span>
                 </span>
                 <div class='player-list-right'>
-                    <span class='player-value'>${displayValue}</span>
+                    <span class='player-value'>${displayValue} Wadaw </span>
                     ${eloProgressBarHtml}
                 </div>`;
 
