@@ -147,8 +147,9 @@ async function getPlayerData(nickname) {
 
         // *** Berechne den "Geldwert" (bleibt für Sortierung erhalten) ***
         if (p.sortElo !== null && p.rating !== null) {
-             // Multiplikation mit 1000 entfernt, Wert ist jetzt Elo * Rating
-             p.worth = p.sortElo * p.rating * (p.impact -0.2);
+            // Multiplikation mit 1000 entfernt, Wert ist jetzt Elo * Rating * Impact - offset
+             p.worth = (p.sortElo * p.rating * (p.impact -0.2) * p.kast * p.adr * p.kpr) / p.dpr ;
+            //p.worth = p.sortElo * p.rating * (p.impact -0.2); 
         } else {
              p.worth = null; // Kein Wert, wenn Daten fehlen
         }
