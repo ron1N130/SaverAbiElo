@@ -35,8 +35,8 @@
     /* Layout */
     --font: 'Roboto', sans-serif;
     --gap: 1.5rem;
-    --max-list: 1200px; /* Kann ggf. erhöht werden, falls die Liste alleine sehr breit sein soll */
-    --max-card: 1200px; /* Kann ggf. erhöht werden */
+    --max-list: 1200px;
+    --max-card: 1200px;
 }
 
 /* ==========================================================================
@@ -147,8 +147,7 @@ footer {
    ========================================================================== */
 main {
     flex: 1;
-    /* Max-Breite von main: Liste + Karte + 2 * Gap */
-    max-width: calc(var(--max-list) + var(--max-card) + var(--gap) * 2); /* Diese Breite kann ggf. erhöht werden, wenn Liste/Karte breiter werden */
+    max-width: calc(var(--max-list) + var(--max-card) + var(--gap) * 2);
     margin: 0 auto;
     padding: 0 var(--gap);
 }
@@ -428,6 +427,7 @@ ol#player-list li::before {
     display: flex;
     flex-direction: column;
     align-items: center; /* Zentriert Inhalt horizontal */
+    justify-content: center; /* **NEU:** Zentriert Inhalt vertikal */
     text-align: center;
     padding: 0.5rem 4px; /* Hinzugefügt: Kleines horizontales Padding */
 }
@@ -741,7 +741,7 @@ ol#player-list li::before {
 
 /* Optional: Sicherstellen, dass der Hover-Effekt auf dem aktiven Button nicht stört */
 .sort-button.active:hover {
-    background-color: #626262; /* Nur eine minimale Änderung beim Hover auf Active */
+    background-color: #626266; /* Nur eine minimale Änderung beim Hover auf Active */
     border-color: #999;
 }
 
