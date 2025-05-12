@@ -622,7 +622,7 @@ function displayUniligaData(data) {
                     <img src="${player.avatar || 'default_avatar.png'}" class="table-avatar" alt="Avatar" onerror="this.src='default_avatar.png'"/>
                     <span>${player.nickname || 'Unbekannt'}</span>
                 </td>
-                <td>${player.matchesPlayed ?? '0'}</td><td>${safe(player.rating, 2)}</td><td>${safe(player.impact, 2)}</td>
+                <td>${player.matchesPlayed ?? '0'}</td><td>${safe(player.rating, 2)}</td><td>${safe(player.impact - 0.2, 2)}</td>
                 <td>${safe(player.adr, 1)}</td><td>${safe(player.kast, 1)}</td><td>${safe(player.hsp, 1)}</td>
                 <td class="${getTeamWinrateClass(player.winRate)}">${safe(player.winRate, 1)}</td>
             </tr>`;
