@@ -28,8 +28,14 @@ function safe(v, digits = 2, suf = "") {
 function safeWorth(v) {
     if (v === null || typeof v === 'undefined') return "—";
     const num = parseFloat(v);
-    // Formatieren als "Währung" ohne Nachkommastellen und mit Tausendertrennzeichen
-    return Number.isFinite(num) ? '$' + num.toLocaleString('de-DE', { maximumFractionDigits: 0 }) : "—";
+    if (!Number.isFinite(num)) return "—";
+
+    // Teile durch 1.000.000, um den Wert in Millionen zu erhalten
+    const worthInMillions = num / 1000000;
+
+    // Formatiere mit 2 Dezimalstellen und füge 'M USD' hinzu
+    // Verwende 'en-US' Locale für Standard-Nummernformatierung ohne deutsche Tausendertrennzeichen
+    return worthInMillions.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 }) + ' M USD';
 }
 
 
