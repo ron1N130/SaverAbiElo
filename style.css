@@ -34,7 +34,7 @@
 
     /* Layout */
     --font: 'Roboto', sans-serif;
-    --gap: 2rem;
+    --gap: 1.5rem;
     --max-list: 1200px; /* Kann ggf. erhöht werden, falls die Liste alleine sehr breit sein soll */
     --max-card: 1200px; /* Kann ggf. erhöht werden */
 }
@@ -360,7 +360,7 @@ ol#player-list li::before {
 
 /* ==========================================================================
    Detail Card (SaverAbi View - Drittel-Balken-Layout)
-   ========================================================================== */
+   ========================================================================= */
 #player-detail-card-container {
     display: none; /* Wird von JS gesteuert */
     width: 100%;
@@ -440,7 +440,9 @@ ol#player-list li::before {
     text-transform: uppercase;
     font-weight: 700;
     text-align: center;
-    width: 100%; /* **NEU:** Nimmt volle Breite des Containers ein */
+    width: 100%;
+    margin-left: auto; /* **NEU:** Zentrierung mit auto Margins */
+    margin-right: auto; /* **NEU:** Zentrierung mit auto Margins */
 }
 
 /* Anpassungen für Wert in der Detailkarte */
@@ -451,7 +453,9 @@ ol#player-list li::before {
     margin-bottom: 0.6rem;
     line-height: 1.1;
     text-align: center;
-    width: 100%; /* **NEU:** Nimmt volle Breite des Containers ein */
+    width: 100%;
+    margin-left: auto; /* **NEU:** Zentrierung mit auto Margins */
+    margin-right: auto; /* **NEU:** Zentrierung mit auto Margins */
 }
 
 /* Progress Bar Container (Drittel-Stil) */
@@ -464,6 +468,8 @@ ol#player-list li::before {
     border-radius: 4px;
     /*overflow: hidden;   /* Verhindert, dass Bar überläuft */
     margin-bottom: 0.4rem; /* Abstand zum Label darunter */
+    margin-left: auto; /* **NEU:** Zentrierung mit auto Margins */
+    margin-right: auto; /* **NEU:** Zentrierung mit auto Margins */
 }
 
 /* Pseudo-Elemente für die Trennlinien */
@@ -501,6 +507,11 @@ ol#player-list li::before {
     text-transform: uppercase;
     margin-top: 0.2rem; /* Kleiner Abstand nach oben */
     transition: color 0.3s;
+    text-align: center; /* **NEU:** Sicherstellen */
+    width: 100%; /* **NEU:** Nimmt volle Breite ein */
+    margin-left: auto; /* **NEU:** Zentrierung mit auto Margins */
+    margin-right: auto; /* **NEU:** Zentrierung mit auto Margins */
+    display: block; /* **NEU:** Verhält sich wie ein Block für margin auto */
 }
 
 
