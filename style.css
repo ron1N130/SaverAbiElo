@@ -179,6 +179,7 @@ main {
    Player List (SaverAbi View)
    ========================================================================== */
 #player-list-container {
+    margin: 0 auto;
     background: rgba(var(--card-bg-rgb), 0.75);
     backdrop-filter: blur(var(--glass-blur));
     border: var(--border);
