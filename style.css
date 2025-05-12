@@ -198,6 +198,12 @@ main {
     text-align: center;
     color: var(--text-primary);
 }
+#player-list-container h3 {
+    margin: 0 0 var(--gap);
+    padding: 0 var(--gap);
+    text-align: center;
+    color: var(--text-primary);
+}
 ol#player-list {
     scrollbar-width: none;
     -ms-overflow-style: none;
