@@ -247,8 +247,8 @@ ol#player-list li::before {
     font-size: 0.9em;
 }
 .club-icon {
-    width: 20px; /* Passe die Grösse an */
-    height: 20px; /* Passe die Grösse an */
+    width: 40px; /* Passe die Grösse an */
+    height: 40px; /* Passe die Grösse an */
     margin-left: 8px; /* Abstand zwischen Spielername und Icon */
     vertical-align: middle; /* Zentriert das Icon vertikal mit dem Text */
     border-radius: 4px; /* Optionale Abrundung der Ecken */
