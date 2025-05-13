@@ -163,7 +163,7 @@ async function getPlayerData(nickname) {
             const rating = p.rating;
             const impact = p.impact;
 
-            const bonusThreshold = thresholds?.elo?.great ?? 2500;
+            const bonusThreshold = thresholds?.elo?.good ?? 2000;
             const bonusPower = 1.8;
             const bonusScale = 0.05;
 
