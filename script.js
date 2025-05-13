@@ -146,7 +146,7 @@ async function getPlayerData(nickname) {
             throw new Error(errorMsg);
         }
         const textData = await res.text(); // **NEU:** Lese als Text
-        console.log("[DEBUG] /api/faceit-data raw text for", nickname, ":", textData); // **NEU:** Logge rohen Text
+        console.log(`[DEBUG] /api/faceit-data raw text for ${nickname}:`, textData); // **NEU:** Logge rohen Text
         const p = JSON.parse(textData); // **NEU:** Parse den Text
 
         if (p.error) {
@@ -166,6 +166,7 @@ async function getPlayerData(nickname) {
         p.winRate = toNum(p.winRate); // Auch Win Rate als Zahl konvertieren
 
 
+        // Berechne den "Geldwert"
         // Berechne den "Geldwert"
         if (p.sortElo !== null && typeof p.rating === 'number' && typeof p.impact === 'number') {
             const elo = p.sortElo;
@@ -591,8 +592,8 @@ function toggleComparisonMode(activate) {
     } else {
         console.log("[LOG] Comparison mode deactivated.");
         if(saverAbiListHeader) saverAbiListHeader.textContent = 'Spielerliste'; // Headertext zurücksetzen
-        resetComparisonSelection(); // Auswahl und Hervorhebung löschen
-        hidePlayerCard(); // Karte ausblenden, wenn keine Spieler mehr ausgewählt sind
+        // hidePlayerCard(); // <-- DIESE ZEILE WURDE ENTFERNT
+        resetComparisonSelection(); // Auswahl und Hervorhebung löschen (behält aber die angezeigte Karte, falls 2 Spieler ausgewählt wurden)
     }
 }
 
@@ -633,7 +634,7 @@ function handlePlayerListClick(e) {
         if (isAlreadySelected) {
              // Wenn der bereits ausgewählte Spieler erneut geklickt wird, Auswahl aufheben
              playersToCompare = playersToCompare.filter(p => p.nickname !== nickname);
-             li.classList.remove('selected-for-compare');
+             li.classList.remove('selected-for-compare'); // Hervorhebung entfernen
              console.log(`[LOG] Player ${nickname} deselected for comparison.`);
               // Karte ausblenden, wenn nur noch 0 oder 1 Spieler ausgewählt sind
              hidePlayerCard();
@@ -653,12 +654,12 @@ function handlePlayerListClick(e) {
                 console.log(`[LOG] Zwei Spieler für Vergleich ausgewählt: ${playersToCompare[0].nickname} vs ${playersToCompare[1].nickname}`);
                 displayComparisonCard(playersToCompare[0], playersToCompare[1]);
                 // Vergleich abgeschlossen, Modus verlassen
-                toggleComparisonMode(false); // Deaktiviert den Vergleichsmodus und setzt die Auswahl zurück
+                toggleComparisonMode(false); // Deaktiviert den Vergleichsmodus und setzt die Auswahl zurück (OHNE die Karte auszublenden)
             } else { // playersToCompare.length === 1
                 console.log(`[LOG] Erster Spieler für Vergleich ausgewählt: ${playerData.nickname}`);
                 // Optional: UI aktualisieren, um zur Auswahl des 2. Spielers aufzufordern
                 if(saverAbiListHeader) saverAbiListHeader.textContent = `Wähle 2. Spieler zum Vergleich (${playerData.nickname} ausgewählt)`;
-                 hidePlayerCard(); // Detailkarte ausblenden
+                 hidePlayerCard(); // Detailkarte ausblenden, um Platz für den Vergleich zu machen (falls noch eine angezeigt war)
             }
         } else {
              // Mehr als 2 Spieler wurden angeklickt, obwohl der Modus aktiv ist (sollte nicht passieren, wenn Modus nach 2 Spielern deaktiviert wird)
@@ -729,13 +730,13 @@ async function loadSaverAbiView() {
     }
     finally {
         console.log("[LOG] loadSaverAbiView finally block reached.");
+        if (loadingIndicatorSaverAbi) {
+            loadingIndicatorSaverAbi.style.display = 'none';
+            console.log("[LOG] Loading indicator hidden.");
+        }
         const sortButtonContainer = document.getElementById('saverabi-sort-controls');
         if (sortButtonContainer) {
             sortButtonContainer.style.display = 'flex';
-        }
-         if (loadingIndicatorSaverAbi) {
-            loadingIndicatorSaverAbi.style.display = 'none';
-            console.log("[LOG] Loading indicator hidden.");
         }
     }
 }
@@ -820,10 +821,9 @@ async function loadUniligaView() {
              return;
          }
 
-
         console.log("[LOG] Uniliga API data received (teams):", JSON.stringify(data.teams, null, 2));
         console.log("[LOG] Uniliga API data received (players):", JSON.stringify(data.players, null, 2));
-        if (!data || !data.teams || data.teams.length === 0 || !data.players || data.players.length === 0) {
+        if (!data || !data.teams || !data.players) {
             throw new Error("Ungültiges Datenformat von der API empfangen.");
         }
         currentUniligaData = data;
@@ -941,12 +941,8 @@ function switchView(viewToShow) {
         if (mainContentArea) mainContentArea.classList.remove('detail-visible');
         loadUniligaView();
     } else if (viewToShow === 'saverabi') {
-        // Vergleichsmodus beenden beim Wechsel zur SaverAbi Ansicht
-        toggleComparisonMode(false);
-
         if (detailCardContainer) detailCardContainer.style.display = 'none';
         if (mainContentArea) mainContentArea.classList.remove('detail-visible');
-
         if (allPlayersData.length === 0) {
              loadSaverAbiView();
          } else {
@@ -956,7 +952,7 @@ function switchView(viewToShow) {
 }
 
 // -------------------------------------------------------------
-// Initialisierung beim Laden der Seite (ANGEPASST)
+// Initialisierung beim Laden der Seite (unverändert)
 // -------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
     console.log("[LOG] DOMContentLoaded event fired.");
@@ -971,43 +967,25 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     } else { console.warn("[LOG] Toggle buttons not found."); }
 
-    // Add click listener for Sort Elo Button
     if (sortEloButton) {
         sortEloButton.addEventListener('click', () => {
-            console.log("[LOG] Sort Elo Button clicked.");
-            toggleComparisonMode(false); // Vergleichsmodus verlassen, wenn sortiert wird
-            currentSortMode = 'elo';
-            sortAndDisplayPlayers();
+            if (currentSortMode !== 'elo') {
+                console.log("[LOG] Switching sort mode to: elo");
+                currentSortMode = 'elo';
+                sortAndDisplayPlayers();
+            }
         });
     } else { console.warn("[LOG] Sort Elo Button not found."); }
 
-    // Add click listener for Sort Worth Button
     if (sortWorthButton) {
         sortWorthButton.addEventListener('click', () => {
-            console.log("[LOG] Sort Worth Button clicked.");
-            toggleComparisonMode(false); // Vergleichsmodus verlassen, wenn sortiert wird
-            currentSortMode = 'worth';
-            sortAndDisplayPlayers();
+            if (currentSortMode !== 'worth') {
+                console.log("[LOG] Switching sort mode to: worth");
+                currentSortMode = 'worth';
+                sortAndDisplayPlayers();
+            }
         });
     } else { console.warn("[LOG] Sort Worth Button not found."); }
-
-    // Add click listener for the new Compare Button
-    if (compareButton) {
-        compareButton.addEventListener('click', () => {
-            console.log("[LOG] Compare Button clicked.");
-            toggleComparisonMode(!isComparing); // Vergleichsmodus umschalten
-        });
-    } else { console.warn("[LOG] Compare Button not found."); }
-
-    // Add click listener to player list container ONCE
-    if (playerListContainerEl) {
-       // Event Listener für Spielerliste zum Anzeigen von Detail/Vergleich
-       playerListContainerEl.removeEventListener('click', handlePlayerListClick); // Doppelte Listener vermeiden
-       playerListContainerEl.addEventListener('click', handlePlayerListClick);
-       console.log("[LOG] Click listener added to player list.");
-    } else {
-       console.warn("[LOG] Konnte Click listener für Spielerliste nicht hinzufügen.");
-    }
 
 
     console.log("[LOG] Initializing default view: saverabi");
