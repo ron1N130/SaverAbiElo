@@ -19,7 +19,7 @@ let teamIconMap = {}; // Speichert das Mapping von Teamnamen zu Icon-Dateinamen
 let allPlayersData = []; // Globale Speicherung der Spielerdaten für SaverAbi
 let currentSortMode = 'elo'; // Start-Sortiermodus ('elo' oder 'worth')
 
-// NEUE Variablen für den Vergleichsmodus
+// Variablen für den Vergleichsmodus
 let isComparing = false;
 let playersToCompare = []; // Array, das die 1 oder 2 Spieler für den Vergleich speichert
 
@@ -162,7 +162,7 @@ async function getPlayerData(nickname) {
         p.kpr = toNum(p.kpr);
         p.hsp = toNum(p.hsPercent);
         p.impact = toNum(p.impact);
-        p.matchesPlayed = toNum(p.matchesPlayed); // Auch Matches Played als Zahl konvertieren
+        p.matchesConsidered = p.matchesConsidered; // Matches Considered als String lassen oder auch zu Zahl?
         p.winRate = toNum(p.winRate); // Auch Win Rate als Zahl konvertieren
 
 
@@ -412,7 +412,7 @@ function displayComparisonCard(player1, player2) {
      if (!detailCardContainer || !mainContentArea) { console.error("FEHLER: Detail Card Container oder Main Content Area nicht gefunden."); return; }
      const saverAbiContentEl = document.getElementById('saverabi-content');
      if (!saverAbiContentEl || !saverAbiContentEl.classList.contains('active')) {
-         console.log("[LOG] SaverAbi view is not active, cannot display comparison card.");
+         console.log("[LOG] SaverAbi view is not active, hiding detail card.");
          detailCardContainer.style.display = 'none';
          if (mainContentArea) mainContentArea.classList.remove('detail-visible');
          return;
@@ -500,7 +500,7 @@ function generateComparisonStatsList(player, opponent, isPlayer1) {
                      comparisonResult = playerValNum - opponentValNum; // Positive if player is better (higher)
                  }
 
-                 const significanceThreshold = (stat.isPercentage || stat.key === 'rating' || stat.key === 'impact' || stat.key === 'dpr' || stat.key === 'kpr') ? 0.005 : 0.5; // Kleine Schwellenwerte für genaue Werte
+                 const significanceThreshold = (stat.isPercentage || stat.key === 'rating' || stat.key === 'impact' || stat.key === 'dpr' || stat.key === 'kpr' || stat.key === 'adr') ? 0.005 : (stat.key === 'elo' ? 5 : 0.5); // Kleine Schwellenwerte für genaue Werte, 5 für Elo
 
                  if (comparisonResult > significanceThreshold) {
                      indicator = stat.lowerIsBetter ? '↓' : '↑'; // Runterpfeil wenn besser und lowerIsBetter=true, Hochpfeil sonst
@@ -573,9 +573,27 @@ function convertStatsToNumbers(player) {
 
 // Funktion zum Umschalten des Vergleichsmodus
 function toggleComparisonMode(activate) {
+    console.log(`[LOG] Toggling comparison mode. Requested state: ${activate}, Current state: ${isComparing}`);
+    if (isComparing === activate && activate === true) {
+         console.log("[LOG] Comparison mode is already active. Doing nothing.");
+         return; // Verhindern, dass der Modus erneut aktiviert wird, wenn er schon an ist
+    }
+     if (isComparing === activate && activate === false) {
+         console.log("[LOG] Comparison mode is already inactive. Doing nothing.");
+         // Nur Reset, wenn der Modus tatsächlich deaktiviert wurde (z.B. durch Sortieren)
+         // resetComparisonSelection(); // Diese Logik ist jetzt in der aufrufenden Funktion
+         return; // Verhindern, dass der Modus erneut deaktiviert wird, wenn er schon aus ist
+    }
+
+
     isComparing = activate;
+    console.log(`[LOG] Comparison mode isComparing set to: ${isComparing}`);
+
     if (compareButton) {
         compareButton.classList.toggle('active', isComparing);
+         console.log(`[LOG] Compare button active class toggled: ${isComparing}`);
+    } else {
+        console.warn("[LOG] compareButton is null in toggleComparisonMode!");
     }
 
     // Sortier-Buttons deaktivieren, wenn im Vergleichsmodus
@@ -586,13 +604,12 @@ function toggleComparisonMode(activate) {
     if (isComparing) {
         console.log("[LOG] Comparison mode activated. Select two players.");
         resetComparisonSelection(); // Vorherige Auswahl löschen
-        hidePlayerCard(); // Aktuelle Detail-/Vergleichskarte ausblenden
-        // Optional: UI aktualisieren, um Benutzer zu leiten (z.B. Headertext ändern)
+        hidePlayerCard(); // Aktuelle Detail-/Vergleichskarte ausblenden BEFORE selecting players
         if(saverAbiListHeader) saverAbiListHeader.textContent = 'Wähle 2 Spieler zum Vergleich';
     } else {
         console.log("[LOG] Comparison mode deactivated.");
         if(saverAbiListHeader) saverAbiListHeader.textContent = 'Spielerliste'; // Headertext zurücksetzen
-        // hidePlayerCard(); // <-- DIESE ZEILE WURDE ENTFERNT
+        // hidePlayerCard(); // <-- DIESE ZEILE BLEIBT ENTFERNT
         resetComparisonSelection(); // Auswahl und Hervorhebung löschen (behält aber die angezeigte Karte, falls 2 Spieler ausgewählt wurden)
     }
 }
@@ -610,45 +627,74 @@ function resetComparisonSelection() {
 
 // Funktion zum Ausblenden der Detail-/Vergleichskarte
 function hidePlayerCard() {
+    console.log("[LOG] Hiding player card.");
      if (detailCardContainer) detailCardContainer.style.display = 'none';
      if (mainContentArea) mainContentArea.classList.remove('detail-visible');
+     detailCardContainer.innerHTML = ''; // Inhalt leeren
 }
 
 
-// handlePlayerListClick (ANGEPASST für Vergleichsmodus)
+// handlePlayerListClick (ANGEPASST für Vergleichsmodus und Detailkarte schließen)
 function handlePlayerListClick(e) {
+    console.log("[LOG] Player list item clicked."); // Add log at the start
     const li = e.target.closest('li');
-    if (!li || !li.dataset.nickname) return;
+    if (!li) {
+        console.log("[LOG] Click was not on a list item.");
+        return;
+    }
     const nickname = li.dataset.nickname;
+    console.log(`[LOG] Clicked player with nickname: ${nickname}`);
+    if (!nickname) {
+        console.warn("[LOG] Clicked list item has no nickname dataset.");
+        return;
+    }
+
     const playerData = allPlayersData.find(p => p.nickname === nickname);
 
     if (!playerData) {
-        console.warn(`[LOG] Keine Daten gefunden für geklickten Spieler: ${nickname}`);
-        return; // Abbrechen, wenn Spielerdaten fehlen
+        console.warn(`[LOG] No player data found for nickname: ${nickname}`);
+        // Optional: Display an error or do nothing if data is missing
+        return;
     }
 
+    // Problem 3 & 4: Detailkarte öffnen und schließen bei erneutem Klick
+    const detailCardIsVisible = detailCardContainer.style.display !== 'none';
+    // Versuche, den Nickname aus der aktuell angezeigten Karte zu bekommen
+    const currentDetailPlayerNicknameEl = detailCardContainer.querySelector('.player-name');
+    const currentDetailPlayerNickname = currentDetailPlayerNicknameEl ? currentDetailPlayerNicknameEl.textContent : null;
+
+
+    if (!isComparing && detailCardIsVisible && currentDetailPlayerNickname === nickname) {
+        console.log(`[LOG] Clicking on already displayed player ${nickname}. Closing detail card.`);
+        hidePlayerCard(); // Karte ausblenden
+        return; // Verarbeitung stoppen
+    }
+
+
     if (isComparing) {
-        // Vergleichsmodus ist aktiv
+        // Vergleichsmodus Logik
         const isAlreadySelected = playersToCompare.some(p => p.nickname === nickname);
+         console.log(`[LOG] In comparison mode. Player ${nickname} already selected? ${isAlreadySelected}. Players selected so far: ${playersToCompare.length}`); // Log Vergleichsstatus
 
         if (isAlreadySelected) {
              // Wenn der bereits ausgewählte Spieler erneut geklickt wird, Auswahl aufheben
              playersToCompare = playersToCompare.filter(p => p.nickname !== nickname);
              li.classList.remove('selected-for-compare'); // Hervorhebung entfernen
-             console.log(`[LOG] Player ${nickname} deselected for comparison.`);
-              // Karte ausblenden, wenn nur noch 0 oder 1 Spieler ausgewählt sind
-             hidePlayerCard();
-             if(playersToCompare.length === 1) {
-                 // Optional: UI aktualisieren, um zur Auswahl des 2. Spielers aufzufordern
-                 if(saverAbiListHeader) saverAbiListHeader.textContent = `Wähle 2. Spieler zum Vergleich (1 ausgewählt)`;
+             console.log(`[LOG] Player ${nickname} deselected. Remaining players: ${playersToCompare.length}`);
+
+             if (playersToCompare.length === 1) {
+                 if(saverAbiListHeader) saverAbiListHeader.textContent = `Wähle 2. Spieler zum Vergleich (${playersToCompare[0].nickname} ausgewählt)`;
+                 hidePlayerCard(); // Karte ausblenden, wenn nur noch ein Spieler übrig ist
              } else { // playersToCompare.length === 0
                  if(saverAbiListHeader) saverAbiListHeader.textContent = 'Wähle 2 Spieler zum Vergleich';
+                 hidePlayerCard(); // Karte ausblenden, wenn keine Spieler ausgewählt sind
              }
 
         } else if (playersToCompare.length < 2) {
             // Spieler zur Vergleichsliste hinzufügen (maximal 2)
             playersToCompare.push(playerData);
             li.classList.add('selected-for-compare'); // Spieler visuell hervorheben
+             console.log(`[LOG] Player ${nickname} selected. Players selected: ${playersToCompare.length}`);
 
             if (playersToCompare.length === 2) {
                 console.log(`[LOG] Zwei Spieler für Vergleich ausgewählt: ${playersToCompare[0].nickname} vs ${playersToCompare[1].nickname}`);
@@ -656,20 +702,19 @@ function handlePlayerListClick(e) {
                 // Vergleich abgeschlossen, Modus verlassen
                 toggleComparisonMode(false); // Deaktiviert den Vergleichsmodus und setzt die Auswahl zurück (OHNE die Karte auszublenden)
             } else { // playersToCompare.length === 1
-                console.log(`[LOG] Erster Spieler für Vergleich ausgewählt: ${playerData.nickname}`);
-                // Optional: UI aktualisieren, um zur Auswahl des 2. Spielers aufzufordern
+                console.log(`[LOG] Erster Spieler ausgewählt: ${playerData.nickname}. Warte auf den zweiten.`);
                 if(saverAbiListHeader) saverAbiListHeader.textContent = `Wähle 2. Spieler zum Vergleich (${playerData.nickname} ausgewählt)`;
-                 hidePlayerCard(); // Detailkarte ausblenden, um Platz für den Vergleich zu machen (falls noch eine angezeigt war)
+                 // Keine Notwendigkeit, die Karte hier auszublenden, hidePlayerCard() wird aufgerufen, wenn der Modus aktiviert wird.
             }
         } else {
-             // Mehr als 2 Spieler wurden angeklickt, obwohl der Modus aktiv ist (sollte nicht passieren, wenn Modus nach 2 Spielern deaktiviert wird)
-             console.warn("[LOG] Ungültiger Zustand: Mehr als 2 Spieler im Vergleichsmodus ausgewählt.");
+             // Dieser Fall sollte idealerweise nicht erreichbar sein, wenn toggleComparisonMode(false) nach Auswahl von 2 Spielern korrekt funktioniert.
+             console.warn("[LOG] Angeklickter Spieler, obwohl 2 Spieler bereits ausgewählt sind und der Modus irgendwie noch aktiv ist.");
              // Optionale Fehlerbehandlung oder einfach Ignorieren
         }
 
     } else {
         // Normaler Detailkarten-Modus
-        console.log(`[LOG] Detailkarte anzeigen für: ${nickname}`);
+        console.log(`[LOG] Nicht im Vergleichsmodus. Zeige Detailkarte für: ${nickname}`);
         resetComparisonSelection(); // Sicherstellen, dass keine alten Vergleiche hängen
         displayDetailCard(playerData);
     }
