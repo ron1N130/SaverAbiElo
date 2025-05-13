@@ -218,7 +218,8 @@ main {
 }
 
 /* Stil für den AKTIVEN Sortierbutton (Elo oder $) */
-#saverabi-sort-controls .sort-button.active {
+/* Der Compare-Button hat einen separaten aktiven Stil unten */
+#saverabi-sort-controls .sort-button.active:not(#compare-button) {
     background-color: var(--button-active-bg);
     color: var(--button-active-text);
     border-color: rgba(var(--button-active-text), 0.5); /* Rahmenfarbe passend */
@@ -226,15 +227,13 @@ main {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* Tieferer Schatten */
 }
 
-/* Spezieller Stil für den aktiven Vergleichsbutton (optional, falls abweichend) */
+/* Spezieller Stil für den aktiven Vergleichsbutton */
 #saverabi-sort-controls #compare-button.active {
      background-color: var(--bar-okay); /* Gelb als Indikator */
      color: #333; /* Dunkler Text auf hellem Button */
      border-color: rgba(0,0,0,0.5);
-     box-shadow: 0 4px 8px rgba(var(--bar-okay-rgb), 0.4); /* Schattenfarbe passend machen */
+     box-shadow: 0 4px 8px rgba(var(--bar-okay), 0.4); /* Schattenfarbe passend machen */
 }
-/* Man könnte auch eine separate Klasse für den aktiven Compare-Button nutzen */
-/* #saverabi-sort-controls .sort-button.active-compare { ... } */
 
 
 /* ==========================================================================
@@ -300,9 +299,14 @@ ol#player-list li:hover {
 
 /* NEU: Stil für ausgewählte Spieler im Vergleichsmodus */
 ol#player-list li.selected-for-compare {
-    background-color: rgba(var(--button-active-text-rgb), 0.2); /* Leichter türkiser Hintergrund */
+    background-color: rgba(37, 190, 255, 0.2); /* Leichter türkiser Hintergrund (aus var(--button-active-text)) */
     border-left: 4px solid var(--button-active-text); /* Türkiser Rand links */
     padding-left: calc(var(--gap) - 4px); /* Padding anpassen */
+}
+
+ol#player-list li.error-item {
+    /* cursor: not-allowed; */ /* Cursor wird in JS gesetzt, falls Daten fehlen/Fehler haben */
+    opacity: 0.7; /* Leicht ausgrauen */
 }
 
 
@@ -317,8 +321,8 @@ ol#player-list li::before {
     flex-shrink: 0;
 }
 .club-icon {
-    width: 30px; /* ZURÜCKGEÄNDERT auf 40px */
-    height: 30px; /* ZURÜCKGEÄNDERT auf 40px */
+    width: 40px; /* ZURÜCKGEÄNDERT auf 40px */
+    height: 40px; /* ZURÜCKGEÄNDERT auf 40px */
     margin-left: 8px;
     vertical-align: middle;
     border-radius: 4px;
@@ -330,6 +334,7 @@ ol#player-list li::before {
     gap: 0.8rem; /* Reduzierter Gap für Icons */
     flex-grow: 1;
     min-width: 0; /* Verhindert Überlaufen */
+    /* Removed overflow: hidden and text-overflow: ellipsis */
 }
 .player-info .avatar {
     width: 40px;
@@ -347,6 +352,8 @@ ol#player-list li::before {
     overflow-wrap: break-word; /* Erlaubt Umbruch langer Namen */
     word-break: break-word;
     white-space: normal;
+    overflow: hidden; /* Text nicht verstecken */
+    text-overflow: ellipsis; /* Füge Ellipsis wieder hinzu, falls nötig */
 }
 .player-list-right {
     text-align: right;
@@ -404,6 +411,7 @@ ol#player-list li::before {
     transform: translateX(20px); /* Startet leicht verschoben */
     transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out; /* Sanfte Einblendung */
     width: 100%; /* Stellt sicher, dass es die zugewiesene Breite nutzt */
+    display: block; /* Explicitly set to block to avoid flex/grid conflicts if used on base */
 }
 /* Wird durch JS auf dem Container gesetzt, wenn Detail/Vergleich sichtbar */
 #main-content-area.detail-visible #player-detail-card-container .player-card-base {
@@ -412,7 +420,13 @@ ol#player-list li::before {
 }
 
 
-/* Stil für die einzelne Detailkarte (bestehendes Layout) */
+/* Stil für die einzelne Detailkarte (ursprüngliches Layout) */
+/* Sicherstellen, dass diese Stile NUR für die Detailkarte gelten */
+.player-card-detail {
+    /* Keine zusätzlichen Display/Layout Stile hier, es sei denn nötig */
+     display: block; /* Should be block to contain the grid */
+}
+
 .player-card-detail .card-header { /* Header */
     display: flex;
     align-items: center;
@@ -436,23 +450,21 @@ ol#player-list li::before {
 .player-card-detail .player-name:hover {
     color: var(--bar-okay);
 }
-.player-card-detail .stats-label {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-}
+/* stats-label ist global definiert, sollte hier aber auch funktionieren */
 
-/* Stats Grid Layout - Bleibt wie gewünscht für die Detailkarte */
+
+/* Stats Grid Layout - Muss NUR auf der Detailkarte im .stats-grid Container angewendet werden */
 .player-card-detail .stats-grid {
-    display: grid;
+    display: grid; /* Explicitly set display to grid */
     grid-template-columns: repeat(3, 1fr); /* 3 GANZ GLEICHE Spalten */
     grid-template-rows: repeat(2, auto);    /* 2 Reihen */
     gap: var(--gap) 1rem; /* Abstand zwischen den Grid-Zellen */
     align-items: start; /* Inhalt oben in der Zelle ausrichten */
 }
 
-/* Stat Item Layout - Flexbox Spalte für Zentrierung */
+/* Stat Item Layout - Flexbox Spalte für Zentrierung innerhalb jeder Zelle */
 .player-card-detail .stat-item {
-    display: flex;
+    display: flex; /* Explicitly set display to flex */
     flex-direction: column; /* Inhalt untereinander */
     align-items: center; /* Zentriert Inhalt HORIZONTAL innerhalb dieser Flexbox */
     justify-content: center; /* Zentriert Inhalt VERTIKAL innerhalb dieser Flexbox */
@@ -480,7 +492,7 @@ ol#player-list li::before {
     display: block;
 }
 
-/* Progress Bar Container (Drittel-Stil) */
+/* Progress Bar Container (Drittel-Stil) - innerhalb der Detailkarte */
 .player-card-detail .stat-progress-container {
     position: relative;
     width: 100%;
@@ -495,7 +507,7 @@ ol#player-list li::before {
     overflow: hidden; /* Verhindert, dass die Pseudo-Elemente überlaufen */
 }
 
-/* Pseudo-Elemente für die Trennlinien */
+/* Pseudo-Elemente für die Trennlinien - innerhalb der Detailkarte */
 .player-card-detail .stat-progress-container::before,
 .player-card-detail .stat-progress-container::after {
     content: '';
@@ -509,7 +521,7 @@ ol#player-list li::before {
 .player-card-detail .stat-progress-container::before { left: 33.333%; }
 .player-card-detail .stat-progress-container::after  { left: 66.666%; }
 
-/* Die farbige Bar */
+/* Die farbige Bar - innerhalb der Detailkarte */
 .player-card-detail .stat-progress-bar {
     position: absolute;
     top: 0;
@@ -521,7 +533,7 @@ ol#player-list li::before {
     z-index: 2;
 }
 
-/* Das Text-Label unter der Bar */
+/* Das Text-Label unter der Bar - innerhalb der Detailkarte */
 .player-card-detail .stat-indicator-label {
     font-size: 0.75rem;
     font-weight: 700;
@@ -537,6 +549,7 @@ ol#player-list li::before {
 /* ==========================================================================
    NEW: Comparison View Styles
    ========================================================================== */
+/* Sicherstellen, dass diese Stile NUR für die Vergleichskarte gelten */
 .player-card-compare {
     /* Erbt Basis-Stile von .player-card-base */
     display: flex; /* Nutzt Flexbox für die nebeneinander liegenden Spielerbereiche */
@@ -812,7 +825,14 @@ ol#player-list li::before {
 
     #saverabi-content #main-content-area { flex-direction: column; align-items: center; justify-content: flex-start !important; }
     #saverabi-content #player-list-container,
-    #saverabi-content #player-detail-card-container { max-width: 650px; width: 100%; position: static; margin-bottom: var(--gap); }
+    /* Hier nur player-list-container auf static setzen, detail-card-container bleibt sticky bis 600px */
+    /* #saverabi-content #player-detail-card-container { max-width: 650px; width: 100%; position: static; margin-bottom: var(--gap); } */
+    #saverabi-content #player-list-container { max-width: 650px; width: 100%; position: static; margin-bottom: var(--gap); }
+
+    /* Detail Card Container bleibt sticky bis 600px, wird aber breiter */
+    #saverabi-content #player-detail-card-container { max-width: 650px; width: 100%; /* position: sticky; top: 1rem; */ margin-bottom: var(--gap); }
+
+
     #saverabi-content #player-list-container { max-height: none; overflow: visible; }
     #saverabi-content ol#player-list { overflow-y: visible; }
     /* Uniliga Ansicht */
@@ -840,6 +860,9 @@ ol#player-list li::before {
     }
 
     /* SaverAbi Detailkarte Anpassungen (wenn sie allein angezeigt wird) */
+    /* Detail Card Container wird hier static */
+    #saverabi-content #player-detail-card-container { position: static; }
+
     .player-card-detail .card-header { flex-direction: column; text-align: center; }
     .player-card-detail .avatar { width: 70px; height: 70px; }
     .player-card-detail .player-name { font-size: 1.6rem; }
@@ -871,5 +894,4 @@ ol#player-list li::before {
          border-bottom: none;
          margin-bottom: 0;
     }
-
 }

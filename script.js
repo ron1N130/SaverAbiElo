@@ -4,12 +4,12 @@
 const thresholds = {
     // Bereinigt - letzte Definition aus deinem Code übernommen
     rating: { bad: 0.85, okay: 1.05, good: 1.2, great: 1.3, max: 1.8 },
-    dpr: { bad: 0.75, okay: 0.7, good: 0.63, great: 0.55, max: 1 }, // Niedriger ist besser
+    dpr: { bad: 0.75, okay: 0.7, good: 0.63, great: 0.55, max: 1 }, // Niedriger ist besser (letzte Definition)
     kast: { bad: 58, okay: 66, good: 75, great: 80, max: 100 },
-    kd: { bad: 0.8, okay: 1.0, good: 1.2, great: 1.4, max: 2.0 },
+    kd: { bad: 0.8, okay: 1.0, good: 1.2, great: 1.4, max: 2.0 }, // KD wieder relevant für Anzeige (letzte Definition)
     adr: { bad: 65, okay: 70, good: 85, great: 90, max: 120 },
     kpr: { bad: 0.5, okay: 0.6, good: 0.8, great: 0.9, max: 1.2 },
-    impact: { bad: 1, okay: 1.3, good: 1.45, great: 1.55, max: 1.8 },
+    impact: { bad: 1, okay: 1.3, good: 1.45, great: 1.55, max: 1.8 }, // Bleibt intern für Berechnung (letzte Definition)
     elo: { bad: 1800, okay: 2000, good: 2600, great: 2900, max: 4000 },
     hsp: { bad: 15, okay: 35, good: 44, great: 55, max: 60 }, // Korrigiert auf 55 für great, falls in %
     winRate: { bad: 40, okay: 50, good: 60, great: 70, max: 100 }
@@ -34,10 +34,11 @@ function safeWorth(v) {
     const num = parseFloat(v);
     if (!Number.isFinite(num)) return "—";
 
-    // Division durch 1000 für "Tsd USD"
+    // Teile durch 1000, um den Wert in "Tausend" zu erhalten
     const worthInThousands = num / 1000;
 
     // Formatiere mit 1 Dezimalstelle und füge ' Tsd USD' hinzu
+    // Verwende 'de-DE' Locale, um das Komma als Dezimaltrennzeichen zu nutzen
     return worthInThousands.toLocaleString('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' Tsd USD';
 }
 
@@ -64,8 +65,10 @@ async function loadTeamIconMap() {
         if (!response.ok) {
             throw new Error(`Fehler beim Laden der Team-Icons (${response.status}) from ${response.url}`);
         }
-        const teamsData = await response.json(); // Direkt als JSON parsen
-        console.log("[LOG] uniliga_teams.json data:", teamsData);
+        const textData = await response.text(); // **NEU:** Lese als Text
+        console.log("[DEBUG] /uniliga_teams.json raw text:", textData); // **NEU:** Logge rohen Text
+        const teamsData = JSON.parse(textData); // **NEU:** Parse den Text
+        console.log("[LOG] uniliga_teams.json raw data:", teamsData); // LOG Rohdaten nach Parse
 
         teamIconMap = teamsData.reduce((map, team) => {
             if (team.name && team.icon) {
@@ -133,22 +136,24 @@ async function getPlayerData(nickname) {
         if (!res.ok) {
             let errorMsg = `HTTP ${res.status}`;
             try {
-                 const errData = await res.json(); // Versuche JSON zu parsen
-                 errorMsg = errData.error || errData.message || JSON.stringify(errData) || errorMsg;
+                 const errDataText = await res.text(); // **NEU:** Lese Fehlerantwort als Text
+                 console.error(`[DEBUG] /api/faceit-data error raw text for ${nickname}:`, errDataText); // **NEU:** Logge rohen Fehlertext
+                 const errData = JSON.parse(errDataText); // **NEU:** Versuche Text zu parsen
+                 errorMsg = errData.error || errDataText || errorMsg;
             } catch (parseError) {
-                 // Wenn JSON nicht parsbar ist, lese den Text
-                 const errDataText = await res.text();
+                 // Konnte JSON nicht parsen, nutze den rohen Text oder HTTP Status
                  errorMsg = errDataText || errorMsg;
-                 console.error(`[DEBUG] Failed to parse error response for ${nickname}:`, parseError, "Raw text:", errDataText);
+                 console.error(`[DEBUG] Failed to parse error response for ${nickname}:`, parseError);
             }
-            console.error(`[DEBUG] API error for ${nickname}: ${errorMsg}`);
-            return { nickname, error: errorMsg, sortElo: -1, worth: null };
+            // Nur Fehler werfen, wenn die Antwort nicht ok ist
+            throw new Error(errorMsg);
         }
-        const p = await res.json(); // Direkt als JSON parsen
-        console.log(`[DEBUG] /api/faceit-data data for ${nickname}:`, p);
+        const textData = await res.text(); // **NEU:** Lese als Text
+        console.log(`[DEBUG] /api/faceit-data raw text for ${nickname}:`, textData); // **NEU:** Logge rohen Text
+        const p = JSON.parse(textData); // **NEU:** Parse den Text
 
+        // Prüfe auf Fehler im geparsten JSON
         if (p.error) {
-             console.error(`[DEBUG] API returned error for ${nickname}: ${p.error}`);
             return { nickname, error: p.error, sortElo: -1, worth: null };
         }
         // Konvertiere relevante Felder sicher in Zahlen
@@ -189,8 +194,9 @@ async function getPlayerData(nickname) {
 
         return p;
     } catch (err) {
-        console.error(`getPlayerData error for ${nickname}:`, err);
-        return { nickname, error: err.message || "Netzwerk- oder Parsing-Fehler", sortElo: -1, worth: null };
+        console.error(`getPlayerData error for ${nickname}:`, err.message);
+        // Gebe ein Fehlerobjekt zurück, auch wenn die API erfolgreich geantwortet hat, aber das Format falsch war oder p.error gesetzt war
+        return { nickname, error: err.message || "Unbekannter Fehler beim Verarbeiten der Daten", sortElo: -1, worth: null };
     }
 }
 
@@ -290,7 +296,10 @@ function assignClubsToPlayers(players) {
         return;
     }
      // Sortiere die Spieler temporär nach Worth für die Zuweisung
-    const sortedByWorth = [...players].sort((a, b) => (b.worth ?? -Infinity) - (a.worth ?? -Infinity));
+     // Filter Spieler ohne Fehler und mit gültigem worth-Wert
+    const sortablePlayers = players.filter(p => !p.error && p.worth !== null && Number.isFinite(p.worth));
+
+    const sortedByWorth = [...sortablePlayers].sort((a, b) => (b.worth ?? -Infinity) - (a.worth ?? -Infinity));
 
     sortedByWorth.forEach((player, index) => {
         const rank = index + 1;
@@ -358,8 +367,8 @@ function displaySinglePlayerCard(player) {
 
     if (!player || player.error) {
         console.warn("[LOG] Displaying error card for player:", player?.nickname || 'N/A', "Error:", player?.error);
-        detailCardContainer.innerHTML = `<div class='player-card-base error-card'>${player?.nickname || 'Spieler'} – Fehler: ${player?.error || 'Unbekannt'}</div>`; // Nutzt player-card-base
-        detailCardContainer.querySelector('.player-card-base')?.classList.add('player-card-detail'); // Fügt Detail-Klasse hinzu
+        // Verwende die .player-card-base und .player-card-detail Klassen für die Fehlerkarte in der Detailansicht
+        detailCardContainer.innerHTML = `<div class='player-card-base player-card-detail error-card'>${player?.nickname || 'Spieler'} – Fehler: ${player?.error || 'Unbekannt'}</div>`;
         return;
     }
 
@@ -406,9 +415,12 @@ function updateStatProgressBars(card, player) {
         // Spezielle Anpassung für die Berechnung von Impact und HSP für die Bar-Kategorie
         if (stat === 'impact' && numericalVal !== null) {
             numericalVal = numericalVal - 0.2; // Anpassung für Bar-Vergleich wie bei Anzeige
-        } else if (stat === 'hsp' && numericalVal !== null && numericalVal <= 1 && cfg.max > 1) {
-             numericalVal = numericalVal * 100; // Normalisiere HSP auf 0-100, wenn nötig
-             console.log(`[LOG] HSP value ${val} adjusted to ${numericalVal}% for threshold comparison.`);
+        } else if (stat === 'hsp' && numericalVal !== null && cfg && cfg.max > 1) {
+             // Normalisiere HSP auf 0-100, wenn nötig (basierend auf Schwellenwerten)
+             if (numericalVal <= 1 && cfg.max > 1) {
+                 numericalVal = numericalVal * 100;
+                 console.log(`[LOG] HSP value ${val} adjusted to ${numericalVal}% for bar threshold comparison.`);
+             }
         }
 
 
@@ -500,8 +512,8 @@ function displayComparisonCard(player1, player2) {
          else if (player1?.error) errorText = `${player1.nickname}: ${player1.error}`;
          else if (player2?.error) errorText = `${player2.nickname}: ${player2.error}`;
          else errorText = "Mindestens ein Spieler konnte nicht gefunden werden."; // Fall, falls Datenobjekte fehlen
-         detailCardContainer.innerHTML = `<div class='player-card-base error-card'>${errorText}</div>`;
-         detailCardContainer.querySelector('.player-card-base')?.classList.add('player-card-compare'); // Fügt Compare-Klasse hinzu
+         // Verwende die .player-card-base und .player-card-compare Klassen für die Fehlerkarte in der Vergleichsansicht
+         detailCardContainer.innerHTML = `<div class='player-card-base player-card-compare error-card'>${errorText}</div>`;
          return;
      }
 
@@ -603,9 +615,11 @@ async function loadSaverAbiView() {
         const namesRes = await fetch('/players.json');
         console.log("[DEBUG] /players.json status:", namesRes.status); // DEBUG Log
         if (!namesRes.ok) throw new Error(`Fehler Laden Spielerliste (${namesRes.status})`);
-        const names = await namesRes.json(); // Direkt als JSON parsen
-        console.log("[LOG] Step 1 successful: Player names loaded:", names);
+        const namesText = await namesRes.text(); // **NEU:** Lese als Text
+        console.log("[DEBUG] /players.json raw text:", namesText); // **NEU:** Logge rohen Text
+        const names = JSON.parse(namesText); // **NEU:** Parse den Text
 
+        console.log("[LOG] Player names loaded:", names);
         if (!Array.isArray(names) || names.length === 0) {
              const msg = "Spielerliste in players.json ist leer oder ungültig.";
              console.warn(`[LOG] ${msg}`);
@@ -632,10 +646,18 @@ async function loadSaverAbiView() {
                 // Fehler bei diesem spezifischen Spieler
                 console.error(`[LOG] Failed to fetch data for one player:`, result.reason);
                  // Erstelle ein Spielerobjekt mit Fehlerinformationen
-                // Versuche, den Nickname aus der Fehlermeldung zu extrahieren
-                const nicknameMatch = result.reason?.message?.match(/for (.+?):/);
-                const nickname = nicknameMatch ? nicknameMatch[1] : 'Unbekannter Spieler';
-                return { nickname: nickname, error: result.reason?.message || 'Fehler beim Laden', sortElo: -1, worth: null };
+                // Versuche, den Nickname aus der Fehlermeldung zu extrahieren (falls im Error-Objekt vorhanden)
+                const errorReason = result.reason;
+                let nickname = 'Unbekannter Spieler';
+                if (typeof errorReason === 'object' && errorReason !== null && errorReason.message) {
+                     const nicknameMatch = errorReason.message.match(/for (.+?):/);
+                     if (nicknameMatch && nicknameMatch[1]) nickname = nicknameMatch[1];
+                } else if (typeof errorReason === 'string') {
+                     const nicknameMatch = errorReason.match(/for (.+?):/);
+                      if (nicknameMatch && nicknameMatch[1]) nickname = nicknameMatch[1];
+                }
+
+                return { nickname: nickname, error: errorReason?.message || errorReason || 'Fehler beim Laden', sortElo: -1, worth: null };
             }
         });
 
@@ -702,7 +724,7 @@ function sortAndDisplayPlayers() {
 
     // Vor dem Sortieren die Club-Icons zuweisen, falls im Worth-Modus
     if (currentSortMode === 'worth') {
-        // Weise Icons nur Spielern ohne Fehler und mit Worth zu
+        // Weise Icons nur Spielern ohne Fehler und mit gültigem worth-Wert zu
         assignClubsToPlayers(allPlayersData.filter(p => !p.error && p.worth !== null && Number.isFinite(p.worth)));
     } else {
          // Icons entfernen/zurücksetzen, wenn im Elo-Modus
@@ -759,7 +781,10 @@ function handlePlayerListClick(e) {
          li.classList.add('error-item'); // Klasse ist schon da, vielleicht blinken lassen?
          // Entferne error-item Klasse nach einer kurzen Verzögerung, falls sie nur zum Hervorheben da war
          // setTimeout(() => { li.classList.remove('error-item'); }, 500);
-         displaySinglePlayerCard(playerData || { nickname: nickname, error: "Daten nicht verfügbar" }); // Zeige Fehlerkarte in der Detailansicht
+         // Zeige Fehlerkarte in der Detailansicht, wenn nicht im Vergleichsmodus, sonst passiert nichts visuell
+         if (!isComparisonMode) {
+             displaySinglePlayerCard(playerData || { nickname: nickname, error: "Daten nicht verfügbar" }); // Zeige Fehlerkarte in der Detailansicht
+         }
         return;
     }
 
@@ -804,7 +829,7 @@ function handlePlayerListClick(e) {
             } else {
                  console.warn("[LOG] Konnte gültige Daten für ausgewählte Spieler im Vergleichsmodus nicht finden. Zeige Fehlerkarte.");
                  // Fehlermeldung in der Vergleichskarte anzeigen
-                 detailCardContainer.innerHTML = `<div class='player-card-base error-card'>Fehler beim Laden oder ausgewählte Spielerdaten ungültig.</div>`;
+                 detailCardContainer.innerHTML = `<div class='player-card-base player-card-compare error-card'>Fehler beim Laden oder ausgewählte Spielerdaten ungültig.</div>`;
                  detailCardContainer.style.display = 'block';
                  if(mainContentArea) mainContentArea.classList.add('detail-visible');
             }
@@ -919,7 +944,7 @@ async function loadUniligaView() {
         console.log(`[LOG] VERSUCHE FETCH (mit Cache Bust): ${apiUrl}...`);
 
         // Laden der Team-Icon Map parallel zum API-Aufruf
-        const [apiResponse] = await Promise.all([
+        const [apiResponse, iconMapLoaded] = await Promise.all([
             fetch(apiUrl),
             loadTeamIconMap() // Stellt sicher, dass die Team-Icon Map geladen ist
         ]);
@@ -928,18 +953,19 @@ async function loadUniligaView() {
         if (!apiResponse.ok) {
             let errorMsg = `Fehler beim Laden der Uniliga-Daten (${apiResponse.status})`;
              try {
-                 const errData = await apiResponse.json();
-                 errorMsg = errData.error || errData.message || JSON.stringify(errData) || errorMsg;
+                 const errDataText = await apiResponse.text(); // **NEU:** Lese Fehlerantwort als Text
+                 console.error(`[DEBUG] Uniliga API error raw text:`, errDataText); // **NEU:** Logge rohen Fehlertext
+                 const errData = JSON.parse(errDataText); // **NEU:** Versuche Text zu parsen
+                 errorMsg = errData.error || errData.message || errDataText || errorMsg;
             } catch (parseError) {
-                 const errDataText = await apiResponse.text();
                  errorMsg = errDataText || errorMsg;
-                 console.error(`[DEBUG] Failed to parse error response for Uniliga:`, parseError, "Raw text:", errDataText);
+                 console.error(`[DEBUG] Failed to parse error response for Uniliga:`, parseError);
             }
-            console.error("[DEBUG] Uniliga API error:", errorMsg);
             throw new Error(errorMsg);
         }
-        const data = await apiResponse.json(); // Direkt als JSON parsen
-        console.log("[LOG] Uniliga API data received:", data);
+        const textData = await apiResponse.text(); // **NEU:** Lese als Text
+        console.log("[DEBUG] Uniliga API raw text:", textData); // **NEU:** Logge rohen Text
+        const data = JSON.parse(textData); // **NEU:** Parse den Text
 
          if (!data || (!data.teams || data.teams.length === 0) && (!data.players || data.players.length === 0) || (data.message?.includes('Minimaler Test'))) {
              console.warn("[LOG] Minimale Test-Antwort oder leere Daten vom Backend erhalten.");
