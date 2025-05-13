@@ -206,14 +206,20 @@ main {
     cursor: pointer;
     font-size: 0.95rem; /* Passend zu View-Toggle */
     font-weight: 700; /* Passend zu View-Toggle */
-    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
     text-align: center;
     white-space: nowrap;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Passend zu View-Toggle */
 }
+/* Stil für deaktivierte Buttons im Vergleichsmodus */
+#saverabi-sort-controls .sort-button:disabled {
+    opacity: 0.5; /* Leicht ausgrauen */
+    cursor: not-allowed; /* Verbots-Cursor */
+}
+
 
 /* Stil, wenn man mit der Maus über einen Button fährt */
-#saverabi-sort-controls .sort-button:hover {
+#saverabi-sort-controls .sort-button:not(:disabled):hover {
     background-color: var(--button-hover-bg);
     color: var(--text-primary); /* Auch Textfarbe ändern */
     border-color: rgba(var(--card-bg-rgb), 0.6);
@@ -221,7 +227,7 @@ main {
 
 /* Stil für den AKTIVEN Sortierbutton (Elo oder $) */
 /* Der Compare-Button hat einen separaten aktiven Stil unten */
-#saverabi-sort-controls .sort-button.active:not(#compare-button) {
+#saverabi-sort-controls .sort-button.active:not(#compare-btn):not(:disabled) {
     background-color: var(--button-active-bg);
     color: var(--button-active-text);
     border-color: rgba(var(--button-active-text), 0.5); /* Rahmenfarbe passend */
@@ -230,11 +236,11 @@ main {
 }
 
 /* Spezieller Stil für den aktiven Vergleichsbutton */
-#saverabi-sort-controls #compare-button.active {
+#saverabi-sort-controls #compare-btn.active:not(:disabled) {
      background-color: var(--bar-okay); /* Gelb als Indikator */
      color: #333; /* Dunkler Text auf hellem Button */
      border-color: rgba(0,0,0,0.5);
-     box-shadow: 0 44px 8px rgba(var(--bar-okay), 0.4); /* Schattenfarbe passend machen */
+     box-shadow: 0 4px 8px rgba(var(--bar-okay), 0.4); /* Schattenfarbe passend machen */
 }
 
 
@@ -281,6 +287,19 @@ ol#player-list {
     max-height: 100%; /* Nutzt die begrenzte Höhe des Containers */
 }
 
+/* NEU: Stil für ausgewählte Spieler im Vergleichsmodus */
+ol#player-list li.selected-for-compare {
+    background-color: rgba(37, 190, 255, 0.2); /* Leichter türkiser Hintergrund (aus var(--button-active-text)) */
+    border-left: 4px solid var(--button-active-text); /* Türkiser Rand links */
+    padding-left: calc(var(--gap) - 4px); /* Padding anpassen */
+}
+
+ol#player-list li.error-item {
+    /* cursor: not-allowed; */ /* Cursor wird in JS gesetzt, falls Daten fehlen/Fehler haben */
+    opacity: 0.7; /* Leicht ausgrauen */
+}
+
+
 /* Verhindert, dass der Spielername in der Liste abgeschnitten wird */
 .player-list-sorted .player-info .player-name {
     flex-shrink: 0; /* Verhindert, dass das Element schrumpft */
@@ -309,18 +328,6 @@ ol#player-list li:last-child {
 }
 ol#player-list li:hover {
     background: rgba(var(--card-bg-rgb), 0.95);
-}
-
-/* NEU: Stil für ausgewählte Spieler im Vergleichsmodus */
-ol#player-list li.selected-for-compare {
-    background-color: rgba(37, 190, 255, 0.2); /* Leichter türkiser Hintergrund (aus var(--button-active-text)) */
-    border-left: 4px solid var(--button-active-text); /* Türkiser Rand links */
-    padding-left: calc(var(--gap) - 4px); /* Padding anpassen */
-}
-
-ol#player-list li.error-item {
-    /* cursor: not-allowed; */ /* Cursor wird in JS gesetzt, falls Daten fehlen/Fehler haben */
-    opacity: 0.7; /* Leicht ausgrauen */
 }
 
 
@@ -672,6 +679,11 @@ ol#player-list li::before {
     line-height: 1; /* Vertikale Ausrichtung helfen */
      /* Optional: margin-left oder padding-left, falls Gap nicht ausreicht */
 }
+/* Stil für Gleichheit im Vergleich */
+.compare-indicator-equal {
+     color: var(--text-secondary); /* Graue Farbe für Gleichheit */
+}
+
 
 .compare-indicator-better {
     color: var(--indicator-better-color); /* Grün */
