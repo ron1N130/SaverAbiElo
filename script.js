@@ -438,7 +438,22 @@ function getComparisonIndicator(statName, value1, value2) {
     const numVal1 = toNum(value1);
     const numVal2 = toNum(value2);
 
-    if (numVal1 === null || numVal2 === null || numVal1 === numVal2) {
+    // Spezielle Anpassung für den Vergleich von Impact und HSP
+     let compareVal1 = numVal1;
+     let compareVal2 = numVal2;
+     const cfg = thresholds[statName];
+
+     if (statName === 'impact' && numVal1 !== null && numVal2 !== null) {
+         compareVal1 = numVal1 - 0.2;
+         compareVal2 = numVal2 - 0.2;
+     } else if (statName === 'hsp' && numVal1 !== null && numVal2 !== null && cfg && cfg.max > 1) {
+          // Normalisiere HSP auf 0-100 für den Vergleich, wenn Schwellen so definiert sind
+          if (numVal1 <= 1 && cfg.max > 1) compareVal1 = numVal1 * 100;
+          if (numVal2 <= 1 && cfg.max > 1) compareVal2 = numVal2 * 100;
+     }
+
+
+    if (compareVal1 === null || compareVal2 === null || compareVal1 === compareVal2) {
         return ''; // Kein Indikator, wenn Werte fehlen oder gleich sind
     }
 
@@ -446,10 +461,10 @@ function getComparisonIndicator(statName, value1, value2) {
 
     // Spezielle Logik für DPR (niedriger ist besser)
     if (statName === 'dpr') {
-        isValue1Better = numVal1 < numVal2;
+        isValue1Better = compareVal1 < compareVal2;
     } else {
          // Logik für alle anderen Stats (höher ist besser)
-        isValue1Better = numVal1 > numVal2;
+        isValue1Better = compareVal1 > compareVal2;
     }
 
     if (isValue1Better) {
@@ -573,13 +588,13 @@ async function loadSaverAbiView() {
          return; // Abbruch, wenn wichtige Elemente fehlen
     }
 
-    // NEU: Exit comparison mode beim Laden der SaverAbi View
-    exitComparisonMode(); // Stellt sicher, dass wir nicht im Vergleichsmodus starten
+    // Setze die Ansicht auf SaverAbi und stelle den Vergleichsmodus zurück
+    // exitComparisonMode(); // Dies wird nun von switchView aufgerufen, wenn dorthin gewechselt wird.
 
     loadingIndicatorSaverAbi.style.display = 'block';
     errorMessageSaverAbi.style.display = 'none';
-    playerListContainerEl.innerHTML = '';
-    detailCardContainer.style.display = 'none';
+    playerListContainerEl.innerHTML = ''; // Liste leeren vor dem Laden
+    detailCardContainer.style.display = 'none'; // Detail-/Vergleichskarte ausblenden
     if(mainContentArea) mainContentArea.classList.remove('detail-visible');
     allPlayersData = []; // Daten zurücksetzen
 
@@ -617,9 +632,10 @@ async function loadSaverAbiView() {
                 // Fehler bei diesem spezifischen Spieler
                 console.error(`[LOG] Failed to fetch data for one player:`, result.reason);
                  // Erstelle ein Spielerobjekt mit Fehlerinformationen
-                const nicknameMatch = result.reason.message.match(/for (.+?):/);
+                // Versuche, den Nickname aus der Fehlermeldung zu extrahieren
+                const nicknameMatch = result.reason?.message?.match(/for (.+?):/);
                 const nickname = nicknameMatch ? nicknameMatch[1] : 'Unbekannter Spieler';
-                return { nickname: nickname, error: result.reason.message || 'Fehler beim Laden', sortElo: -1, worth: null };
+                return { nickname: nickname, error: result.reason?.message || 'Fehler beim Laden', sortElo: -1, worth: null };
             }
         });
 
@@ -645,8 +661,8 @@ async function loadSaverAbiView() {
         sortAndDisplayPlayers();
 
         // Click Listener nur einmal hinzufügen beim Initialisieren der View
+        // Entferne vorherige Listener, um Duplikate zu vermeiden (wichtig beim Wechsel der Views)
         if (playerListContainerEl) {
-             // Entferne vorherige Listener, um Duplikate zu vermeiden (wichtig beim Wechsel der Views)
              playerListContainerEl.removeEventListener('click', handlePlayerListClick);
              playerListContainerEl.addEventListener('click', handlePlayerListClick);
              console.log("[LOG] Click listener added to player list.");
@@ -686,7 +702,8 @@ function sortAndDisplayPlayers() {
 
     // Vor dem Sortieren die Club-Icons zuweisen, falls im Worth-Modus
     if (currentSortMode === 'worth') {
-        assignClubsToPlayers(allPlayersData.filter(p => !p.error && p.worth !== null)); // Nur Spieler ohne Fehler & mit Worth zuweisen
+        // Weise Icons nur Spielern ohne Fehler und mit Worth zu
+        assignClubsToPlayers(allPlayersData.filter(p => !p.error && p.worth !== null && Number.isFinite(p.worth)));
     } else {
          // Icons entfernen/zurücksetzen, wenn im Elo-Modus
         allPlayersData.forEach(player => player.assignedClubIcon = null);
@@ -715,11 +732,12 @@ function sortAndDisplayPlayers() {
         // Wenn im Vergleichsmodus und 2 Spieler ausgewählt sind, die Vergleichsansicht neu rendern
         const player1 = allPlayersData.find(p => p.nickname === playersToCompare[0]);
         const player2 = allPlayersData.find(p => p.nickname === playersToCompare[1]);
-         if(player1 && player2 && !player1.error && !player2.error) displayComparisonCard(player1, player2); // Nur anzeigen, wenn beide gültig sind
+         // Nur anzeigen, wenn beide Spielerdaten existieren und keine Fehler enthalten
+         if(player1 && player2 && !player1.error && !player2.error) displayComparisonCard(player1, player2);
          else {
              console.warn("[LOG] Konnte gültige Spielerdaten für Neu-Rendering der Vergleichskarte nicht finden.");
-              // Optional: Fehlermeldung in der Vergleichskarte anzeigen
-             detailCardContainer.innerHTML = `<div class='player-card-base error-card'>Fehler beim Laden der Daten für Vergleich oder ungültige Spieler ausgewählt.</div>`;
+              // Optionale Fehlermeldung in der Vergleichskarte anzeigen
+             detailCardContainer.innerHTML = `<div class='player-card-base error-card'>Fehler beim Laden oder ausgewählte Spielerdaten ungültig.</div>`;
               detailCardContainer.style.display = 'block';
               if(mainContentArea) mainContentArea.classList.add('detail-visible');
          }
@@ -734,14 +752,14 @@ function handlePlayerListClick(e) {
     const nickname = li.dataset.nickname;
     const playerData = allPlayersData.find(p => p.nickname === nickname);
 
+    // Verhindere Interaktion, wenn Spielerdaten fehlen oder einen Fehler haben
     if (!playerData || playerData.error) {
-        console.warn(`[LOG] Geklickter Spieler "${nickname}" hat keine Daten oder einen Fehler. Kann nicht ausgewählt oder angezeigt werden.`);
-        // Optional: Kurze visuelle Rückmeldung geben (z.B. Klasse hinzufügen, die schnell wieder entfernt wird)
+        console.warn(`[LOG] Geklickter Spieler "${nickname}" hat keine Daten oder einen Fehler. Aktion blockiert.`);
+        // Optionale visuelle Rückmeldung (z.B. kurz die Fehlerklasse hervorheben)
          li.classList.add('error-item'); // Klasse ist schon da, vielleicht blinken lassen?
-         setTimeout(() => {
-             // Optional: li.classList.remove('error-item'); // Nur wenn Klasse temporär hinzugefügt wird
-         }, 500);
-        displaySinglePlayerCard(playerData || { nickname: nickname, error: "Daten nicht verfügbar" }); // Zeige Fehlerkarte
+         // Entferne error-item Klasse nach einer kurzen Verzögerung, falls sie nur zum Hervorheben da war
+         // setTimeout(() => { li.classList.remove('error-item'); }, 500);
+         displaySinglePlayerCard(playerData || { nickname: nickname, error: "Daten nicht verfügbar" }); // Zeige Fehlerkarte in der Detailansicht
         return;
     }
 
@@ -784,7 +802,7 @@ function handlePlayerListClick(e) {
             if (p1 && p2 && !p1.error && !p2.error) {
                  displayComparisonCard(p1, p2);
             } else {
-                 console.warn("[LOG] Konnte gültige Daten für ausgewählte Spieler im Vergleichsmodus nicht finden.");
+                 console.warn("[LOG] Konnte gültige Daten für ausgewählte Spieler im Vergleichsmodus nicht finden. Zeige Fehlerkarte.");
                  // Fehlermeldung in der Vergleichskarte anzeigen
                  detailCardContainer.innerHTML = `<div class='player-card-base error-card'>Fehler beim Laden oder ausgewählte Spielerdaten ungültig.</div>`;
                  detailCardContainer.style.display = 'block';
@@ -1091,9 +1109,11 @@ function switchView(viewToShow) {
          exitComparisonMode(); // Dies setzt auch die Button-Zustände zurück
 
          // Überprüfen, ob allPlayersData leer ist und gegebenenfalls neu laden
+         // loadSaverAbiView wird jetzt innerhalb von switchView aufgerufen,
+         // wenn wir zur SaverAbi Ansicht wechseln und die Daten noch nicht geladen sind.
          if (allPlayersData.length === 0 || allPlayersData.filter(p => !p.error).length === 0) {
-              console.log("[LOG] allPlayersData is empty or contains only errors. Reloading data.");
-              loadSaverAbiView(); // Lädt Daten und ruft dann sortAndDisplayPlayers auf
+             console.log("[LOG] allPlayersData is empty or contains only errors. Loading data.");
+             loadSaverAbiView(); // Lädt Daten und ruft dann sortAndDisplayPlayers auf
          } else {
               console.log("[LOG] allPlayersData already loaded. Sorting and displaying.");
               sortAndDisplayPlayers(); // Daten sind vorhanden, nur neu sortieren/anzeigen
@@ -1158,9 +1178,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
         console.log("[LOG] Initializing default view: saverabi");
-        // Initialisiere die SaverAbi View beim Laden durch Beenden des Vergleichsmodus.
-        // Dies setzt den Standard-Sortiermodus und lädt die Daten, falls nötig.
-        exitComparisonMode();
+        // Initialisiere die SaverAbi View beim Laden.
+        // Dies macht die Ansicht sichtbar und triggert dann das Laden der Daten, falls nötig.
+        switchView('saverabi');
 
     } else {
          console.error("Initialization failed: DOM elements not found.");
