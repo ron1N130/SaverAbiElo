@@ -170,7 +170,9 @@ async function getPlayerData(nickname) {
             const weightedElo = elo + (elo > bonusThreshold ? Math.pow(elo - bonusThreshold, bonusPower) * bonusScale : 0);
 
             const impactFactor = impact - 0.2;
-            let finalWorth = weightedElo * rating * impactFactor;
+            //let finalWorth = weightedElo * rating * impactFactor;
+            let finalWorth = elo * elo * (2/3000) * impactFactor * rating;
+
 
             finalWorth = Math.max(0, finalWorth);
 
