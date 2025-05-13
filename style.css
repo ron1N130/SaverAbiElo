@@ -152,17 +152,17 @@ footer {
    ========================================================================== */
 main {
     flex: 1;
-    /* Max-Breite passt sich nun an, wenn Detail/Vergleich sichtbar ist */
+    /* Auf breiteren Bildschirmen genug Platz für Liste + Karte nebeneinander lassen */
     max-width: calc(var(--max-list) + var(--max-card) + var(--gap) * 2);
     margin: 0 auto;
     padding: 0 var(--gap);
     width: 100%; /* Stellt sicher, dass es auf kleinen Screens volle Breite nimmt */
 }
-/* Layout für SaverAbi Ansicht */
+/* Layout für SaverAbi Ansicht (Standard: Nebeneinander auf breiten Bildschirmen) */
 #main-content-area {
-    display: flex;
+    display: flex; /* Standardmäßig Flex-Richtung: row (nebeneinander) */
     gap: var(--gap);
-    justify-content: center;
+    justify-content: center; /* Inhalt zentrieren, wenn extra Platz vorhanden ist */
     align-items: flex-start; /* Elemente oben ausrichten */
     flex-wrap: wrap; /* Erlaubt Umbruch auf kleineren Bildschirmen */
 }
@@ -251,8 +251,8 @@ main {
     max-width: var(--max-list);
     display: flex;
     flex-direction: column;
-    max-height: calc(80vh - 4rem); /* Höhe begrenzen */
-    overflow: hidden; /* Container fix */
+    /* max-height wird nun in Media Query angepasst */
+    /* overflow wird nun in Media Query angepasst */
     flex-shrink: 0; /* Verhindert, dass die Liste kleiner wird als ihr Inhalt */
 }
 
@@ -273,8 +273,7 @@ ol#player-list {
     margin: 0;
     padding: 0;
     counter-reset: rank;
-    overflow-y: auto; /* Scrollen innerhalb der Liste */
-    max-height: 100%;
+    /* overflow-y und max-height werden nun in Media Query angepasst */
 }
 
 #player-list::-webkit-scrollbar {
@@ -334,7 +333,6 @@ ol#player-list li::before {
     gap: 0.8rem; /* Reduzierter Gap für Icons */
     flex-grow: 1;
     min-width: 0; /* Verhindert Überlaufen */
-    /* Removed overflow: hidden and text-overflow: ellipsis */
 }
 .player-info .avatar {
     width: 40px;
@@ -394,10 +392,11 @@ ol#player-list li::before {
     display: none; /* Wird von JS gesteuert */
     width: 100%;
     max-width: var(--max-card); /* Nutzt die gleiche Max-Breite */
-    position: sticky; /* Bleibt sticky */
+    position: sticky; /* Bleibt sticky auf breiteren Bildschirmen */
     top: 1rem;
     align-self: flex-start; /* Stellt sicher, dass es oben bleibt */
     flex-shrink: 0; /* Verhindert, dass der Container schrumpft */
+    /* position: static wird in Media Query gesetzt */
 }
 
 .player-card-base { /* Basis-Stil für Karten (Detail & Vergleich) */
@@ -411,7 +410,7 @@ ol#player-list li::before {
     transform: translateX(20px); /* Startet leicht verschoben */
     transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out; /* Sanfte Einblendung */
     width: 100%; /* Stellt sicher, dass es die zugewiesene Breite nutzt */
-    display: block; /* Explicitly set to block to avoid flex/grid conflicts if used on base */
+    display: block; /* Explicitly set to block */
 }
 /* Wird durch JS auf dem Container gesetzt, wenn Detail/Vergleich sichtbar */
 #main-content-area.detail-visible #player-detail-card-container .player-card-base {
@@ -420,7 +419,7 @@ ol#player-list li::before {
 }
 
 
-/* Stil für die einzelne Detailkarte (ursprüngliches Layout) */
+/* Stil für die einzelne Detailkarte (ursprüngliches Layout - 3x2 Grid) */
 /* Sicherstellen, dass diese Stile NUR für die Detailkarte gelten */
 .player-card-detail {
     /* Keine zusätzlichen Display/Layout Stile hier, es sei denn nötig */
@@ -472,42 +471,44 @@ ol#player-list li::before {
     padding: 0;
 }
 
-/* Anpassungen für Label und Wert in der Detailkarte */
+/* Anpassungen für Label in der Detailkarte */
 .player-card-detail .stat-item .label {
     font-size: 0.8rem;
     color: var(--text-secondary);
     margin-bottom: 0.3rem;
     text-transform: uppercase;
     font-weight: 700;
-    text-align: center;
+    text-align: center; /* Text zentrieren */
     display: block;
 }
+
+/* Anpassungen für Wert in der Detailkarte */
 .player-card-detail .stat-item .value {
     font-size: 2rem;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0.6rem;
     line-height: 1.1;
-    text-align: center;
-    display: block;
+    text-align: center; /* Text zentrieren */
+     display: block;
 }
 
 /* Progress Bar Container (Drittel-Stil) - innerhalb der Detailkarte */
 .player-card-detail .stat-progress-container {
     position: relative;
-    width: 100%;
-    max-width: 150px;
+    width: 100%;        /* Nimmt volle Breite des Stat-Items ein, bis max-width */
+    max-width: 150px;   /* Maximale Breite begrenzen */
     height: 8px;
     background-color: var(--bar-bg);
     border-radius: 4px;
     margin-bottom: 0.4rem;
-    margin-left: auto;
-    margin-right: auto;
-    display: block;
+    margin-left: auto; /* Zentriert diesen Block */
+    margin-right: auto; /* Zentriert diesen Block */
+    display: block; /* Stellt sicher, dass margin: auto funktioniert */
     overflow: hidden; /* Verhindert, dass die Pseudo-Elemente überlaufen */
 }
 
-/* Pseudo-Elemente für die Trennlinien - innerhalb der Detailkarte */
+/* Pseudo-Elemente für die Trennlinien - Position bleibt relativ zur Bar */
 .player-card-detail .stat-progress-container::before,
 .player-card-detail .stat-progress-container::after {
     content: '';
@@ -521,19 +522,20 @@ ol#player-list li::before {
 .player-card-detail .stat-progress-container::before { left: 33.333%; }
 .player-card-detail .stat-progress-container::after  { left: 66.666%; }
 
-/* Die farbige Bar - innerhalb der Detailkarte */
+/* Die farbige Bar - wird von JS positioniert */
 .player-card-detail .stat-progress-bar {
     position: absolute;
     top: 0;
     height: 100%;
     background-color: var(--bar-bad);
-    border-radius: 0;
-    box-shadow: 0 0 8px transparent;
+    border-radius: 0; /* Kein Radius für Drittel-Bar */
+    box-shadow: 0 0 8px transparent; /* Leichter Glow, Farbe per JS */
     transition: left 0.3s ease-out, width 0.3s ease-out, background-color 0.3s, box-shadow 0.3s;
     z-index: 2;
+    /* left und width werden per JS gesetzt */
 }
 
-/* Das Text-Label unter der Bar - innerhalb der Detailkarte */
+/* Das Text-Label unter der Bar (GOOD/OKAY/BAD) */
 .player-card-detail .stat-indicator-label {
     font-size: 0.75rem;
     font-weight: 700;
@@ -541,7 +543,7 @@ ol#player-list li::before {
     text-transform: uppercase;
     margin-top: 0.2rem;
     transition: color 0.3s;
-    text-align: center;
+    text-align: center; /* Text zentrieren */
     display: block;
 }
 
@@ -552,7 +554,8 @@ ol#player-list li::before {
 /* Sicherstellen, dass diese Stile NUR für die Vergleichskarte gelten */
 .player-card-compare {
     /* Erbt Basis-Stile von .player-card-base */
-    display: flex; /* Nutzt Flexbox für die nebeneinander liegenden Spielerbereiche */
+    /* Standard: Flex-Richtung: row (nebeneinander) auf breiteren Bildschirmen */
+    display: flex;
     gap: var(--gap); /* Abstand zwischen den beiden Spielerbereichen */
     flex-wrap: wrap; /* Erlaubt Umbruch auf sehr kleinen Bildschirmen */
     justify-content: space-around; /* Zentriert die Bereiche, wenn sie nebeneinander passen */
@@ -695,7 +698,7 @@ ol#player-list li::before {
     box-shadow: var(--shadow);
     padding: var(--gap);
     color: var(--text-secondary);
-    max-width: var(--max-list); /* Begrenzen auf max-list Breite */
+    /* max-width wird nun in Media Query angepasst */
     margin: 0 auto; /* Zentrieren */
 }
 #uniliga-data-area p {
@@ -718,7 +721,7 @@ ol#player-list li::before {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
-    min-width: 750px; /* Mindestbreite, um Scrollen zu erzwingen, wenn nötig */
+    /* min-width wird nun in Media Query angepasst */
 }
 
 .stats-table th,
@@ -765,9 +768,10 @@ ol#player-list li::before {
     text-align: right;
     font-feature-settings: "tnum";
     font-variant-numeric: tabular-nums;
-    width: 65px; /* Standardbreite für numerische Spalten */
+    /* width wird nun in Media Query angepasst */
 }
 /* Spezifische Breite für breitere Spalten (optional) */
+/* Diese könnten in Media Queries angepasst werden, falls nötig */
 .stats-table th:nth-child(3), .stats-table td:nth-child(3) { width: 70px; } /* Matches Played */
 .stats-table th:nth-child(4), .stats-table td:nth-child(4) { width: 70px; } /* Rating */
 .stats-table th:nth-child(5), .stats-table td:nth-child(5) { width: 70px; } /* Impact */
@@ -814,40 +818,63 @@ ol#player-list li::before {
 
 
 /* ==========================================================================
-   Responsive
+   Responsive Layout (Breakpoints)
    ========================================================================== */
+
+/* Anpassungen für Bildschirme bis 1250px, aber NICHT unbedingt Stapelung des Hauptinhalts */
 @media (max-width: 1250px) {
-    /* SaverAbi Ansicht: */
-    h3#saverabi-list-header {
-        text-align: center;
-        width: 100%; /* Zentrierung sicherstellen */
-    }
-
-    #saverabi-content #main-content-area { flex-direction: column; align-items: center; justify-content: flex-start !important; }
-    #saverabi-content #player-list-container,
-    /* Hier nur player-list-container auf static setzen, detail-card-container bleibt sticky bis 600px */
-    /* #saverabi-content #player-detail-card-container { max-width: 650px; width: 100%; position: static; margin-bottom: var(--gap); } */
-    #saverabi-content #player-list-container { max-width: 650px; width: 100%; position: static; margin-bottom: var(--gap); }
-
-    /* Detail Card Container bleibt sticky bis 600px, wird aber breiter */
-    #saverabi-content #player-detail-card-container { max-width: 650px; width: 100%; /* position: sticky; top: 1rem; */ margin-bottom: var(--gap); }
-
-
-    #saverabi-content #player-list-container { max-height: none; overflow: visible; }
-    #saverabi-content ol#player-list { overflow-y: visible; }
-    /* Uniliga Ansicht */
+     /* Max Breite für Uniliga-Datenbereich anpassen */
     #uniliga-content #uniliga-data-area { max-width: 95%; margin-left: auto; margin-right: auto; }
-
-    /* Vergleichsansicht im responsiven Modus anpassen */
-    .player-card-compare {
-        flex-direction: column; /* Spielerbereiche untereinander */
-        gap: var(--gap); /* Abstand zwischen den Spielerbereichen */
-    }
-    .player-compare-player-section {
-        min-width: 0; /* Keine Mindestbreite erzwingen, nimmt volle Breite */
-    }
 }
 
+
+/* NEUER Breakpoint für die Stapelung des Hauptinhalts (Liste und Karte) */
+@media (max-width: 992px) {
+     /* SaverAbi Ansicht: Liste und Karte vertikal stapeln */
+    #saverabi-content #main-content-area {
+        flex-direction: column; /* Vertikal stapeln */
+        align-items: center; /* Elemente in der Mitte zentrieren, wenn gestapelt */
+        justify-content: flex-start !important; /* Überschreibe potenzielles justify-content: center */
+    }
+    /* Liste und Karte volle Breite geben und statisch positionieren */
+    #saverabi-content #player-list-container,
+    #saverabi-content #player-detail-card-container {
+        max-width: 650px; /* Oder eine andere maximale Breite, wenn gestapelt */
+        width: 100%;
+        position: static; /* Sticky-Positionierung entfernen, wenn gestapelt */
+        margin-bottom: var(--gap); /* Abstand zwischen gestapelten Elementen */
+    }
+    /* Höhe und Scrollen der Liste anpassen, wenn gestapelt */
+    #saverabi-content #player-list-container {
+         max-height: none; /* Feste Höhe entfernen */
+         overflow: visible; /* Inhalt darf überlaufen, falls nötig */
+    }
+    #saverabi-content ol#player-list {
+        overflow-y: visible; /* Vertikales Scrollen in der Liste erlauben (falls Container keine Höhe hat) */
+    }
+
+    /* Vergleichsansicht: Spielerbereiche vertikal innerhalb der Karte stapeln */
+    .player-card-compare {
+        flex-direction: column; /* Spielerbereiche vertikal stapeln */
+        gap: var(--gap); /* Abstand zwischen gestapelten Bereichen */
+    }
+    .player-compare-player-section {
+        min-width: 0; /* Bereiche dürfen schrumpfen */
+        padding-bottom: var(--gap); /* Padding/Margin am unteren Rand jedes Bereichs */
+        border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3); /* Trennlinie hinzufügen */
+    }
+    .player-compare-player-section:last-child {
+        border-bottom: none; /* Keine Trennlinie nach dem letzten Bereich */
+        padding-bottom: 0;
+    }
+
+    /* Kleinere Anpassungen für Tabellen auf mittelgroßen Bildschirmen */
+    .stats-table { min-width: 700px; } /* Mindestbreite beibehalten, aber evtl. anpassen */
+    .stats-table th, .stats-table td { padding: 0.6rem 0.4rem; } /* Padding reduzieren */
+}
+
+
+/* Anpassungen für sehr kleine Bildschirme (typischerweise Mobiltelefone) */
 @media (max-width: 600px) {
     header h1 { font-size: 1.5rem; }
     .toggle-button { padding: 0.5rem 0.8rem; font-size: 0.85rem; }
@@ -859,14 +886,15 @@ ol#player-list li::before {
         font-size: 0.85em;
     }
 
-    /* SaverAbi Detailkarte Anpassungen (wenn sie allein angezeigt wird) */
-    /* Detail Card Container wird hier static */
-    #saverabi-content #player-detail-card-container { position: static; }
+    /* SaverAbi Detailkarte Anpassungen (wenn gestapelt) */
+    /* position: static ist bereits bei 992px gesetzt */
+    /* #saverabi-content #player-detail-card-container { position: static; } */
+
 
     .player-card-detail .card-header { flex-direction: column; text-align: center; }
     .player-card-detail .avatar { width: 70px; height: 70px; }
     .player-card-detail .player-name { font-size: 1.6rem; }
-    /* Stats Grid auf kleinen Schirmen (für einzelne Detailkarte) */
+    /* Stats Grid auf sehr kleinen Schirmen (2 Spalten) */
     .player-card-detail .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem 0.5rem; }
     .player-card-detail .stat-item .value { font-size: 1.7rem; }
     .player-card-detail .stat-item .label { font-size: 0.7rem; }
@@ -883,15 +911,10 @@ ol#player-list li::before {
     .stats-table th:not(:nth-child(1)):not(:nth-child(2)) { width: auto; }
     .player-cell { max-width: 100px; } /* Spielerzellen begrenzen */
 
-    /* Vergleichsansicht Anpassungen für sehr kleine Screens */
-    .player-card-compare .player-compare-player-section {
-         min-width: 0; /* Erlaubt weiteres Schrumpfen */
-         padding: 0; /* Optional: Innen-Padding entfernen */
-         border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3); /* Trennlinie zwischen Spielern */
-         margin-bottom: var(--gap);
-    }
-    .player-card-compare .player-compare-player-section:last-child {
-         border-bottom: none;
-         margin-bottom: 0;
-    }
+    /* Vergleichsansicht: Stile für sehr kleine Bildschirme (bereits ab 992px gestapelt) */
+     .player-card-compare .player-compare-player-section {
+         /* min-width ist bereits 0 ab 992px, keine Wiederholung nötig */
+         /* padding und border-bottom werden ab 992px behandelt */
+     }
+
 }
