@@ -158,12 +158,13 @@ async function getPlayerData(nickname) {
 
 
         // Berechne den "Geldwert"
+        // Berechne den "Geldwert"
         if (p.sortElo !== null && typeof p.rating === 'number' && typeof p.impact === 'number') {
             const elo = p.sortElo;
             const rating = p.rating;
             const impact = p.impact;
 
-            const bonusThreshold = thresholds?.elo?.good ?? 2000;
+            const bonusThreshold = thresholds?.elo?.okay ?? 2000;
             const bonusPower = 1.8;
             const bonusScale = 0.05;
 
@@ -171,7 +172,6 @@ async function getPlayerData(nickname) {
 
             const impactFactor = impact - 0.2;
             let finalWorth = weightedElo * rating * impactFactor;
-
 
             finalWorth = Math.max(0, finalWorth);
 
