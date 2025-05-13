@@ -34,21 +34,11 @@ function safeWorth(v) {
     const num = parseFloat(v);
     if (!Number.isFinite(num)) return "—";
 
-    // Teile durch 1000, um den Wert in "Tausend" zu erhalten (wie im CSS Kommentar)
-    // ACHTUNG: Der CSS Kommentar spricht von "Mio USD", die Berechnung hier scheint auf Tausend zu zielen.
-    // Falls Mio USD korrekt ist, müsste die Division durch 1,000,000 erfolgen.
-    // Ich behalte die aktuelle Logik (Division durch 1000) bei, da sie im original JS stand,
-    // aber der Kommentar im CSS könnte irreführend sein.
+    // Division durch 1000 für "Tsd USD"
     const worthInThousands = num / 1000;
 
     // Formatiere mit 1 Dezimalstelle und füge ' Tsd USD' hinzu
-    // Verwende 'de-DE' Locale, um das Komma als Dezimaltrennzeichen zu nutzen
-     // Korrigiere die Einheit im String, um zur Division durch 1000 zu passen
     return worthInThousands.toLocaleString('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' Tsd USD';
-    // Falls Mio USD gewünscht ist, ändere die Zeile zu:
-    // const worthInMillions = num / 1000000;
-    // return worthInMillions.toLocaleString('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' Mio USD';
-
 }
 
 
@@ -125,8 +115,10 @@ function cacheDOMElements() {
          // Optional: Zeige eine generelle Fehlermeldung an
         if(errorMessageSaverAbi) { errorMessageSaverAbi.textContent = "Fehler beim Initialisieren der Seite (UI-Elemente fehlen)."; errorMessageSaverAbi.style.display = 'block'; }
         if(loadingIndicatorSaverAbi) loadingIndicatorSaverAbi.style.display = 'none';
+         return false; // Indicate failure
     } else {
         console.log("[LOG] DOM elements cached successfully.");
+        return true; // Indicate success
     }
 }
 
@@ -227,6 +219,8 @@ function displayPlayerList(players) {
     if (!players || players.length === 0) {
         console.log("[LOG] Keine Spielerdaten zum Anzeigen vorhanden.");
         playerListContainerEl.innerHTML = '<li>Keine Spielerdaten gefunden oder geladen.</li>';
+        // Wenn keine Spieler da sind, Sortier-Controls verstecken? Oder anzeigen mit Fehlermeldung?
+        // Wir lassen sie erstmal anzeigen, da der Fehlerindikator da ist.
         return;
     }
 
@@ -241,6 +235,8 @@ function displayPlayerList(players) {
 
         if (player.error) {
             li.classList.add('error-item');
+            // Fehlerhafte Spieler können nicht für den Vergleich ausgewählt werden
+             li.style.cursor = 'not-allowed';
             li.innerHTML = `<span class='player-info'><img src='default_avatar.png' class='avatar' alt="Standard Avatar"/><span class='player-name'>${player.nickname}</span></span><div class='player-list-right error-text'>Fehler</div>`; // Angepasste Fehlermeldung
         } else {
             const displayValue = currentSortMode === 'elo'
@@ -315,7 +311,7 @@ function assignClubsToPlayers(players) {
             assignedClubName = null;
         }
         // Finde den ursprünglichen Spieler im allPlayersData Array, um das Icon zuzuweisen
-        const originalPlayer = players.find(p => p.nickname === player.nickname);
+        const originalPlayer = allPlayersData.find(p => p.nickname === player.nickname); // Nutzt allPlayersData
         if(originalPlayer) {
              originalPlayer.assignedClubIcon = assignedClubName ? clubIconMap[assignedClubName] : null;
         } else {
@@ -332,7 +328,7 @@ function updateEloProgressBarForList(containerEl) {
     const val = parseInt(containerEl.dataset.elo, 10) || 0;
     const cfg = thresholds.elo;
     const pct = Math.min(100, (val / cfg.max) * 100);
-    const bar = containerEl.querySelector('.elo-progress-bar');
+    const bar = containerEl.querySelector('.elo-progress-bar'); // Präziserer Selektor
     if (!bar) return;
     bar.style.width = pct + '%';
     let color = 'var(--bar-bad)';
@@ -347,10 +343,10 @@ function displaySinglePlayerCard(player) {
     console.log("[LOG] displaySinglePlayerCard called for player:", player?.nickname || 'N/A');
     if (!detailCardContainer || !mainContentArea) { console.error("FEHLER: Detail Card Container oder Main Content Area nicht gefunden."); return; }
 
-    // Sicherstellen, dass die SaverAbi-Ansicht aktiv ist
+    // Sicherstellen, dass die SaverAbi-Ansicht aktiv ist und wir NICHT im Vergleichsmodus sind
     const saverAbiContentEl = document.getElementById('saverabi-content');
-    if (!saverAbiContentEl || !saverAbiContentEl.classList.contains('active')) {
-        console.log("[LOG] SaverAbi view is not active, hiding detail card.");
+    if (!saverAbiContentEl || !saverAbiContentEl.classList.contains('active') || isComparisonMode) {
+        console.log("[LOG] SaverAbi view not active or in comparison mode, hiding detail card.");
         detailCardContainer.style.display = 'none';
         if (mainContentArea) mainContentArea.classList.remove('detail-visible');
         return;
@@ -380,7 +376,7 @@ function displaySinglePlayerCard(player) {
               <div class="stat-item" data-stat="rating"><div class="label">Rating 2.0</div><div class="value">${safe(player.rating, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
               <div class="stat-item" data-stat="dpr"><div class="label">DPR</div><div class="value">${safe(player.dpr, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
               <div class="stat-item" data-stat="kast"><div class="label">KAST</div><div class="value">${safe(player.kast, 1, '%')}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
-              <div class="stat-item" data-stat="impact"><div class="label">IMPACT</div><div class="value">${safe(player.impact -0.2, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
+              <div class="stat-item" data-stat="impact"><div class="label">IMPACT</div><div class="value">${safe(player.impact !== null ? player.impact - 0.2 : null, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
               <div class="stat-item" data-stat="adr"><div class="label">ADR</div><div class="value">${safe(player.adr, 1)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
               <div class="stat-item" data-stat="kpr"><div class="label">KPR</div><div class="value">${safe(player.kpr, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
            </div>
@@ -390,11 +386,14 @@ function displaySinglePlayerCard(player) {
 }
 
 
-// updateStatProgressBars (unverändert)
+// updateStatProgressBars (unverändert bis auf Impact und HSP Anpassung)
 function updateStatProgressBars(card, player) {
     // Sucht innerhalb des übergebenen Karten-Elements
+     if (!card) { console.error("FEHLER: card element is null in updateStatProgressBars!"); return; }
      card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
-        const stat = item.dataset.stat; const val = player[stat]; const cfg = thresholds[stat];
+        const stat = item.dataset.stat;
+        let val = player[stat]; // Ursprünglicher Wert
+        const cfg = thresholds[stat];
         const bar = item.querySelector('.stat-progress-container .stat-progress-bar'); // Präziserer Selektor
         const lbl = item.querySelector('.stat-indicator-label');
         if (!cfg || !bar || !lbl) {
@@ -404,31 +403,22 @@ function updateStatProgressBars(card, player) {
         let category = 0; let text = 'BAD'; let color = 'var(--bar-bad)'; let barLeft = '0%'; const barWidth = '33.333%'; let borderRadiusStyle = '0';
         let numericalVal = toNum(val); // Sicher in Zahl umwandeln
 
+        // Spezielle Anpassung für die Berechnung von Impact und HSP für die Bar-Kategorie
+        if (stat === 'impact' && numericalVal !== null) {
+            numericalVal = numericalVal - 0.2; // Anpassung für Bar-Vergleich wie bei Anzeige
+        } else if (stat === 'hsp' && numericalVal !== null && numericalVal <= 1 && cfg.max > 1) {
+             numericalVal = numericalVal * 100; // Normalisiere HSP auf 0-100, wenn nötig
+             console.log(`[LOG] HSP value ${val} adjusted to ${numericalVal}% for threshold comparison.`);
+        }
+
+
         if (numericalVal != null) { // Prüfen, ob der Wert eine gültige Zahl ist
              if (stat === 'dpr') { // Niedriger DPR ist besser
                 if (numericalVal <= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
                 else if (numericalVal <= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
                 else if (numericalVal <= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
                 else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
-            } else if (stat === 'hsp') { // HSP ist in %
-                let compareVal = numericalVal;
-                 // Annahme: HSP kommt als Zahl zwischen 0 und 100 oder 0 und 1.
-                 // Schwellenwerte sind in 0-100. Normalisieren bei Bedarf.
-                 if (compareVal <= 1 && cfg.max > 1) { // Sieht nach 0-1 aus, Schwellen nach 0-100
-                      compareVal = compareVal * 100;
-                      console.log(`[LOG] HSP value ${val} adjusted to ${compareVal}% for threshold comparison.`);
-                 } else if (compareVal > 1 && cfg.max <= 1) { // Sieht nach 0-100 aus, Schwellen nach 0-1
-                       compareVal = compareVal / 100;
-                       console.log(`[LOG] HSP value ${val} adjusted to ${compareVal} for threshold comparison.`);
-                 }
-                 // Jetzt mit den angepassten Schwellenwerten vergleichen
-                 if (compareVal >= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
-                else if (compareVal >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
-                else if (compareVal >= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
-                else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
-
-            }
-            else { // Höher ist besser für andere Stats
+            } else { // Höher ist besser für andere Stats (inkl. angepasstem Impact und HSP)
                 if (numericalVal >= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
                 else if (numericalVal >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
                 else if (numericalVal >= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
@@ -436,7 +426,7 @@ function updateStatProgressBars(card, player) {
             }
         } else {
             text = '---'; category = -1; color = 'transparent'; barLeft = '0%'; borderRadiusStyle = '0';
-             console.warn(`[LOG] Ungültiger numerischer Wert für Stat "${stat}":`, val);
+             console.warn(`[LOG] Ungültiger numerischer Wert für Stat "${stat}" für Bar-Anzeige:`, val);
         }
         bar.style.left = barLeft; bar.style.width = barWidth; bar.style.backgroundColor = color; bar.style.boxShadow = (category !== -1) ? `0 0 8px ${color}` : 'none'; bar.style.borderRadius = borderRadiusStyle;
         lbl.textContent = text; lbl.style.color = (category !== -1) ? color : 'var(--text-secondary)';
@@ -475,10 +465,10 @@ function displayComparisonCard(player1, player2) {
      console.log("[LOG] displayComparisonCard called for players:", player1?.nickname, player2?.nickname);
      if (!detailCardContainer || !mainContentArea) { console.error("FEHLER: Detail Card Container oder Main Content Area nicht gefunden."); return; }
 
-     // Sicherstellen, dass die SaverAbi-Ansicht aktiv ist
+     // Sicherstellen, dass die SaverAbi-Ansicht aktiv ist und wir im Vergleichsmodus sind
      const saverAbiContentEl = document.getElementById('saverabi-content');
-    if (!saverAbiContentEl || !saverAbiContentEl.classList.contains('active')) {
-        console.log("[LOG] SaverAbi view is not active, hiding comparison card.");
+    if (!saverAbiContentEl || !saverAbiContentEl.classList.contains('active') || !isComparisonMode) {
+        console.log("[LOG] SaverAbi view not active or not in comparison mode, hiding comparison card.");
         detailCardContainer.style.display = 'none';
         if (mainContentArea) mainContentArea.classList.remove('detail-visible');
         return;
@@ -505,11 +495,13 @@ function displayComparisonCard(player1, player2) {
          { name: 'rating', label: 'Rating 2.0', format: v => safe(v, 2) },
          { name: 'dpr', label: 'DPR', format: v => safe(v, 2) },
          { name: 'kast', label: 'KAST', format: v => safe(v, 1, '%') },
-         { name: 'impact', label: 'IMPACT', format: v => safe(v - 0.2, 2) }, // Anpassung für Impact Anzeige
+         // Impact Wert für Anzeige anpassen
+         { name: 'impact', label: 'IMPACT', format: v => safe(v !== null ? v - 0.2 : null, 2) },
          { name: 'adr', label: 'ADR', format: v => safe(v, 1) },
          { name: 'kpr', label: 'KPR', format: v => safe(v, 2) },
-         { name: 'kd', label: 'K/D', format: v => safe(v, 2) }, // K/D wieder hinzufügen für Vergleich? Oder weglassen wie vorher? Füge es hinzu.
-         { name: 'hsp', label: 'HS %', format: v => safe(v, 1, '%') }, // HSP Format anpassen
+         { name: 'kd', label: 'K/D', format: v => safe(v, 2) },
+         // HSP Wert für Anzeige anpassen
+         { name: 'hsp', label: 'HS %', format: v => safe(v, 1, '%') },
     ];
 
      let player1StatsHtml = '';
@@ -568,13 +560,17 @@ function displayComparisonCard(player1, player2) {
 }
 
 
-// loadSaverAbiView (modifiziert, um sortAndDisplayPlayers aufzurufen)
+// loadSaverAbiView (modifiziert für besseres Logging und Fehlerbehandlung)
 async function loadSaverAbiView() {
     console.log("[LOG] loadSaverAbiView called");
-    if (!loadingIndicatorSaverAbi || !errorMessageSaverAbi || !playerListContainerEl || !detailCardContainer || !mainContentArea || !saverAbiContent || !sortEloButton || !sortWorthButton || !compareButton || !saverAbiListHeader) {
-        console.error("FEHLER: Benötigte Elemente für SaverAbi View fehlen!");
-        if(errorMessageSaverAbi) { errorMessageSaverAbi.textContent = "Fehler: UI-Elemente nicht initialisiert."; errorMessageSaverAbi.style.display = 'block'; }
-        return;
+    // Prüfe, ob DOM-Elemente erfolgreich gecached wurden
+    if (!cacheDOMElements()) {
+         console.error("DOM elements not cached, cannot load SaverAbi view.");
+         // Fehlermeldung wurde bereits in cacheDOMElements gesetzt
+         if(loadingIndicatorSaverAbi) loadingIndicatorSaverAbi.style.display = 'none';
+         const sortButtonContainer = document.getElementById('saverabi-sort-controls');
+         if (sortButtonContainer) sortButtonContainer.style.display = 'none'; // Sort-Controls verstecken, wenn UI fehlt
+         return; // Abbruch, wenn wichtige Elemente fehlen
     }
 
     // NEU: Exit comparison mode beim Laden der SaverAbi View
@@ -588,33 +584,62 @@ async function loadSaverAbiView() {
     allPlayersData = []; // Daten zurücksetzen
 
     try {
-        console.log("[LOG] Fetching /players.json...");
+        console.log("[LOG] Step 1: Fetching /players.json...");
         const namesRes = await fetch('/players.json');
         console.log("[DEBUG] /players.json status:", namesRes.status); // DEBUG Log
         if (!namesRes.ok) throw new Error(`Fehler Laden Spielerliste (${namesRes.status})`);
         const names = await namesRes.json(); // Direkt als JSON parsen
+        console.log("[LOG] Step 1 successful: Player names loaded:", names);
 
-        console.log("[LOG] Player names loaded:", names);
         if (!Array.isArray(names) || names.length === 0) {
-             const msg = "Spielerliste leer/ungültig in players.json";
+             const msg = "Spielerliste in players.json ist leer oder ungültig.";
              console.warn(`[LOG] ${msg}`);
              if(errorMessageSaverAbi) { errorMessageSaverAbi.textContent = msg; errorMessageSaverAbi.style.display = 'block'; }
              if(playerListContainerEl) playerListContainerEl.innerHTML = '<li>Keine Spieler in der Liste gefunden.</li>';
+             // Sortier-Controls anzeigen, auch wenn keine Spieler geladen wurden, damit Buttons sichtbar sind
+             const sortButtonContainer = document.getElementById('saverabi-sort-controls');
+             if (sortButtonContainer) sortButtonContainer.style.display = 'flex';
              return; // Beende Funktion, da keine Spieler geladen werden können
         }
 
-        console.log("[LOG] Fetching player data for all players...");
+        console.log("[LOG] Step 2: Fetching player data for all players...");
         const promises = names.map(name => getPlayerData(name));
-        const results = await Promise.all(promises);
-        console.log("[LOG] Player data fetch results (raw):", results);
-        allPlayersData = results;
+        // Verwenden Sie Promise.allSettled, um zu warten, bis alle Promises abgeschlossen sind,
+        // unabhängig davon, ob sie erfüllt oder abgelehnt wurden.
+        const results = await Promise.allSettled(promises);
+        console.log("[LOG] Step 2 results (Promise.allSettled):", results);
+
+        // Verarbeiten Sie die Ergebnisse von allSettled
+        allPlayersData = results.map(result => {
+            if (result.status === 'fulfilled') {
+                return result.value; // Erfolgreich geladene Spielerdaten
+            } else {
+                // Fehler bei diesem spezifischen Spieler
+                console.error(`[LOG] Failed to fetch data for one player:`, result.reason);
+                 // Erstelle ein Spielerobjekt mit Fehlerinformationen
+                const nicknameMatch = result.reason.message.match(/for (.+?):/);
+                const nickname = nicknameMatch ? nicknameMatch[1] : 'Unbekannter Spieler';
+                return { nickname: nickname, error: result.reason.message || 'Fehler beim Laden', sortElo: -1, worth: null };
+            }
+        });
+
+        console.log("[LOG] Step 2 successful: allPlayersData populated:", allPlayersData);
+
 
         const validPlayerCount = allPlayersData.filter(p => !p.error).length;
         console.log(`[LOG] Gültige Spielerdaten empfangen: ${validPlayerCount} / ${allPlayersData.length}`);
+
         if(validPlayerCount === 0 && allPlayersData.length > 0) {
             console.warn("[LOG] Keine gültigen Spielerdaten von der API erhalten, nur Fehler.");
-             if(errorMessageSaverAbi) { errorMessageSaverAbi.textContent = "Keine gültigen Spielerdaten von der API erhalten."; errorMessageSaverAbi.style.display = 'block'; }
+             // Fehlermeldung nur anzeigen, wenn KEIN allgemeiner Fehler beim Laden der Liste auftrat
+             if (!errorMessageSaverAbi.textContent) {
+                 errorMessageSaverAbi.textContent = "Keine gültigen Spielerdaten von der API erhalten. Siehe Konsole für Details.";
+                 errorMessageSaverAbi.style.display = 'block';
+             }
+        } else if (validPlayerCount > 0) {
+             errorMessageSaverAbi.style.display = 'none'; // Fehler ausblenden, wenn mindestens ein Spieler geladen wurde
         }
+
 
         // Sortieren und anzeigen der Spieler nach dem Standard-Sortiermodus
         sortAndDisplayPlayers();
@@ -629,7 +654,7 @@ async function loadSaverAbiView() {
              console.warn("[LOG] Konnte Click listener für Spielerliste nicht hinzufügen.");
         }
 
-         // Sortier-Controls anzeigen, wenn Daten geladen wurden
+         // Sortier-Controls anzeigen, wenn Daten geladen wurden (auch bei Fehlern, um Buttons sichtbar zu halten)
         const sortButtonContainer = document.getElementById('saverabi-sort-controls');
         if (sortButtonContainer) {
             sortButtonContainer.style.display = 'flex';
@@ -639,8 +664,10 @@ async function loadSaverAbiView() {
 
     } catch (err) {
         console.error("Schwerwiegender Fehler in loadSaverAbiView:", err);
-        if(errorMessageSaverAbi){ errorMessageSaverAbi.textContent = `Fehler: ${err.message}`; errorMessageSaverAbi.style.display = 'block'; }
+        if(errorMessageSaverAbi){ errorMessageSaverAbi.textContent = `Fehler beim Laden der Spielerdaten: ${err.message}`; errorMessageSaverAbi.style.display = 'block'; }
         if(playerListContainerEl) playerListContainerEl.innerHTML = '<li>Fehler beim Laden der Spielerliste oder Daten.</li>';
+        const sortButtonContainer = document.getElementById('saverabi-sort-controls');
+        if (sortButtonContainer) sortButtonContainer.style.display = 'flex'; // Buttons auch im Fehlerfall anzeigen
     }
     finally {
         console.log("[LOG] loadSaverAbiView finally block reached.");
@@ -648,16 +675,18 @@ async function loadSaverAbiView() {
             loadingIndicatorSaverAbi.style.display = 'none';
             console.log("[LOG] Loading indicator hidden.");
         }
+         // Sicherstellen, dass die Button-Zustände korrekt sind nach dem Laden
+         updateSortButtonStates();
     }
 }
 
-// sortAndDisplayPlayers (modifiziert, um Club-Icon Zuweisung basierend auf aktuellem allPlayersData zu machen)
+// sortAndDisplayPlayers (modifiziert zur Aktualisierung der Button-Zustände)
 function sortAndDisplayPlayers() {
     console.log(`[LOG] Sorting and displaying players based on: ${currentSortMode}. Comparison Mode: ${isComparisonMode}`);
 
     // Vor dem Sortieren die Club-Icons zuweisen, falls im Worth-Modus
     if (currentSortMode === 'worth') {
-        assignClubsToPlayers(allPlayersData); // Zuweisung basierend auf aktuellen Daten
+        assignClubsToPlayers(allPlayersData.filter(p => !p.error && p.worth !== null)); // Nur Spieler ohne Fehler & mit Worth zuweisen
     } else {
          // Icons entfernen/zurücksetzen, wenn im Elo-Modus
         allPlayersData.forEach(player => player.assignedClubIcon = null);
@@ -675,13 +704,7 @@ function sortAndDisplayPlayers() {
     displayPlayerList(sortedPlayers); // Diese Funktion kümmert sich um das Rendering
 
     // NEU: Button-Zustände aktualisieren
-    if (sortEloButton && sortWorthButton && compareButton) {
-        sortEloButton.classList.toggle('active', currentSortMode === 'elo' && !isComparisonMode);
-        sortWorthButton.classList.toggle('active', currentSortMode === 'worth' && !isComparisonMode);
-        compareButton.classList.toggle('active', isComparisonMode); // Compare Button ist aktiv, wenn im Vergleichsmodus
-    } else {
-         console.warn("[LOG] Sortier- oder Vergleichsbuttons nicht gefunden.");
-    }
+    updateSortButtonStates();
 
     // NEU: Detail-/Vergleichskarte verstecken, wenn Sortierung geändert wird (außer im Vergleichsmodus, wo 2 ausgewählt sind)
     if (!isComparisonMode || playersToCompare.length < 2) {
@@ -692,12 +715,18 @@ function sortAndDisplayPlayers() {
         // Wenn im Vergleichsmodus und 2 Spieler ausgewählt sind, die Vergleichsansicht neu rendern
         const player1 = allPlayersData.find(p => p.nickname === playersToCompare[0]);
         const player2 = allPlayersData.find(p => p.nickname === playersToCompare[1]);
-         if(player1 && player2) displayComparisonCard(player1, player2);
-         else console.warn("[LOG] Konnte Spielerdaten für Neu-Rendering der Vergleichskarte nicht finden.");
+         if(player1 && player2 && !player1.error && !player2.error) displayComparisonCard(player1, player2); // Nur anzeigen, wenn beide gültig sind
+         else {
+             console.warn("[LOG] Konnte gültige Spielerdaten für Neu-Rendering der Vergleichskarte nicht finden.");
+              // Optional: Fehlermeldung in der Vergleichskarte anzeigen
+             detailCardContainer.innerHTML = `<div class='player-card-base error-card'>Fehler beim Laden der Daten für Vergleich oder ungültige Spieler ausgewählt.</div>`;
+              detailCardContainer.style.display = 'block';
+              if(mainContentArea) mainContentArea.classList.add('detail-visible');
+         }
     }
 }
 
-// handlePlayerListClick (modifiziert für Vergleichsmodus)
+// handlePlayerListClick (modifiziert für Vergleichsmodus und Fehlerbehandlung)
 function handlePlayerListClick(e) {
     const li = e.target.closest('li');
     if (!li || !li.dataset.nickname) return; // Nur auf gültige Listenelemente reagieren
@@ -705,17 +734,15 @@ function handlePlayerListClick(e) {
     const nickname = li.dataset.nickname;
     const playerData = allPlayersData.find(p => p.nickname === nickname);
 
-    if (!playerData) {
-        console.warn(`[LOG] Keine Daten gefunden für geklickten Spieler: ${nickname}`);
-        // Optional: Fehlerkarte anzeigen, wenn keine Daten verfügbar sind
-        displaySinglePlayerCard({ nickname: nickname, error: "Daten nicht verfügbar" });
+    if (!playerData || playerData.error) {
+        console.warn(`[LOG] Geklickter Spieler "${nickname}" hat keine Daten oder einen Fehler. Kann nicht ausgewählt oder angezeigt werden.`);
+        // Optional: Kurze visuelle Rückmeldung geben (z.B. Klasse hinzufügen, die schnell wieder entfernt wird)
+         li.classList.add('error-item'); // Klasse ist schon da, vielleicht blinken lassen?
+         setTimeout(() => {
+             // Optional: li.classList.remove('error-item'); // Nur wenn Klasse temporär hinzugefügt wird
+         }, 500);
+        displaySinglePlayerCard(playerData || { nickname: nickname, error: "Daten nicht verfügbar" }); // Zeige Fehlerkarte
         return;
-    }
-
-    if (playerData.error) {
-         console.warn(`[LOG] Geklickter Spieler "${nickname}" hat einen Fehler. Zeige Fehlerkarte.`);
-         displaySinglePlayerCard(playerData); // Zeige Fehlerkarte für diesen Spieler
-         return;
     }
 
 
@@ -753,12 +780,13 @@ function handlePlayerListClick(e) {
         if (playersToCompare.length === 2) {
             const p1 = allPlayersData.find(p => p.nickname === playersToCompare[0]);
             const p2 = allPlayersData.find(p => p.nickname === playersToCompare[1]);
-            if (p1 && p2) {
+            // Stelle sicher, dass beide Spielerdaten gültig sind, bevor du die Vergleichskarte anzeigst
+            if (p1 && p2 && !p1.error && !p2.error) {
                  displayComparisonCard(p1, p2);
             } else {
-                 console.error("[LOG] Konnte Daten für ausgewählte Spieler im Vergleichsmodus nicht finden.");
-                 // Optional: Fehlermeldung anzeigen
-                 detailCardContainer.innerHTML = `<div class='player-card-base error-card'>Fehler beim Laden der Daten für Vergleich.</div>`;
+                 console.warn("[LOG] Konnte gültige Daten für ausgewählte Spieler im Vergleichsmodus nicht finden.");
+                 // Fehlermeldung in der Vergleichskarte anzeigen
+                 detailCardContainer.innerHTML = `<div class='player-card-base error-card'>Fehler beim Laden oder ausgewählte Spielerdaten ungültig.</div>`;
                  detailCardContainer.style.display = 'block';
                  if(mainContentArea) mainContentArea.classList.add('detail-visible');
             }
@@ -797,10 +825,8 @@ function enterComparisonMode() {
     detailCardContainer.style.display = 'none'; // Detail-/Vergleichskarte ausblenden
     if(mainContentArea) mainContentArea.classList.remove('detail-visible');
 
-    // Button-Zustände aktualisieren
-    if (sortEloButton) sortEloButton.classList.remove('active');
-    if (sortWorthButton) sortWorthButton.classList.remove('active');
-    if (compareButton) compareButton.classList.add('active');
+    // NEU: Button-Zustände aktualisieren
+    updateSortButtonStates();
 
     // Visuelle Hervorhebung in der Liste entfernen (falls vorhanden)
     document.querySelectorAll('#player-list li.selected-for-compare').forEach(li => {
@@ -808,7 +834,6 @@ function enterComparisonMode() {
     });
 
     // Optionale Nachricht anzeigen: "Wählen Sie zwei Spieler zum Vergleichen aus"
-    // (Dies könnte in der Spielerliste selbst oder an anderer Stelle platziert werden)
     // Beispiel: saverAbiListHeader.textContent = 'Spieler auswählen (2)';
     console.log("[LOG] Comparison Mode active. Select two players.");
 }
@@ -820,21 +845,30 @@ function exitComparisonMode() {
     detailCardContainer.style.display = 'none'; // Detail-/Vergleichskarte ausblenden
      if(mainContentArea) mainContentArea.classList.remove('detail-visible');
 
-    // Button-Zustände aktualisieren (zurück zum aktuellen Sortiermodus)
-    if (sortEloButton) sortEloButton.classList.toggle('active', currentSortMode === 'elo');
-    if (sortWorthButton) sortWorthButton.classList.toggle('active', currentSortMode === 'worth');
-    if (compareButton) compareButton.classList.remove('active');
+    // NEU: Button-Zustände aktualisieren
+    updateSortButtonStates();
 
      // Visuelle Hervorhebung in der Liste entfernen
      document.querySelectorAll('#player-list li.selected-for-compare').forEach(li => {
          li.classList.remove('selected-for-compare');
      });
 
-    // Spielerliste neu anzeigen (falls nötig, z.B. wenn Header geändert wurde)
-    // Wenn der Header immer "Spielerliste" bleibt, ist ein Neu-Rendering der Liste nicht zwingend nötig,
-    // aber wir rufen sortAndDisplayPlayers auf, um sicherzustellen, dass der Listen-Zustand korrekt ist.
+    // Spielerliste neu anzeigen (falls nötig)
     sortAndDisplayPlayers(); // Neu sortieren/anzeigen basierend auf dem aktuellen Sortiermodus
     console.log("[LOG] Comparison Mode inactive.");
+}
+
+// NEU: Funktion zur Aktualisierung der Sortier-Button-Zustände
+function updateSortButtonStates() {
+     if (sortEloButton && sortWorthButton && compareButton) {
+        // Elo und $ Buttons sind aktiv, wenn NICHT im Vergleichsmodus UND der jeweilige Modus aktiv ist
+        sortEloButton.classList.toggle('active', currentSortMode === 'elo' && !isComparisonMode);
+        sortWorthButton.classList.toggle('active', currentSortMode === 'worth' && !isComparisonMode);
+        // Compare Button ist aktiv, wenn im Vergleichsmodus
+        compareButton.classList.toggle('active', isComparisonMode);
+     } else {
+          console.warn("[LOG] Sortier- oder Vergleichsbuttons nicht gefunden. Kann Zustände nicht aktualisieren.");
+     }
 }
 
 
@@ -846,10 +880,13 @@ let currentUniligaData = null;
 
 async function loadUniligaView() {
     console.log("[LOG] loadUniligaView WURDE AUFGERUFEN!");
-    if (!loadingIndicatorUniliga || !errorMessageUniliga || !uniligaDataArea) {
-        console.error("FEHLER: Benötigte Elemente für Uniliga View fehlen!");
-        if (errorMessageUniliga) { errorMessageUniliga.textContent = "Fehler: UI-Elemente nicht initialisiert."; errorMessageUniliga.style.display = 'block'; }
-        return;
+    // Prüfe, ob DOM-Elemente erfolgreich gecached wurden
+    if (!cacheDOMElements()) {
+         console.error("DOM elements not cached, cannot load Uniliga view.");
+         // Fehlermeldung wurde bereits in cacheDOMElements gesetzt
+         if(loadingIndicatorUniliga) loadingIndicatorUniliga.style.display = 'none';
+         // Sort-Controls sind in dieser View standardmäßig versteckt, keine Anpassung nötig.
+         return; // Abbruch, wenn wichtige Elemente fehlen
     }
 
      // NEU: Exit comparison mode beim Wechsel zur Uniliga View
@@ -886,7 +923,7 @@ async function loadUniligaView() {
         const data = await apiResponse.json(); // Direkt als JSON parsen
         console.log("[LOG] Uniliga API data received:", data);
 
-         if (data && (data.message?.includes('Minimaler Test') || (!data.teams && !data.players))) {
+         if (!data || (!data.teams || data.teams.length === 0) && (!data.players || data.players.length === 0) || (data.message?.includes('Minimaler Test'))) {
              console.warn("[LOG] Minimale Test-Antwort oder leere Daten vom Backend erhalten.");
              errorMessageUniliga.textContent = data.message || "Keine vollständigen Uniliga-Daten verfügbar.";
              errorMessageUniliga.style.display = 'block';
@@ -1051,13 +1088,16 @@ function switchView(viewToShow) {
         loadUniligaView();
     } else if (viewToShow === 'saverabi') {
          // Beim Wechsel zurück zur SaverAbi View, sicherstellen, dass Vergleichsmodus deaktiviert ist
-         exitComparisonMode(); // Dies lädt auch die Spielerliste neu und setzt die Anzeige zurück
+         exitComparisonMode(); // Dies setzt auch die Button-Zustände zurück
 
-         // Die loadSaverAbiView() wird bereits von exitComparisonMode() aufgerufen,
-         // wenn allPlayersData leer ist. Wenn Daten da sind, sortiert und zeigt
-         // exitComparisonMode() die Liste neu an. Daher hier kein zusätzlicher Aufruf nötig,
-         // außer wenn loadSaverAbiView selbst einen Fehler hatte und allPlayersData leer blieb.
-         // Im aktuellen Design deckt exitComparisonMode das korrekt ab.
+         // Überprüfen, ob allPlayersData leer ist und gegebenenfalls neu laden
+         if (allPlayersData.length === 0 || allPlayersData.filter(p => !p.error).length === 0) {
+              console.log("[LOG] allPlayersData is empty or contains only errors. Reloading data.");
+              loadSaverAbiView(); // Lädt Daten und ruft dann sortAndDisplayPlayers auf
+         } else {
+              console.log("[LOG] allPlayersData already loaded. Sorting and displaying.");
+              sortAndDisplayPlayers(); // Daten sind vorhanden, nur neu sortieren/anzeigen
+         }
     }
 }
 
@@ -1066,58 +1106,64 @@ function switchView(viewToShow) {
 // -------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
     console.log("[LOG] DOMContentLoaded event fired.");
-    cacheDOMElements(); // Erst Elemente cachen
+    // Cache DOM elements and check if successful before adding listeners
+    if (cacheDOMElements()) {
 
-    // Event Listener für View Toggle Buttons
-    if (toggleButtons) {
-        toggleButtons.forEach(button => {
-            button.addEventListener('click', (event) => {
-                const view = event.currentTarget.dataset.view;
-                if (view) switchView(view);
+        // Event Listener für View Toggle Buttons
+        if (toggleButtons) {
+            toggleButtons.forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const view = event.currentTarget.dataset.view;
+                    if (view) switchView(view);
+                });
             });
-        });
-         console.log("[LOG] View toggle button listeners added.");
-    } else { console.warn("[LOG] View toggle buttons not found. Cannot add listeners."); }
+             console.log("[LOG] View toggle button listeners added.");
+        } else { console.warn("[LOG] View toggle buttons not found. Cannot add listeners."); }
 
-    // Event Listener für Sortier-Buttons
-    if (sortEloButton) {
-        sortEloButton.addEventListener('click', () => {
-            if (currentSortMode !== 'elo' || isComparisonMode) { // Wenn Modus anders ODER im Vergleichsmodus
-                console.log("[LOG] Switching sort mode to: elo (from button click)");
-                 exitComparisonMode(); // Vergleichsmodus beenden, dies setzt auch die Buttons zurück und sortiert neu
-                currentSortMode = 'elo'; // Setze den Modus NACH exitComparisonMode
-                sortAndDisplayPlayers(); // Erneutes Sortieren und Anzeigen nach Elo
-            } else {
-                 console.log("[LOG] Already in Elo sort mode and not in comparison mode.");
-            }
-        });
-         console.log("[LOG] Elo sort button listener added.");
-    } else { console.warn("[LOG] Sort Elo Button not found. Cannot add listener."); }
+        // Event Listener für Sortier-Buttons
+        if (sortEloButton) {
+            sortEloButton.addEventListener('click', () => {
+                if (currentSortMode !== 'elo' || isComparisonMode) { // Wenn Modus anders ODER im Vergleichsmodus
+                    console.log("[LOG] Switching sort mode to: elo (from button click)");
+                    exitComparisonMode(); // Vergleichsmodus beenden (aktualisiert auch Button-Zustände und Liste)
+                    currentSortMode = 'elo'; // Setze den Modus NACH exitComparisonMode
+                     // sortAndDisplayPlayers() wird von exitComparisonMode aufgerufen, wenn allPlayersData nicht leer ist.
+                     // Wenn allPlayersData leer ist, wird loadSaverAbiView() aufgerufen, was dann sortAndDisplayPlayers() aufruft.
+                } else {
+                     console.log("[LOG] Already in Elo sort mode and not in comparison mode.");
+                }
+            });
+             console.log("[LOG] Elo sort button listener added.");
+        } else { console.warn("[LOG] Sort Elo Button not found. Cannot add listener."); }
 
-    if (sortWorthButton) {
-        sortWorthButton.addEventListener('click', () => {
-            if (currentSortMode !== 'worth' || isComparisonMode) { // Wenn Modus anders ODER im Vergleichsmodus
-                console.log("[LOG] Switching sort mode to: worth (from button click)");
-                 exitComparisonMode(); // Vergleichsmodus beenden
-                currentSortMode = 'worth'; // Setze den Modus NACH exitComparisonMode
-                sortAndDisplayPlayers(); // Erneutes Sortieren und Anzeigen nach Worth
-            } else {
-                 console.log("[LOG] Already in Worth sort mode and not in comparison mode.");
-            }
-        });
-         console.log("[LOG] Worth sort button listener added.");
-    } else { console.warn("[LOG] Sort Worth Button not found. Cannot add listener."); }
+        if (sortWorthButton) {
+            sortWorthButton.addEventListener('click', () => {
+                if (currentSortMode !== 'worth' || isComparisonMode) { // Wenn Modus anders ODER im Vergleichsmodus
+                    console.log("[LOG] Switching sort mode to: worth (from button click)");
+                    exitComparisonMode(); // Vergleichsmodus beenden
+                    currentSortMode = 'worth'; // Setze den Modus NACH exitComparisonMode
+                    // sortAndDisplayPlayers() wird von exitComparisonMode aufgerufen.
+                } else {
+                     console.log("[LOG] Already in Worth sort mode and not in comparison mode.");
+                }
+            });
+             console.log("[LOG] Worth sort button listener added.");
+        } else { console.warn("[LOG] Sort Worth Button not found. Cannot add listener."); }
 
-     // NEU: Event Listener für Vergleichsbutton
-    if (compareButton) {
-        compareButton.addEventListener('click', toggleComparisonMode);
-         console.log("[LOG] Compare button listener added.");
-    } else { console.warn("[LOG] Compare Button not found. Cannot add listener."); }
+         // NEU: Event Listener für Vergleichsbutton
+        if (compareButton) {
+            compareButton.addEventListener('click', toggleComparisonMode);
+             console.log("[LOG] Compare button listener added.");
+        } else { console.warn("[LOG] Compare Button not found. Cannot add listener."); }
 
 
-    console.log("[LOG] Initializing default view: saverabi");
-    // Initialisiere die SaverAbi View beim Laden
-    // switchView('saverabi'); // Dieser Aufruf ist nicht nötig, da exitComparisonMode() aufgerufen wird,
-                               // was wiederum loadSaverAbiView() oder sortAndDisplayPlayers() aufruft.
-    exitComparisonMode(); // Startet im Standard-Sortiermodus und lädt Daten/Liste.
+        console.log("[LOG] Initializing default view: saverabi");
+        // Initialisiere die SaverAbi View beim Laden durch Beenden des Vergleichsmodus.
+        // Dies setzt den Standard-Sortiermodus und lädt die Daten, falls nötig.
+        exitComparisonMode();
+
+    } else {
+         console.error("Initialization failed: DOM elements not found.");
+         // Fehlermeldung wurde bereits in cacheDOMElements gesetzt
+    }
 });
