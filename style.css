@@ -35,8 +35,14 @@
     /* Layout */
     --font: 'Roboto', sans-serif;
     --gap: 1.5rem;
-    --max-list: 1200px;
-    --max-card: 1200px;
+    /* *** ANGEPASSTE MAX-BREITEN FÜR KOMPAKTERES LAYOUT *** */
+    --max-list: 500px; /* Maximale Breite der Liste auf breiten Bildschirmen */
+    --max-card: 400px; /* Maximale Breite der Detail-/Vergleichskarte auf breiten Bildschirmen */
+
+    /* Neue Variablen für Vergleichsindikatoren */
+    --indicator-better-color: var(--bar-great); /* Grün für besser */
+    --indicator-worse-color: var(--bar-bad); /* Rot für schlechter */
+    --indicator-font-size: 0.9em; /* Größe der Pfeile */
 }
 
 /* ==========================================================================
@@ -121,7 +127,8 @@ footer {
    Loading & Error Indicators
    ========================================================================== */
 .loading-indicator, .error-message {
-    max-width: var(--max-list);
+    /* Max-Breite basierend auf Listenbreite oder angepasst */
+     max-width: var(--max-list);
     margin: var(--gap) auto;
     padding: var(--gap);
     text-align: center;
@@ -147,19 +154,23 @@ footer {
    ========================================================================== */
 main {
     flex: 1;
+    /* Max-Breite angepasst, um Platz für Liste + Karte nebeneinander zu lassen */
+    /* Summe der Max-Breiten + 2*Gap */
     max-width: calc(var(--max-list) + var(--max-card) + var(--gap) * 2);
     margin: 0 auto;
     padding: 0 var(--gap);
+    width: 100%; /* Stellt sicher, dass es auf kleinen Screens volle Breite nimmt */
 }
-/* Layout für SaverAbi Ansicht */
+/* Layout für SaverAbi Ansicht (Standard: Nebeneinander auf breiten Bildschirmen) */
 #main-content-area {
-    display: flex;
+    display: flex; /* Standardmäßig Flex-Richtung: row (nebeneinander) */
     gap: var(--gap);
-    justify-content: center;
-    align-items: flex-start;
+    justify-content: center; /* Inhalt zentrieren, wenn extra Platz vorhanden ist */
+    align-items: flex-start; /* Elemente oben ausrichten */
+    flex-wrap: wrap; /* Erlaubt Umbruch auf kleineren Bildschirmen */
 }
 #main-content-area.detail-visible {
-    justify-content: flex-start;
+    justify-content: flex-start; /* Ausrichtung ändern, wenn Detail/Vergleich sichtbar */
 }
 /* View Content Handling */
 .view-content {
@@ -176,31 +187,79 @@ main {
 }
 
 /* ==========================================================================
+   SaverAbi Sort Controls
+   ========================================================================== */
+#saverabi-sort-controls {
+    display: flex;
+    justify-content: center;
+    margin-bottom: var(--gap); /* Abstand zur Liste/Überschrift */
+    margin-top: 0.5rem; /* Abstand zum Loading/Error */
+    gap: 10px;
+}
+
+/* Grundlegender Stil für alle Buttons im Sortier-Container */
+#saverabi-sort-controls .sort-button {
+    background-color: var(--button-bg);
+    color: var(--text-secondary);
+    border: 1px solid rgba(var(--card-bg-rgb), 0.3); /* Leicht angepasster Border */
+    padding: 0.6rem 1.2rem; /* Passend zu View-Toggle */
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.95rem; /* Passend zu View-Toggle */
+    font-weight: 700; /* Passend zu View-Toggle */
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    text-align: center;
+    white-space: nowrap;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Passend zu View-Toggle */
+}
+
+/* Stil, wenn man mit der Maus über einen Button fährt */
+#saverabi-sort-controls .sort-button:hover {
+    background-color: var(--button-hover-bg);
+    color: var(--text-primary); /* Auch Textfarbe ändern */
+    border-color: rgba(var(--card-bg-rgb), 0.6);
+}
+
+/* Stil für den AKTIVEN Sortierbutton (Elo oder $) */
+/* Der Compare-Button hat einen separaten aktiven Stil unten */
+#saverabi-sort-controls .sort-button.active:not(#compare-button) {
+    background-color: var(--button-active-bg);
+    color: var(--button-active-text);
+    border-color: rgba(var(--button-active-text), 0.5); /* Rahmenfarbe passend */
+    font-weight: 700;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* Tieferer Schatten */
+}
+
+/* Spezieller Stil für den aktiven Vergleichsbutton */
+#saverabi-sort-controls #compare-button.active {
+     background-color: var(--bar-okay); /* Gelb als Indikator */
+     color: #333; /* Dunkler Text auf hellem Button */
+     border-color: rgba(0,0,0,0.5);
+     box-shadow: 0 44px 8px rgba(var(--bar-okay), 0.4); /* Schattenfarbe passend machen */
+}
+
+
+/* ==========================================================================
    Player List (SaverAbi View)
    ========================================================================== */
 #player-list-container {
-    margin: 0 auto;
+    margin: 0; /* Zentrierung im Flex-Container erfolgt über justify-content/align-items */
     background: rgba(var(--card-bg-rgb), 0.75);
     backdrop-filter: blur(var(--glass-blur));
     border: var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     padding: var(--gap) 0;
-    width: 100%;
-    max-width: var(--max-list);
+    /* *** ANGEPASST: Flex-Regeln für breite Bildschirme *** */
+    /* Wächst nicht, Schrumpft, Basis ist Inhalt */
+    flex: 0 1 auto;
+    max-width: var(--max-list); /* Begrenzt die maximale Breite */
     display: flex;
     flex-direction: column;
-    max-height: calc(80vh - 4rem); /* Höhe begrenzen */
+    max-height: calc(80vh - 4rem); /* Höhe begrenzen auf breiteren Bildschirmen */
     overflow: hidden; /* Container fix */
+     /* flex-shrink: 0; /* Kann entfernt werden, da flex-shrink: 1 in flex shorthand ist */
 }
-/* Zentriert die Überschrift "Spielerliste" innerhalb des Containers (alt) */
-/* H3 ist nun ausserhalb für bessere Zentrierung über Liste und Karte */
-/* #player-list-container h3 {
-    margin: 0 0 var(--gap);
-    padding: 0 var(--gap);
-    text-align: center;
-    color: var(--text-primary);
-} */
 
 /* Zentriert die Überschrift "Spielerliste" oberhalb der Liste/Karte */
 h3#saverabi-list-header {
@@ -208,6 +267,7 @@ h3#saverabi-list-header {
     margin-bottom: var(--gap); /* Füge Abstand nach unten zur Liste hinzu */
     margin-top: var(--gap); /* Füge Abstand nach oben zu den Sortierbuttons hinzu */
     color: var(--text-primary); /* Stelle sicher, dass die Farbe korrekt ist */
+    width: 100%; /* Nimmt verfügbare Breite ein für Zentrierung über Flex-Items */
 }
 
 
@@ -219,7 +279,7 @@ ol#player-list {
     padding: 0;
     counter-reset: rank;
     overflow-y: auto; /* Scrollen innerhalb der Liste */
-    max-height: 100%;
+    max-height: 100%; /* Nutzt die begrenzte Höhe des Containers */
 }
 
 /* Verhindert, dass der Spielername in der Liste abgeschnitten wird */
@@ -251,6 +311,20 @@ ol#player-list li:last-child {
 ol#player-list li:hover {
     background: rgba(var(--card-bg-rgb), 0.95);
 }
+
+/* NEU: Stil für ausgewählte Spieler im Vergleichsmodus */
+ol#player-list li.selected-for-compare {
+    background-color: rgba(37, 190, 255, 0.2); /* Leichter türkiser Hintergrund (aus var(--button-active-text)) */
+    border-left: 4px solid var(--button-active-text); /* Türkiser Rand links */
+    padding-left: calc(var(--gap) - 4px); /* Padding anpassen */
+}
+
+ol#player-list li.error-item {
+    /* cursor: not-allowed; */ /* Cursor wird in JS gesetzt, falls Daten fehlen/Fehler haben */
+    opacity: 0.7; /* Leicht ausgrauen */
+}
+
+
 ol#player-list li::before {
     counter-increment: rank;
     content: counter(rank);
@@ -262,8 +336,8 @@ ol#player-list li::before {
     flex-shrink: 0;
 }
 .club-icon {
-    width: 30px; /* ZURÜCKGEÄNDERT auf 40px */
-    height: 30px; /* ZURÜCKGEÄNDERT auf 40px */
+    width: 40px;
+    height: 40px;
     margin-left: 8px;
     vertical-align: middle;
     border-radius: 4px;
@@ -273,9 +347,8 @@ ol#player-list li::before {
     display: flex;
     align-items: center;
     gap: 0.8rem; /* Reduzierter Gap für Icons */
-    /* overflow: hidden; /* Diese Regel wurde entfernt */
     flex-grow: 1;
-     min-width: 0; /* Verhindert Überlaufen */
+    min-width: 0; /* Verhindert Überlaufen */
 }
 .player-info .avatar {
     width: 40px;
@@ -284,31 +357,33 @@ ol#player-list li::before {
     object-fit: cover;
     border: 2px solid rgba(var(--card-bg-rgb), 0.3);
     flex-shrink: 0;
-    /* margin-right: 8px; /* Nicht nötig dank Gap */
 }
 .player-info .player-name {
     font-weight: bold;
-    /* white-space: nowrap; */ /* Nicht mehr nötig */
-    /* overflow: hidden; */ /* Nicht mehr nötig */
     text-align: left;
-    /* text-overflow: ellipsis; */ /* Nicht mehr nötig */
     flex-grow: 1;
-     min-width: 0; /* Verhindert Überlaufen */
-     /* margin-right: 8px; /* Abstand zum Icon, wenn es da ist */
+    min-width: 0; /* Verhindert Überlaufen */
+    overflow-wrap: break-word; /* Erlaubt Umbruch langer Namen */
+    word-break: break-word;
+    white-space: normal;
+    overflow: hidden; /* Text nicht verstecken */
+    text-overflow: ellipsis; /* Füge Ellipsis wieder hinzu, falls nötig */
 }
 .player-list-right {
     text-align: right;
     flex-shrink: 0;
-    /* min-width: 100px; */ /* Kann drin bleiben oder entfernt werden je nach Bedarf */
+    display: flex; /* Flexbox, um Wert und Bar/Icon zu organisieren */
+    flex-direction: column; /* Untereinander */
+    align-items: flex-end; /* Rechtsbündig */
 }
 /* *** Anpassung für den Wert und die Progressbar in der Liste *** */
 .player-list-right .player-value {
     font-weight: bold;
     margin-bottom: 0.3rem;
     font-size: 0.95em;
-    display: block; /* Stellt sicher, dass es eine eigene Zeile bekommt */
-    white-space: nowrap; /* Verhindert Umbruch */
-    text-align: right; /* Stellt sicher, dass der Wert rechtsbündig ist */
+    display: block;
+    white-space: nowrap;
+    text-align: right;
 }
 .player-list-right .elo-progress-container {
     width: 90px;
@@ -316,7 +391,7 @@ ol#player-list li::before {
     background: var(--bar-bg);
     border-radius: 3px;
     overflow: hidden;
-     margin-left: auto; /* Zentriert die Bar, wenn player-list-right breiter ist */
+    margin-left: auto; /* Zentriert die Bar, wenn player-list-right breiter ist */
 }
 .player-list-right .elo-progress-bar {
     height: 100%;
@@ -327,34 +402,53 @@ ol#player-list li::before {
 
 
 /* ==========================================================================
-   Detail Card (SaverAbi View - Drittel-Balken-Layout)
+   Detail Card & Comparison View (SaverAbi View)
    ========================================================================== */
 #player-detail-card-container {
     display: none; /* Wird von JS gesteuert */
-    width: 100%;
-    max-width: var(--max-card);
-    position: sticky; /* Bleibt sticky */
+    width: 100%; /* Nimmt die volle Breite seines Flex-Containers bis max-width */
+    max-width: var(--max-card); /* Begrenzt die maximale Breite der Karte */
+    position: sticky; /* Bleibt sticky auf breiteren Bildschirmen */
     top: 1rem;
     align-self: flex-start; /* Stellt sicher, dass es oben bleibt */
+    flex-shrink: 0; /* Verhindert, dass der Container schrumpft */
+     /* *** ANGEPASST: Flex-Regeln für breite Bildschirme *** */
+     /* Wächst, Schrumpft, Basis ist Inhalt */
+    flex: 1 1 auto;
+    /* position: static, width: 100% werden in Media Query gesetzt */
 }
 
-.player-card-hltv { /* Allgemeine Karte */
+.player-card-base { /* Basis-Stil für Karten (Detail & Vergleich) */
     background: rgba(var(--card-bg-rgb), 0.75);
     backdrop-filter: blur(var(--glass-blur));
     border: var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     padding: var(--gap);
-    opacity: 0;
-    transform: translateX(20px);
-    transition: opacity 0.5s, transform 0.5s;
+    opacity: 0; /* Startet unsichtbar */
+    transform: translateX(20px); /* Startet leicht verschoben */
+    transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out; /* Sanfte Einblendung */
+    width: 100%; /* Stellt sicher, dass es die zugewiesene Breite des übergeordneten Containers nutzt */
+    display: block; /* Explicitly set to block */
 }
-#main-content-area.detail-visible .player-card-hltv {
+/* Wird durch JS auf dem Container gesetzt, wenn Detail/Vergleich sichtbar */
+#main-content-area.detail-visible #player-detail-card-container .player-card-base {
     opacity: 1;
     transform: translateX(0);
 }
 
-.player-card-hltv .card-header { /* Header */
+
+/* Stil für die einzelne Detailkarte (ursprüngliches Layout - 3x2 Grid) */
+/* Sicherstellen, dass diese Stile NUR für die Detailkarte gelten */
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail {
+    /* Erbt Basis-Stile von .player-card-base */
+    /* Keine zusätzlichen Display/Layout Stile hier, es sei denn nötig */
+     display: block; /* Should be block to contain the grid */
+}
+
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .card-header { /* Header */
     display: flex;
     align-items: center;
     gap: var(--gap);
@@ -362,89 +456,92 @@ ol#player-list li::before {
     border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3);
     padding-bottom: var(--gap);
 }
-.player-card-hltv .card-header .avatar {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .card-header .avatar {
     width: 60px;
     height: 60px;
     border-radius: 50%;
     border: 3px solid rgba(var(--card-bg-rgb), 0.3);
 }
-.player-card-hltv .player-name {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .player-name {
     font-size: 1.5rem;
     color: var(--text-primary);
     text-decoration: none;
     transition: color 0.2s;
 }
-.player-card-hltv .player-name:hover {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .player-name:hover {
     color: var(--bar-okay);
 }
-.stats-label {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-}
+/* stats-label ist global definiert, sollte hier aber auch funktionieren */
 
-/* Stats Grid Layout - Bleibt wie gewünscht */
-.player-card-hltv .stats-grid {
-    display: grid;
+
+/* Stats Grid Layout - Muss NUR auf der Detailkarte im .stats-grid Container angewendet werden */
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stats-grid {
+    display: grid; /* Explicitly set display to grid */
     grid-template-columns: repeat(3, 1fr); /* 3 GANZ GLEICHE Spalten */
     grid-template-rows: repeat(2, auto);    /* 2 Reihen */
     gap: var(--gap) 1rem; /* Abstand zwischen den Grid-Zellen */
     align-items: start; /* Inhalt oben in der Zelle ausrichten */
 }
 
-/* Stat Item Layout - Flexbox Spalte für Zentrierung */
-.player-card-hltv .stat-item {
-    display: flex;
+/* Stat Item Layout - Flexbox Spalte für Zentrierung innerhalb jeder Zelle */
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-item {
+    display: flex; /* Explicitly set display to flex */
     flex-direction: column; /* Inhalt untereinander */
     align-items: center; /* Zentriert Inhalt HORIZONTAL innerhalb dieser Flexbox */
     justify-content: center; /* Zentriert Inhalt VERTIKAL innerhalb dieser Flexbox */
-    text-align: center; /* Zentriert Text (falls Elemente inline oder inline-block sind) */
+    text-align: center; /* Zentriert Text */
     padding: 0; /* KEIN internes Padding, Zentrierung nur über Flex/Margin */
 }
 
 /* Anpassungen für Label in der Detailkarte */
-.player-card-hltv .stat-item .label {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-item .label {
     font-size: 0.8rem;
     color: var(--text-secondary);
     margin-bottom: 0.3rem;
     text-transform: uppercase;
     font-weight: 700;
     text-align: center; /* Text zentrieren */
-    /* width: auto; /* standard für Flex Item */
-    /* margin: auto; /* standard für Flex Item, align-items macht es */
     display: block; /* Wichtig für text-align und margin: auto */
 }
 
 /* Anpassungen für Wert in der Detailkarte */
-.player-card-hltv .stat-item .value {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-item .value {
     font-size: 2rem;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0.6rem;
     line-height: 1.1;
     text-align: center; /* Text zentrieren */
-    /* width: auto; /* standard für Flex Item */
-    /* margin: auto; /* standard für Flex Item */
      display: block; /* Wichtig */
 }
 
 /* Progress Bar Container (Drittel-Stil) */
-.player-card-hltv .stat-progress-container {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-progress-container {
     position: relative;
     width: 100%;        /* Nimmt volle Breite des Stat-Items ein, bis max-width */
     max-width: 150px;   /* Maximale Breite begrenzen */
     height: 8px;
     background-color: var(--bar-bg);
     border-radius: 4px;
-    /* overflow: hidden; /* Kann zu Runden am Rand führen */
     margin-bottom: 0.4rem;
     margin-left: auto; /* Zentriert diesen Block */
     margin-right: auto; /* Zentriert diesen Block */
     display: block; /* Stellt sicher, dass margin: auto funktioniert */
+    overflow: hidden; /* Verhindert, dass die Pseudo-Elemente überlaufen */
 }
 
 /* Pseudo-Elemente für die Trennlinien - Position bleibt relativ zur Bar */
-.player-card-hltv .stat-progress-container::before,
-.player-card-hltv .stat-progress-container::after {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-progress-container::before,
+.player-card-detail .stat-progress-container::after {
     content: '';
     position: absolute;
     top: 0;
@@ -453,11 +550,14 @@ ol#player-list li::before {
     background-color: rgba(150, 150, 150, 0.63);
     z-index: 1;
 }
-.player-card-hltv .stat-progress-container::before { left: 33.333%; }
-.player-card-hltv .stat-progress-container::after  { left: 66.666%; }
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-progress-container::before { left: 33.333%; }
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-progress-container::after  { left: 66.666%; }
 
 /* Die farbige Bar - wird von JS positioniert */
-.player-card-hltv .stat-progress-bar {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-progress-bar {
     position: absolute;
     top: 0;
     height: 100%;
@@ -470,7 +570,8 @@ ol#player-list li::before {
 }
 
 /* Das Text-Label unter der Bar (GOOD/OKAY/BAD) */
-.player-card-hltv .stat-indicator-label {
+/* *** ANGEPASST: Klasse von .player-card-hltv zu .player-card-detail geändert *** */
+.player-card-detail .stat-indicator-label {
     font-size: 0.75rem;
     font-weight: 700;
     color: var(--text-secondary);
@@ -478,9 +579,126 @@ ol#player-list li::before {
     margin-top: 0.2rem;
     transition: color 0.3s;
     text-align: center; /* Text zentrieren */
-    /* width: auto; /* standard für Flex Item */
-    /* margin: auto; /* standard für Flex Item */
-    display: block; /* Wichtig */
+    display: block;
+}
+
+
+/* NEW: Comparison View Styles */
+/* Sicherstellen, dass diese Stile NUR für die Vergleichskarte gelten */
+.player-card-compare {
+    /* Erbt Basis-Stile von .player-card-base */
+    /* Standard: Flex-Richtung: row (nebeneinander) auf breiteren Bildschirmen */
+    display: flex;
+    gap: var(--gap); /* Abstand zwischen den beiden Spielerbereichen */
+    flex-wrap: wrap; /* Erlaubt Umbruch auf sehr kleinen Bildschirmen */
+    justify-content: space-around; /* Zentriert die Bereiche, wenn sie nebeneinander passen */
+}
+
+.player-compare-player-section {
+    flex: 1; /* Jeder Spielerbereich nimmt verfügbaren Platz ein */
+    min-width: 280px; /* Mindestbreite, bevor ein Umbruch erfolgt */
+    display: flex;
+    flex-direction: column; /* Header, Stats, etc. untereinander */
+}
+
+.player-compare-player-section .card-header {
+    display: flex;
+    flex-direction: column; /* Avatar und Name untereinander */
+    align-items: center; /* Zentriert Avatar und Name */
+    gap: 0.5rem; /* Abstand zwischen Avatar und Name */
+    margin-bottom: var(--gap);
+    border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3);
+    padding-bottom: var(--gap);
+    text-align: center; /* Stellt sicher, dass der Text zentriert ist */
+}
+
+.player-compare-player-section .card-header .avatar {
+     width: 70px; /* Größerer Avatar im Vergleich */
+     height: 70px;
+     border-radius: 50%;
+     border: 3px solid rgba(var(--card-bg-rgb), 0.3);
+}
+
+.player-compare-player-section .player-name {
+     font-size: 1.6rem;
+     color: var(--text-primary);
+     text-decoration: none;
+     transition: color 0.2s;
+     margin-top: 0; /* Abstand nach oben reduzieren */
+}
+.player-compare-player-section .player-name:hover {
+     color: var(--bar-okay);
+}
+
+.player-compare-player-section .stats-label {
+     color: var(--text-secondary);
+     font-size: 0.9rem;
+     margin-top: 0.3rem;
+}
+
+.player-compare-stats-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.player-compare-stats-list li {
+    display: flex;
+    justify-content: space-between; /* Label links, Wert mit Indikator rechts */
+    align-items: center;
+    padding: 0.6rem 0; /* Kleineres Padding */
+    border-bottom: 1px dashed rgba(var(--card-bg-rgb), 0.2); /* Gestreifte Trennlinie */
+    font-size: 1rem;
+}
+.player-compare-stats-list li:last-child {
+    border-bottom: none;
+}
+
+.player-compare-stats-list li .label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-weight: 700;
+    flex-shrink: 0; /* Verhindert Schrumpfen des Labels */
+    margin-right: 1rem; /* Abstand zum Wert */
+}
+
+.player-compare-stats-list li .value-container {
+     display: flex; /* Flexbox für Wert und Pfeil */
+     align-items: center; /* Vertikal zentriert */
+     gap: 0.4rem; /* Abstand zwischen Wert und Pfeil */
+     font-weight: bold;
+     color: var(--text-primary);
+     flex-grow: 1; /* Erlaubt dem Wert-Container zu wachsen (selten nötig hier) */
+     justify-content: flex-end; /* Richtet Wert und Pfeil rechtsbündig aus */
+}
+
+.player-compare-stats-list li .value {
+    font-size: 1.1rem; /* Etwas größerer Wert */
+    /* KEINE feste Breite, damit es sich anpasst */
+}
+
+/* NEU: Stile für die Vergleichs-Pfeil-Indikatoren */
+.compare-indicator {
+    font-size: var(--indicator-font-size);
+    font-weight: bold; /* Pfeil fett darstellen */
+    line-height: 1; /* Vertikale Ausrichtung helfen */
+     /* Optional: margin-left oder padding-left, falls Gap nicht ausreicht */
+}
+
+.compare-indicator-better {
+    color: var(--indicator-better-color); /* Grün */
+}
+
+.compare-indicator-worse {
+    color: var(--indicator-worse-color); /* Rot */
+}
+
+/* Stil für den "Fehlerkarte" im Vergleichsmodus oder Detail */
+.player-card-base.error-card {
+    text-align: center;
+    color: var(--bar-bad);
+    font-weight: bold;
 }
 
 
@@ -513,6 +731,8 @@ ol#player-list li::before {
     box-shadow: var(--shadow);
     padding: var(--gap);
     color: var(--text-secondary);
+    /* max-width wird nun in Media Query angepasst */
+    margin: 0 auto; /* Zentrieren */
 }
 #uniliga-data-area p {
     margin-bottom: 0.5rem;
@@ -534,7 +754,7 @@ ol#player-list li::before {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
-    min-width: 750px;
+    /* min-width wird nun in Media Query angepasst */
 }
 
 .stats-table th,
@@ -581,12 +801,17 @@ ol#player-list li::before {
     text-align: right;
     font-feature-settings: "tnum";
     font-variant-numeric: tabular-nums;
-    width: 65px;
+    /* width wird nun in Media Query angepasst */
 }
 /* Spezifische Breite für breitere Spalten (optional) */
-.stats-table th:nth-child(3), .stats-table td:nth-child(3) { width: 70px; }
-.stats-table th:nth-child(4), .stats-table td:nth-child(4) { width: 70px; }
-.stats-table th:nth-child(7), .stats-table td:nth-child(7) { width: 70px; }
+/* Diese könnten in Media Queries angepasst werden, falls nötig */
+.stats-table th:nth-child(3), .stats-table td:nth-child(3) { width: 70px; } /* Matches Played */
+.stats-table th:nth-child(4), .stats-table td:nth-child(4) { width: 70px; } /* Rating */
+.stats-table th:nth-child(5), .stats-table td:nth-child(5) { width: 70px; } /* Impact */
+.stats-table th:nth-child(6), .stats-table td:nth-child(6) { width: 70px; } /* ADR */
+.stats-table th:nth-child(7), .stats-table td:nth-child(7) { width: 70px; } /* KAST% */
+.stats-table th:nth-child(8), .stats-table td:nth-child(8) { width: 70px; } /* HS% */
+.stats-table th:nth-child(9), .stats-table td:nth-child(9) { width: 70px; } /* WR% */
 
 
 .table-avatar {
@@ -619,42 +844,97 @@ ol#player-list li::before {
     margin-top: 0.5rem;
 }
 
-/* Farbklassen für Winrate */
+/* Farbklassen für Winrate und andere Werte */
 .text-good { color: var(--bar-good); font-weight: bold; }
 .text-okay { color: var(--bar-okay); font-weight: bold; }
 .text-bad { color: var(--bar-bad); font-weight: bold; }
 
 
 /* ==========================================================================
-   Responsive
+   Responsive Layout (Breakpoints)
    ========================================================================== */
-@media (max-width: 1250px) {
-    /* SaverAbi Ansicht: */
-    h3#saverabi-list-header {
-        text-align: center;
-    }
 
-    #saverabi-content #main-content-area { flex-direction: column; align-items: center; justify-content: flex-start !important; }
-    #saverabi-content #player-list-container,
-    #saverabi-content #player-detail-card-container { max-width: 650px; width: 100%; position: static; margin-bottom: var(--gap); }
-    #saverabi-content #player-list-container { max-height: none; overflow: visible; }
-    #saverabi-content ol#player-list { overflow-y: visible; }
-    /* Uniliga Ansicht */
+/* Anpassungen für Bildschirme bis 1250px, aber NICHT unbedingt Stapelung des Hauptinhalts */
+@media (max-width: 1250px) {
+     /* Max Breite für Uniliga-Datenbereich anpassen */
     #uniliga-content #uniliga-data-area { max-width: 95%; margin-left: auto; margin-right: auto; }
 }
 
+
+/* NEUER Breakpoint für die Stapelung des Hauptinhalts (Liste und Karte) */
+@media (max-width: 992px) {
+     /* SaverAbi Ansicht: Liste und Karte vertikal stapeln */
+    #saverabi-content #main-content-area {
+        flex-direction: column; /* Vertikal stapeln */
+        align-items: center; /* Elemente in der Mitte zentrieren, wenn gestapelt */
+        justify-content: flex-start !important;
+    }
+    /* Liste und Karte volle Breite geben und statisch positionieren */
+    #saverabi-content #player-list-container,
+    #saverabi-content #player-detail-card-container {
+        max-width: 650px; /* Oder eine andere maximale Breite, wenn gestapelt */
+        width: 100%; /* Volle Breite im gestapelten Modus */
+        position: static; /* Sticky-Positionierung entfernen, wenn gestapelt */
+        margin-bottom: var(--gap); /* Abstand zwischen gestapelten Elementen */
+        flex: 0 0 auto; /* Kein Flex-Wachstum/Schrumpfen im gestapelten Modus, Basis auto */
+    }
+    /* Höhe und Scrollen der Liste anpassen, wenn gestapelt */
+    #saverabi-content #player-list-container {
+         max-height: none; /* Feste Höhe entfernen */
+         overflow: visible; /* Inhalt darf überlaufen, falls nötig */
+    }
+    #saverabi-content ol#player-list {
+        overflow-y: visible; /* Vertikales Scrollen in der Liste erlauben (falls Container keine Höhe hat) */
+    }
+
+    /* Vergleichsansicht: Spielerbereiche vertikal innerhalb der Karte stapeln */
+    .player-card-compare {
+        flex-direction: column; /* Vertikal stapeln */
+        gap: var(--gap); /* Abstand zwischen gestapelten Bereichen */
+    }
+    .player-compare-player-section {
+        flex: 0 0 auto; /* Kein Flex-Wachstum/Schrumpfen im gestapelten Modus */
+        min-width: 0; /* Bereiche dürfen schrumpfen */
+        padding-bottom: var(--gap); /* Padding/Margin am unteren Rand jedes Bereichs */
+        border-bottom: 1px solid rgba(var(--card-bg-rgb), 0.3); /* Trennlinie hinzufügen */
+    }
+    .player-compare-player-section:last-child {
+        border-bottom: none; /* Keine Trennlinie nach dem letzten Bereich */
+        padding-bottom: 0;
+    }
+
+    /* Kleinere Anpassungen für Tabellen auf mittelgroßen Bildschirmen */
+    .stats-table { min-width: 700px; } /* Mindestbreite beibehalten, aber evtl. anpassen */
+    .stats-table th, .stats-table td { padding: 0.6rem 0.4rem; } /* Padding reduzieren */
+    .stats-table td:not(:nth-child(1)):not(:nth-child(2)),
+    .stats-table th:not(:nth-child(1)):not(:nth-child(2)) { width: auto; } /* Allow numeric columns to auto width */
+}
+
+
+/* Anpassungen für sehr kleine Bildschirme (typischerweise Mobiltelefone) */
 @media (max-width: 600px) {
     header h1 { font-size: 1.5rem; }
     .toggle-button { padding: 0.5rem 0.8rem; font-size: 0.85rem; }
-    /* SaverAbi Detailkarte Anpassungen */
-    .player-card-hltv .card-header { flex-direction: column; text-align: center; }
-    .player-card-hltv .avatar { width: 70px; height: 70px; }
-    .player-card-hltv .player-name { font-size: 1.6rem; }
-    /* Stats Grid auf kleinen Schirmen */
-    .player-card-hltv .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem 0.5rem; }
-    .player-card-hltv .stat-item .value { font-size: 1.7rem; }
-    .player-card-hltv .stat-item .label { font-size: 0.7rem; }
-    .player-card-hltv .stat-progress-container { max-width: 120px; }
+
+    /* Kleinere Sortier/Vergleichsbuttons */
+    #saverabi-sort-controls { gap: 8px; }
+    #saverabi-sort-controls .sort-button {
+        padding: 7px 15px;
+        font-size: 0.85em;
+    }
+
+    /* SaverAbi Detailkarte Anpassungen (wenn gestapelt) */
+    /* position: static und width: 100% werden bereits bei 992px gesetzt */
+
+    .player-card-detail .card-header { flex-direction: column; text-align: center; }
+    .player-card-detail .avatar { width: 70px; height: 70px; }
+    .player-card-detail .player-name { font-size: 1.6rem; }
+    /* Stats Grid auf sehr kleinen Schirmen (2 Spalten) */
+    .player-card-detail .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem 0.5rem; }
+    .player-card-detail .stat-item .value { font-size: 1.7rem; }
+    .player-card-detail .stat-item .label { font-size: 0.7rem; }
+    .player-card-detail .stat-progress-container { max-width: 120px; }
+
     /* Uniliga Ansicht Anpassungen */
     #uniliga-content h2 { font-size: 1.3rem; }
     #uniliga-data-area { padding: 1rem; }
@@ -664,63 +944,11 @@ ol#player-list li::before {
     .stats-table td:not(:nth-child(1)):not(:nth-child(2)),
     .stats-table th:not(:nth-child(1)):not(:nth-child(2)) { width: auto; }
     .player-cell { max-width: 100px; }
-}
 
-/* style.css */
+    /* Vergleichsansicht: Stile für sehr kleine Bildschirme (bereits ab 992px gestapelt) */
+     .player-card-compare .player-compare-player-section {
+         /* flex ist bereits ab 992px angepasst */
+         min-width: 0; /* Erlaubt weiteres Schrumpfen */
+     }
 
-/* Container für die Sortierbuttons */
-#saverabi-sort-controls {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 20px;
-    margin-top: 10px;
-    gap: 10px;
-}
-
-/* Grundlegender Stil für beide Sortierbuttons */
-.sort-button {
-    background-color: #3a3a3c;
-    color: #e1e1e3;
-    border: 1px solid #555;
-    padding: 8px 18px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.9em;
-    font-weight: 500;
-    transition: background-color 0.2s ease, border-color 0.2s ease;
-    text-align: center;
-    white-space: nowrap;
-}
-
-/* Stil, wenn man mit der Maus über einen Button fährt */
-.sort-button:hover {
-    background-color: #4a4a4e;
-    border-color: #777;
-}
-
-/* Stil für den AKTIVEN Sortierbutton */
-.sort-button.active {
-    background-color: #5c5c60;
-    color: #ffffff;
-    border-color: #888;
-    font-weight: 700;
-    box-shadow: 0 0 5px rgba(150, 150, 150, 0.1);
-}
-
-/* Optional: Sicherstellen, dass der Hover-Effekt auf dem aktiven Button nicht stört */
-.sort-button.active:hover {
-    background-color: #626266;
-    border-color: #999;
-}
-
-/* --- Anpassungen für kleinere Bildschirme (optional) --- */
-@media (max-width: 600px) {
-    #saverabi-sort-controls {
-        gap: 8px;
-    }
-
-    .sort-button {
-        padding: 7px 15px;
-        font-size: 0.85em;
-    }
 }
