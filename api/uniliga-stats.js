@@ -1,4 +1,4 @@
-// api/uniliga-stats.js - Finale Version mit Bo2-Punkten & Verarbeitung beider Maps
+// api/uniliga-stats.js - Finale Version mit Bo2-Punkten (2-1-0) & Verarbeitung beider Maps
 
 // --- Imports ---
 import Redis from "ioredis";
@@ -6,20 +6,20 @@ import { calculateAverageStats } from './utils/stats.js'; // Pfad prüfen!
 import fs from 'fs';
 import path from 'path';
 
-console.log('[API Uniliga - Punkte Final V3] Modul Imports geladen.');
+console.log('[API Uniliga - Punkte Final V5] Modul Imports geladen.'); // Log version updated again for debugging
 
 // --- Konfiguration & Konstanten ---
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL = process.env.REDIS_URL;
 const API_BASE_URL = "https://open.faceit.com/data/v4";
 const UNILIGA_CHAMPIONSHIP_ID = "c1fcd6a9-34ef-4e18-8e92-b57af0667a40";
-const CACHE_VERSION = 12; // Version erhöht, da sich die Datenstruktur ändert
+const CACHE_VERSION = 14; // Version erhöht für Debugging-Logs
 const CACHE_TTL_SECONDS = 4 * 60 * 60; // 4 Stunden
 const API_DELAY = 500;
 const MATCH_DETAIL_BATCH_SIZE = 10;
 const MAX_MATCHES_TO_FETCH = 500;
 
-console.log('[API Uniliga - Punkte Final V3] Konstanten definiert.');
+console.log('[API Uniliga - Punkte Final V5] Konstanten definiert.');
 
 // --- Hilfsfunktionen (delay, fetchFaceitApi) ---
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -36,7 +36,7 @@ async function fetchFaceitApi(endpoint, retries = 3) {
     } catch (error) { console.error(`[API Uniliga] Fetch error for ${endpoint}: ${error.message}`); if (retries > 0) { await delay(API_DELAY * (5 - retries + 1)); return fetchFaceitApi(endpoint, retries - 1); } else throw error; }
 }
 
-console.log('[API Uniliga - Punkte Final V3] Hilfsfunktionen definiert.');
+console.log('[API Uniliga - Punkte Final V5] Hilfsfunktionen definiert.');
 
 // --- Redis‑Initialisierung ---
 let redis = null;
@@ -54,11 +54,11 @@ try {
     console.log(`[API Uniliga] Created teamInfoMap with ${Object.keys(teamInfoMap).length} teams.`);
 } catch (e) { console.error(`[API Uniliga CRITICAL] Failed to load/parse JSON from '${calculatedJsonPath}':`, e); jsonLoadError = e; teamInfoMap = {}; }
 
-console.log('[API Uniliga - Punkte Final V3] Modul-Setup abgeschlossen.');
+console.log('[API Uniliga - Punkte Final V5] Modul-Setup abgeschlossen.');
 
 // --- Haupt‑Handler ---
 export default async function handler(req, res) {
-    console.log(`[API Uniliga - Punkte Final V3] Handler invoked. URL: ${req.url}`);
+    console.log(`[API Uniliga - Punkte Final V5] Handler invoked. URL: ${req.url}`);
     if (jsonLoadError) { console.error("[API Uniliga] JSON Load Error detected."); } else { console.log(`[API Uniliga] Handler using teamInfoMap size: ${Object.keys(teamInfoMap).length}`); }
 
     const championshipId = UNILIGA_CHAMPIONSHIP_ID;
@@ -102,6 +102,9 @@ export default async function handler(req, res) {
             const batchPromises = batchMatchIds.map(async (matchId) => { // Start Verarbeitung pro Match-ID
                 try {
                     const stats = await fetchFaceitApi(`/matches/${matchId}/stats`);
+                    // Add logging to see the full stats object for a match
+                    // console.log(`[API Uniliga DEBUG] Full stats for Match ${matchId}:`, JSON.stringify(stats, null, 2));
+
                     const rounds = stats?.rounds; // Das Array der Karten für dieses Match
                     const roundsFound = rounds?.length ?? 0;
 
@@ -129,22 +132,32 @@ export default async function handler(req, res) {
                     if (teamIdsValidForPoints) {
                         for (const roundDataForPoints of rounds) { // Iteriere über die Karten NUR zum Zählen der Siege
                             const winnerMap = roundDataForPoints?.round_stats?.["Winner"];
+                            // Add logging for each map winner
+                            // console.log(`[API Uniliga DEBUG] Match ${matchId}, Map: Winner = ${winnerMap}`);
                             if (winnerMap === teamId1) team1MapWins++;
                             else if (winnerMap === teamId2) team2MapWins++;
                         }
-                        // Punkte basierend auf Kartensiegen vergeben (Best of 2 Uniliga System)
+
+                        // Add logging here to see map win counts per match
+                        console.log(`[API Uniliga DEBUG] Match ${matchId}: Team1 Map Wins = ${team1MapWins}, Team2 Map Wins = ${team2MapWins}`);
+
+                        // Punkte basierend auf Kartensiegen vergeben (Best of 2 Uniliga System - 2 für Sieg, 1 für Unentschieden)
                         let pointsTeam1 = 0,
                             pointsTeam2 = 0;
                         if (team1MapWins > team2MapWins) { // Team 1 hat mehr Karten gewonnen (muss 2-0 in Bo2 sein)
-                            pointsTeam1 = 2; // 2 Punkte für den Sieger
+                            pointsTeam1 = 2; // 2 Punkte für den Sieger (korrigiert)
                             pointsTeam2 = 0; // 0 Punkte für den Verlierer
                         } else if (team2MapWins > team1MapWins) { // Team 2 hat mehr Karten gewonnen (muss 0-2 in Bo2 sein)
                             pointsTeam1 = 0; // 0 Punkte für den Verlierer
-                            pointsTeam2 = 2; // 2 Punkte für den Sieger
+                            pointsTeam2 = 2; // 2 Punkte für den Sieger (korrigiert)
                         } else { // Karten sind gleich (muss 1-1 in Bo2 sein)
                             pointsTeam1 = 1; // 1 Punkt für beide Teams
                             pointsTeam2 = 1;
                         }
+
+                        // Add logging here to see points awarded per match
+                        console.log(`[API Uniliga DEBUG] Match ${matchId}: Points Team1 = ${pointsTeam1}, Points Team2 = ${pointsTeam2}`);
+
 
                         // Initialisiere Team-Stats (inkl. Punkte & Match-Outcome Felder) sicher, falls noch nicht geschehen
                         if (!teamStats[teamId1]) teamStats[teamId1] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, matchWins: 0, matchLosses: 0, matchDraws: 0, matchesPlayed: 0, players: new Set() };
@@ -154,17 +167,17 @@ export default async function handler(req, res) {
                         teamStats[teamId1].points = (teamStats[teamId1].points || 0) + pointsTeam1;
                         teamStats[teamId2].points = (teamStats[teamId2].points || 0) + pointsTeam2;
 
-                        // Track match outcomes based on points
+                        // Track match outcomes based on points (2 for win, 1 for draw, 0 for loss)
                         teamStats[teamId1].matchesPlayed++;
                         teamStats[teamId2].matchesPlayed++;
 
-                        if (pointsTeam1 === 3) {
+                        if (pointsTeam1 === 2) { // Team 1 won the match (2-0)
                             teamStats[teamId1].matchWins++;
                             teamStats[teamId2].matchLosses++;
-                        } else if (pointsTeam2 === 3) {
+                        } else if (pointsTeam2 === 2) { // Team 2 won the match (2-0)
                             teamStats[teamId2].matchWins++;
                             teamStats[teamId1].matchLosses++;
-                        } else if (pointsTeam1 === 1 && pointsTeam2 === 1) {
+                        } else if (pointsTeam1 === 1 && pointsTeam2 === 1) { // Match was a draw (1-1)
                             teamStats[teamId1].matchDraws++;
                             teamStats[teamId2].matchDraws++;
                         }
@@ -255,7 +268,8 @@ export default async function handler(req, res) {
              const totalMatchWins = team.matchWins || 0;
              const totalMatchLosses = team.matchLosses || 0;
              const totalMatchDraws = team.matchDraws || 0;
-             const matchWinRate = totalMatchesPlayed > 0 ? (totalMatchWins / totalMatchesPlayed) * 100 : 0;
+             // Match win rate is based on (Wins + 0.5 * Draws) / Total Matches, or simply Wins / Total Matches depending on definition. Let's use Wins / Total Matches for simplicity in the table header context (S, U, N).
+             const matchWinPercentage = totalMatchesPlayed > 0 ? (totalMatchWins / totalMatchesPlayed) * 100 : 0;
 
 
              let avgTeamRating = 0; let playerCount = 0;
@@ -266,13 +280,13 @@ export default async function handler(req, res) {
                   id: teamId, name: team.name,
                   // Map stats (if needed elsewhere)
                   mapsPlayed: mapsPlayedCorrected, mapWins: mapWinsCorrected, mapLosses: mapLossesCorrected,
-                  mapWinRate: +mapWinRate.toFixed(1),
+                  mapWinRate: +mapWinRate.toFixed(1), // Keep map win rate if needed
                   // Match stats for the table
                   matchesPlayed: totalMatchesPlayed,
                   matchWins: totalMatchWins,
                   matchLosses: totalMatchLosses,
                   matchDraws: totalMatchDraws,
-                  matchWinRate: +matchWinRate.toFixed(1), // Use match win rate
+                  matchWinRate: +matchWinPercentage.toFixed(1), // Use calculated match win percentage
                   avgRating: +avgTeamRating.toFixed(2),
                   points: team.points || 0 // Punkte
              };
@@ -290,6 +304,8 @@ export default async function handler(req, res) {
          // +++ Logging vor Response +++
          console.log(`[API Uniliga DEBUG] Final sortedPlayerStats length = ${sortedPlayerStats?.length}`);
          console.log(`[API Uniliga DEBUG] Final sortedTeamStats length = ${sortedTeamStats?.length}`);
+         // Log final team stats before sending
+         console.log(`[API Uniliga DEBUG] Final sortedTeamStats:`, JSON.stringify(sortedTeamStats, null, 2));
          // +++ Ende Logging +++
 
         // e) Finale Antwort vorbereiten
@@ -313,4 +329,4 @@ export default async function handler(req, res) {
     }
 }
 
-console.log('[API Uniliga - Punkte Final V2] Modul Ende erreicht.');
+console.log('[API Uniliga - Punkte Final V5] Modul Ende erreicht.');
