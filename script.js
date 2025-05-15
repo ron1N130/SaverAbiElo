@@ -12,7 +12,7 @@ const thresholds = {
     impact: { bad: 1, okay: 1.3, good: 1.45, great: 1.55, max: 1.8 }, // Bleibt intern für Berechnung (letzte Definition)
     elo: { bad: 1800, okay: 2000, good: 2600, great: 2900, max: 4000 },
     hsp: { bad: 15, okay: 35, good: 44, great: 0.55, max: 60 }, // Beachte: great hier 0.55 statt 55? Überprüfen! Falls % gemeint war, eher 55
-    winRate: { bad: 40, okay: 50, good: 60, great: 70, max: 100 }
+    winRate: { bad: 40, okay: 50, good: 60, great: 70, max: 100 } // Wird jetzt für Match-Winrate verwendet
 };
 
 let teamIconMap = {}; // Speichert das Mapping von Teamnamen zu Icon-Dateinamen
@@ -509,6 +509,7 @@ async function loadUniligaView() {
     uniligaDataArea.innerHTML = '';
 
     try {
+        // Using a cache busting parameter to ensure fresh data during development/testing
         const apiUrl = `/api/uniliga-stats?cacheBust=${Date.now()}`;
         console.log(`[LOG] VERSUCHE FETCH (mit Cache Bust): ${apiUrl}...`);
 
@@ -544,7 +545,7 @@ async function loadUniligaView() {
          }
         console.log("[LOG] Uniliga API data received (teams):", JSON.stringify(data.teams, null, 2));
         console.log("[LOG] Uniliga API data received (players):", JSON.stringify(data.players, null, 2));
-        if (!data || !data.teams || !data.players) {
+        if (!data || !data.teams || data.teams.length === 0 || !data.players || data.players.length === 0) {
             throw new Error("Ungültiges Datenformat von der API empfangen.");
         }
         currentUniligaData = data;
@@ -562,7 +563,6 @@ async function loadUniligaView() {
 }
 
 function displayUniligaData(data) {
-    // ... (keine Änderungen hier)
     console.log("[LOG] displayUniligaData called with data:", data);
     if (!uniligaDataArea) { console.error("FEHLER: uniligaDataArea ist null in displayUniligaData!"); return; }
     if (!data || !data.teams || data.teams.length === 0 || !data.players || data.players.length === 0) {
@@ -575,13 +575,30 @@ function displayUniligaData(data) {
     <h3>Team Rangliste</h3>
     <div class="table-container">
         <table class="stats-table team-ranking-table">
-            <thead><tr><th>#</th><th>Team</th><th>Spiele</th><th>Pkt</th><th>S</th><th>N</th><th>WR %</th><th>Avg. R.</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Team</th>
+                    <th>Spiele</th>
+                    <th>Pkt</th>
+                    <th>S</th>
+                    <th>U</th> <th>N</th>
+                    <th>WR %</th>
+                    <th>Avg. R.</th>
+                </tr>
+            </thead>
             <tbody>`;
     const sortedTeams = [...data.teams].sort((a, b) => {
-        const pointsDiff = (b.points ?? -1) - (a.points ?? -1);
+        // Sorting logic now uses match stats as implemented in backend
+        const pointsDiff = (b.points ?? 0) - (a.points ?? 0);
         if (pointsDiff !== 0) return pointsDiff;
+        const winsDiff = (b.matchWins ?? 0) - (a.matchWins ?? 0);
+        if (winsDiff !== 0) return winsDiff;
+        const drawsDiff = (b.matchDraws ?? 0) - (a.matchDraws ?? 0);
+        if (drawsDiff !== 0) return drawsDiff;
         return (b.avgRating ?? 0) - (a.avgRating ?? 0);
     });
+
     sortedTeams.forEach((team, index) => {
         const teamName = team.name || `Team ID ${team.id.substring(0,8)}...`;
         const iconFilename = teamIconMap[teamName];
@@ -594,8 +611,9 @@ function displayUniligaData(data) {
                     <img src="${iconPath}" class="table-avatar team-avatar" alt="${altText}" onerror="this.style.display='none'; this.onerror=null;"/>
                     <span>${teamName}</span>
                 </td>
-                <td>${team.matchesPlayed ?? '0'}</td><td>${team.points ?? '0'}</td><td>${team.wins ?? '0'}</td><td>${team.losses ?? '0'}</td>
-                <td class="${getTeamWinrateClass(team.winRate)}">${safe(team.winRate, 1)}</td><td>${safe(team.avgRating, 2)}</td>
+                <td>${team.matchesPlayed ?? '0'}</td>
+                <td>${team.points ?? '0'}</td>
+                <td>${team.matchWins ?? '0'}</td> <td>${team.matchDraws ?? '0'}</td> <td>${team.matchLosses ?? '0'}</td> <td class="${getTeamWinrateClass(team.matchWinRate)}">${safe(team.matchWinRate, 1)}</td> <td>${safe(team.avgRating, 2)}</td>
             </tr>`;
     });
     teamTableHtml += `</tbody></table></div>`;
@@ -633,6 +651,8 @@ function getTeamWinrateClass(winRate) {
     const val = parseFloat(winRate);
     if (isNaN(val)) return '';
     const cfg = thresholds.winRate;
+    // Assuming thresholds.winRate is for percentage (0-100)
+    if (val >= cfg.great) return 'text-great'; // Use great threshold for highest win rate class
     if (val >= cfg.good) return 'text-good';
     if (val >= cfg.okay) return 'text-okay';
     return 'text-bad';

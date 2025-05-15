@@ -13,7 +13,7 @@ const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL = process.env.REDIS_URL;
 const API_BASE_URL = "https://open.faceit.com/data/v4";
 const UNILIGA_CHAMPIONSHIP_ID = "c1fcd6a9-34ef-4e18-8e92-b57af0667a40";
-const CACHE_VERSION = 11; // Version beibehalten oder bei Bedarf erhöhen
+const CACHE_VERSION = 12; // Version erhöht, da sich die Datenstruktur ändert
 const CACHE_TTL_SECONDS = 4 * 60 * 60; // 4 Stunden
 const API_DELAY = 500;
 const MATCH_DETAIL_BATCH_SIZE = 10;
@@ -62,6 +62,7 @@ export default async function handler(req, res) {
     if (jsonLoadError) { console.error("[API Uniliga] JSON Load Error detected."); } else { console.log(`[API Uniliga] Handler using teamInfoMap size: ${Object.keys(teamInfoMap).length}`); }
 
     const championshipId = UNILIGA_CHAMPIONSHIP_ID;
+    // Update cache key to reflect the new cache version
     const cacheKey = `uniliga_stats:${championshipId}_v${CACHE_VERSION}`;
 
     // 1. Cache prüfen
@@ -88,8 +89,12 @@ export default async function handler(req, res) {
         console.log(`[API Uniliga] Total matches found: ${allMatches.length}. Fetching details...`);
 
         // Datenstrukturen initialisieren
-        const playerMatchStats = {}; const teamStats = {}; const playerDetails = {};
-        let processedMatchCount = 0; let skippedMatchCount = 0; let processedMapCount = 0;
+        const playerMatchStats = {};
+        const teamStats = {}; // Will now also store match win/loss/draw counts
+        const playerDetails = {};
+        let processedMatchCount = 0;
+        let skippedMatchCount = 0;
+        let processedMapCount = 0;
 
         // Batches von Match-Details verarbeiten
         for (let i = 0; i < allMatches.length; i += MATCH_DETAIL_BATCH_SIZE) {
@@ -103,13 +108,16 @@ export default async function handler(req, res) {
                     // Überspringe Match, wenn keine gültigen Rundendaten gefunden wurden
                     if (roundsFound === 0 || !Array.isArray(rounds)) {
                         console.warn(`[API Uniliga WARN] Skipping Match ${matchId}: No rounds array found or empty.`);
-                        skippedMatchCount++; return null;
+                        skippedMatchCount++;
+                        return null;
                     }
                     processedMatchCount++; // Zähle verarbeitete Begegnungen
 
                     // --- Punkteberechnung für die gesamte Begegnung (matchId) ---
-                    let teamId1 = null, teamId2 = null;
-                    let team1MapWins = 0, team2MapWins = 0;
+                    let teamId1 = null,
+                        teamId2 = null;
+                    let team1MapWins = 0,
+                        team2MapWins = 0;
                     let teamIdsValidForPoints = false;
                     // Finde die beiden Team-IDs aus der ersten Karte
                     if (rounds[0]?.teams?.length === 2) {
@@ -124,22 +132,46 @@ export default async function handler(req, res) {
                             if (winnerMap === teamId1) team1MapWins++;
                             else if (winnerMap === teamId2) team2MapWins++;
                         }
-                        // Punkte basierend auf Kartensiegen vergeben
-                        let pointsTeam1 = 0, pointsTeam2 = 0;
-                        if (team1MapWins > team2MapWins) { pointsTeam1 = 2; pointsTeam2 = 0; }
-                        else if (team2MapWins > team1MapWins) { pointsTeam1 = 0; pointsTeam2 = 2; }
-                        else { pointsTeam1 = 1; pointsTeam2 = 1; } // Unentschieden
+                        // Punkte basierend auf Kartensiegen vergeben (Best of 2 Uniliga System)
+                        let pointsTeam1 = 0,
+                            pointsTeam2 = 0;
+                        if (team1MapWins > team2MapWins) { // Team 1 hat mehr Karten gewonnen (muss 2-0 in Bo2 sein)
+                            pointsTeam1 = 2; // 2 Punkte für den Sieger
+                            pointsTeam2 = 0; // 0 Punkte für den Verlierer
+                        } else if (team2MapWins > team1MapWins) { // Team 2 hat mehr Karten gewonnen (muss 0-2 in Bo2 sein)
+                            pointsTeam1 = 0; // 0 Punkte für den Verlierer
+                            pointsTeam2 = 2; // 2 Punkte für den Sieger
+                        } else { // Karten sind gleich (muss 1-1 in Bo2 sein)
+                            pointsTeam1 = 1; // 1 Punkt für beide Teams
+                            pointsTeam2 = 1;
+                        }
 
-                        // Initialisiere Team-Stats (inkl. Punktefeld) sicher, falls noch nicht geschehen
-                        if (!teamStats[teamId1]) teamStats[teamId1] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() };
-                        if (!teamStats[teamId2]) teamStats[teamId2] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() };
+                        // Initialisiere Team-Stats (inkl. Punkte & Match-Outcome Felder) sicher, falls noch nicht geschehen
+                        if (!teamStats[teamId1]) teamStats[teamId1] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, matchWins: 0, matchLosses: 0, matchDraws: 0, matchesPlayed: 0, players: new Set() };
+                        if (!teamStats[teamId2]) teamStats[teamId2] = { name: "TBD", mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, matchWins: 0, matchLosses: 0, matchDraws: 0, matchesPlayed: 0, players: new Set() };
+
                         // Addiere Punkte zum Gesamtpunktestand des Teams
                         teamStats[teamId1].points = (teamStats[teamId1].points || 0) + pointsTeam1;
                         teamStats[teamId2].points = (teamStats[teamId2].points || 0) + pointsTeam2;
+
+                        // Track match outcomes based on points
+                        teamStats[teamId1].matchesPlayed++;
+                        teamStats[teamId2].matchesPlayed++;
+
+                        if (pointsTeam1 === 3) {
+                            teamStats[teamId1].matchWins++;
+                            teamStats[teamId2].matchLosses++;
+                        } else if (pointsTeam2 === 3) {
+                            teamStats[teamId2].matchWins++;
+                            teamStats[teamId1].matchLosses++;
+                        } else if (pointsTeam1 === 1 && pointsTeam2 === 1) {
+                            teamStats[teamId1].matchDraws++;
+                            teamStats[teamId2].matchDraws++;
+                        }
                     } else {
                         console.warn(`[API Uniliga Punkte WARN] Match ${matchId}: Teams f. Punkte nicht identifiziert.`);
                     }
-                    // --- Ende Punkteberechnung ---
+                    // --- Ende Punkteberechnung und Match-Outcome Tracking ---
 
 
                     // --- Verarbeitung der einzelnen Karten für Detail-Statistiken ---
@@ -165,13 +197,15 @@ export default async function handler(req, res) {
                             else { finalTeamName = `Unbekanntes Team (ID: ${teamId.substring(0, 8)}...)`; }
 
                             // Stelle sicher, dass der Teameintrag existiert (sollte durch Punkteberechnung oben schon passiert sein, aber sicher ist sicher)
-                            if (!teamStats[teamId]) { teamStats[teamId] = { name: finalTeamName, mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, players: new Set() }; }
-                            else { teamStats[teamId].name = finalTeamName; teamStats[teamId].points = teamStats[teamId].points || 0; } // Setze Namen und stelle sicher, dass Punkte nicht überschrieben werden
+                            if (!teamStats[teamId]) { teamStats[teamId] = { name: finalTeamName, mapWins: 0, mapLosses: 0, mapsPlayed: 0, points: 0, matchWins: 0, matchLosses: 0, matchDraws: 0, matchesPlayed: 0, players: new Set() }; }
+                             else { teamStats[teamId].name = finalTeamName; teamStats[teamId].points = teamStats[teamId].points || 0; } // Setze Namen und stelle sicher, dass Punkte nicht überschrieben werden
 
-                            // Zähle Karten-Ergebnisse für dieses Team
-                            teamStats[teamId].mapsPlayed += 1 / roundData.teams.length; // Normalerweise +0.5
-                            const isWinnerThisMap = teamId === winningTeamIdMap;
-                            if (winningTeamIdMap) { if (isWinnerThisMap) teamStats[teamId].mapWins += 1 / roundData.teams.length; else teamStats[teamId].mapLosses += 1 / roundData.teams.length; }
+
+                            // Zähle Karten-Ergebnisse für dieses Team (Diese Zählungen werden für die Map-Stats beibehalten, aber die Team-Tabelle im Frontend nutzt jetzt Match-Stats)
+                             teamStats[teamId].mapsPlayed += 1 / roundData.teams.length; // Normalerweise +0.5
+                             const isWinnerThisMap = teamId === winningTeamIdMap;
+                             if (winningTeamIdMap) { if (isWinnerThisMap) teamStats[teamId].mapWins += 1 / roundData.teams.length; else teamStats[teamId].mapLosses += 1 / roundData.teams.length; }
+
 
                             // Verarbeite Spieler DIESER KARTE
                             for (const player of team.players) {
@@ -205,32 +239,52 @@ export default async function handler(req, res) {
         }
         const sortedPlayerStats = Object.values(aggregatedPlayerStats).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 
-        // d) Teamstatistiken finalisieren (mit Punkten)
+        // d) Teamstatistiken finalisieren (mit Punkten und Match-Outcomes)
         console.log("[API Uniliga] Aggregating final team statistics...");
         const aggregatedTeamStats = {};
         for (const teamId in teamStats) {
              const team = teamStats[teamId];
+             // Correct map counts (still calculated based on 0.5 per map)
              const mapsPlayedCorrected = Math.round(team.mapsPlayed * 2);
              const mapWinsCorrected = Math.round(team.mapWins * 2);
              const mapLossesCorrected = Math.round(team.mapLosses * 2);
              const mapWinRate = mapsPlayedCorrected > 0 ? (mapWinsCorrected / mapsPlayedCorrected) * 100 : 0;
+
+             // Use the collected match stats directly
+             const totalMatchesPlayed = team.matchesPlayed || 0;
+             const totalMatchWins = team.matchWins || 0;
+             const totalMatchLosses = team.matchLosses || 0;
+             const totalMatchDraws = team.matchDraws || 0;
+             const matchWinRate = totalMatchesPlayed > 0 ? (totalMatchWins / totalMatchesPlayed) * 100 : 0;
+
+
              let avgTeamRating = 0; let playerCount = 0;
              team.players.forEach(playerId => { if (aggregatedPlayerStats[playerId]?.rating) { avgTeamRating += aggregatedPlayerStats[playerId].rating; playerCount++; } });
              avgTeamRating = playerCount > 0 ? avgTeamRating / playerCount : 0;
 
              aggregatedTeamStats[teamId] = {
                   id: teamId, name: team.name,
-                  mapsPlayed: mapsPlayedCorrected, mapWins: mapWinsCorrected, mapLosses: mapLossesCorrected, // Karten-Stats
+                  // Map stats (if needed elsewhere)
+                  mapsPlayed: mapsPlayedCorrected, mapWins: mapWinsCorrected, mapLosses: mapLossesCorrected,
                   mapWinRate: +mapWinRate.toFixed(1),
+                  // Match stats for the table
+                  matchesPlayed: totalMatchesPlayed,
+                  matchWins: totalMatchWins,
+                  matchLosses: totalMatchLosses,
+                  matchDraws: totalMatchDraws,
+                  matchWinRate: +matchWinRate.toFixed(1), // Use match win rate
                   avgRating: +avgTeamRating.toFixed(2),
                   points: team.points || 0 // Punkte
              };
          }
-        // Sortiere Teams: Punkte > Karten-WR > AvgRating
+        // Sortiere Teams: Punkte > Match-Siege > Unentschieden > AvgRating
          const sortedTeamStats = Object.values(aggregatedTeamStats).sort((a, b) => {
              const pointsDiff = (b.points ?? 0) - (a.points ?? 0); if (pointsDiff !== 0) return pointsDiff;
-             const wrDiff = (b.mapWinRate ?? 0) - (a.mapWinRate ?? 0); if (wrDiff !== 0) return wrDiff;
-             return (b.avgRating ?? 0) - (a.avgRating ?? 0);
+             const winsDiff = (b.matchWins ?? 0) - (a.matchWins ?? 0); // Priorisiere Match-Siege
+             if (winsDiff !== 0) return winsDiff;
+             const drawsDiff = (b.matchDraws ?? 0) - (a.matchDraws ?? 0); // Dann Unentschieden
+             if (drawsDiff !== 0) return drawsDiff;
+             return (b.avgRating ?? 0) - (a.avgRating ?? 0); // Schließlich durchschnittliches Rating als Tie-Breaker
           });
 
          // +++ Logging vor Response +++
@@ -241,7 +295,8 @@ export default async function handler(req, res) {
         // e) Finale Antwort vorbereiten
         const responseData = {
             version: CACHE_VERSION, lastUpdated: new Date().toISOString(), championshipId: championshipId,
-            players: sortedPlayerStats, teams: sortedTeamStats // Enthält jetzt .points bei Teams
+            players: sortedPlayerStats,
+            teams: sortedTeamStats // Enthält jetzt .points, .matchesPlayed, .matchWins, .matchLosses, .matchDraws
         };
 
         // f) Im Cache speichern
