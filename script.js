@@ -3,7 +3,7 @@
 // -------------------------------------------------------------
 const thresholds = {
     // Bereinigt - letzte Definition aus deinem Code übernommen
-    rating: { bad: 0.85, okay: 1.05, good: 1.2, great: 1.3, max: 1.8 },
+    rating: { bad: 0.85, okay: 1.05, good: 1.15, great: 1.3, max: 1.8 },
     dpr: { bad: 0.75, okay: 0.7, good: 0.63, great: 0.55, max: 1 }, // Niedriger ist besser (letzte Definition)
     kast: { bad: 58, okay: 66, good: 75, great: 80, max: 100 },
     kd: { bad: 0.8, okay: 1.0, good: 1.2, great: 1.4, max: 2.0 }, // KD wieder relevant für Anzeige (letzte Definition)
