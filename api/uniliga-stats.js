@@ -12,7 +12,7 @@ console.log('[API Uniliga - Punkte Final V5] Modul Imports geladen.'); // Log ve
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL = process.env.REDIS_URL;
 const API_BASE_URL = "https://open.faceit.com/data/v4";
-const UNILIGA_CHAMPIONSHIP_ID = "c1fcd6a9-34ef-4e18-8e92-b57af0667a40";
+const UNILIGA_CHAMPIONSHIP_ID = "385c17da-3fe3-4b94-9c98-8686d66281df";
 const CACHE_VERSION = 14; // Version erhöht für Debugging-Logs
 const CACHE_TTL_SECONDS = 4 * 60 * 60; // 4 Stunden
 const API_DELAY = 500;
