@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 import leetifyHandler from "../api/leetify-data.js";
+import { buildPlayoffBracket } from "../api/uniliga-stats.js";
 
 const playerFixtures = {
     Alpha: {
@@ -78,10 +79,11 @@ const leetifyFixture = {
     sprayAccuracy: 41.7
 };
 
-const uniligaFixture = {
+const uniligaGroupsFixture = {
     lastUpdated: "2026-07-27T08:00:00.000Z",
-    championshipId: "4ee001a9-f6f3-4936-916b-798d3171cca8",
-    championshipName: "University Esports Summer Championship 2026",
+    phase: "groups",
+    championshipId: "group-stage-id",
+    championshipName: "Uniliga Liga 1 Sommerseason 2026",
     teams: [{
         id: "team-1",
         name: "AIX",
@@ -102,7 +104,88 @@ const uniligaFixture = {
         adr: 102,
         kast: 80,
         winRate: 75
-    }]
+    }],
+    bracket: null
+};
+
+const uniligaPlayoffsFixture = {
+    lastUpdated: "2026-07-27T09:00:00.000Z",
+    phase: "playoffs",
+    championshipId: "4ee001a9-f6f3-4936-916b-798d3171cca8",
+    championshipName: "Uniliga Liga 1 Playoffs",
+    teams: [{
+        id: "team-1",
+        name: "AIX",
+        matchesPlayed: 2,
+        matchWins: 2,
+        matchDraws: 0,
+        matchLosses: 0,
+        mapWins: 4,
+        mapLosses: 1,
+        avgRating: 1.3,
+        points: 2
+    }, {
+        id: "team-2",
+        name: "MUC",
+        matchesPlayed: 2,
+        matchWins: 1,
+        matchDraws: 0,
+        matchLosses: 1,
+        mapWins: 3,
+        mapLosses: 3,
+        avgRating: 1.1,
+        points: 1
+    }],
+    players: [{
+        nickname: "Alpha",
+        avatar: "/default_avatar.png",
+        matchesPlayed: 4,
+        rating: 1.52,
+        impact: 1.92,
+        adr: 103,
+        kast: 81,
+        winRate: 100
+    }],
+    bracket: {
+        format: "single-elimination",
+        champion: {
+            id: "team-1",
+            name: "AIX",
+            score: 2,
+            winner: true
+        },
+        rounds: [{
+            round: "1",
+            label: "Halbfinale",
+            matches: [{
+                matchId: "1-semi-final",
+                round: 1,
+                status: "FINISHED",
+                bestOf: 3,
+                scheduledAt: "2026-07-20T18:00:00.000Z",
+                teams: [
+                    { id: "team-1", name: "AIX", score: 2, winner: true },
+                    { id: "team-3", name: "OSGG", score: 0, winner: false }
+                ],
+                winnerId: "team-1"
+            }]
+        }, {
+            round: "2",
+            label: "Finale",
+            matches: [{
+                matchId: "1-grand-final",
+                round: 2,
+                status: "FINISHED",
+                bestOf: 3,
+                scheduledAt: "2026-07-26T18:00:00.000Z",
+                teams: [
+                    { id: "team-1", name: "AIX", score: 2, winner: true },
+                    { id: "team-2", name: "MUC", score: 1, winner: false }
+                ],
+                winnerId: "team-1"
+            }]
+        }]
+    }
 };
 
 function jsonResponse(data) {
@@ -188,10 +271,48 @@ test("uses the requested Uniliga championship and SaverAbi roster", async () => 
     ]);
     const players = JSON.parse(playersSource);
 
+    assert.match(uniligaSource, /0a49e9c4-808c-4172-bfcb-997c5982770e/);
     assert.match(uniligaSource, /4ee001a9-f6f3-4936-916b-798d3171cca8/);
+    assert.match(uniligaSource, /Uniliga Liga 1 Sommerseason 2026/);
     assert.equal(players.includes("s3sh"), true);
     assert.equal(players.includes("2911-"), true);
     assert.equal(players.includes("a5u"), false);
+});
+
+test("builds the playoff bracket from FACEIT rounds and results", () => {
+    const bracket = buildPlayoffBracket([{
+        match_id: "1-semi-a",
+        round: 1,
+        status: "FINISHED",
+        best_of: 3,
+        scheduled_at: "2026-07-20T18:00:00.000Z",
+        teams: {
+            faction1: { faction_id: "team-a", name: "AIX" },
+            faction2: { faction_id: "team-b", name: "MUC" }
+        },
+        results: {
+            winner: "faction1",
+            score: { faction1: 2, faction2: 0 }
+        }
+    }, {
+        match_id: "1-final",
+        round: 2,
+        status: "FINISHED",
+        best_of: 3,
+        scheduled_at: "2026-07-26T18:00:00.000Z",
+        teams: {
+            faction1: { faction_id: "team-a", name: "AIX" },
+            faction2: { faction_id: "team-c", name: "OSGG" }
+        },
+        results: {
+            winner: "faction1",
+            score: { faction1: 2, faction2: 1 }
+        }
+    }]);
+
+    assert.deepEqual(bracket.rounds.map((round) => round.label), ["Halbfinale", "Finale"]);
+    assert.equal(bracket.rounds[0].matches[0].teams[0].winner, true);
+    assert.equal(bracket.champion.name, "AIX");
 });
 
 test("renders the leaderboard, filters players, and switches to Uniliga", async () => {
@@ -221,10 +342,18 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
                     return jsonResponse(leetifyFixture);
                 }
                 if (url.pathname === "/uniliga_teams.json") {
-                    return jsonResponse([{ name: "AIX", icon: "aix.png" }]);
+                    return jsonResponse([
+                        { name: "AIX", icon: "aix.png" },
+                        { name: "MUC", icon: "muc.png" },
+                        { name: "OSGG", icon: "osgg.png" }
+                    ]);
                 }
                 if (url.pathname === "/api/uniliga-stats") {
-                    return jsonResponse(uniligaFixture);
+                    return jsonResponse(
+                        url.searchParams.get("phase") === "playoffs"
+                            ? uniligaPlayoffsFixture
+                            : uniligaGroupsFixture
+                    );
                 }
                 return { ok: false, status: 404, json: async () => ({ error: "Not found" }) };
             };
@@ -281,10 +410,27 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
     assert.equal(document.getElementById("summary-leading-team").textContent, "AIX");
     assert.equal(
         document.getElementById("uniliga-championship-title").textContent,
-        "University Esports Summer Championship 2026"
+        "Uniliga Liga 1 Sommerseason 2026"
     );
     assert.equal(document.getElementById("uniliga-content").hidden, false);
     assert.equal(document.getElementById("saverabi-content").hidden, true);
+
+    document.getElementById("uniliga-phase-playoffs").click();
+    await waitFor(
+        () => document.querySelectorAll("#uniliga-data-area .bracket-round").length === 2,
+        "Playoff bracket did not render"
+    );
+    assert.equal(
+        document.getElementById("uniliga-championship-title").textContent,
+        "Uniliga Liga 1 Playoffs"
+    );
+    assert.equal(document.getElementById("summary-leading-team-label").textContent, "Champion");
+    assert.equal(document.getElementById("summary-leading-team").textContent, "AIX");
+    assert.equal(document.querySelectorAll(".bracket-match").length, 2);
+    assert.deepEqual(
+        [...document.querySelectorAll(".bracket-round h3")].map((heading) => heading.textContent),
+        ["Halbfinale", "Finale"]
+    );
 
     dom.window.close();
 });

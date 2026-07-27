@@ -1201,6 +1201,71 @@ img {
     }
 }
 
+.uniliga-phase-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    padding: 0.55rem;
+}
+
+.uniliga-phase-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+    gap: 0.4rem;
+}
+
+.uniliga-phase-button {
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    padding: 0.72rem 0.9rem;
+    color: var(--muted);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.uniliga-phase-button:hover {
+    color: var(--text-soft);
+}
+
+.uniliga-phase-button.active {
+    border-color: rgba(255, 95, 59, 0.35);
+    background: var(--accent-soft);
+    color: var(--text);
+}
+
+.uniliga-phase-button span,
+.uniliga-phase-button small {
+    display: block;
+}
+
+.uniliga-phase-button span {
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.uniliga-phase-button small {
+    margin-top: 0.18rem;
+    color: var(--muted);
+    font-size: 0.62rem;
+}
+
+.uniliga-phase-nav > p {
+    max-width: 390px;
+    margin: 0;
+    padding-right: 0.65rem;
+    color: var(--muted);
+    font-size: 0.7rem;
+    text-align: right;
+}
+
 .uniliga-grid {
     display: grid;
     grid-template-columns: 0.85fr 1.15fr;
@@ -1229,6 +1294,214 @@ img {
     margin: 0.25rem 0 0;
     color: var(--muted);
     font-size: 0.68rem;
+}
+
+.uniliga-panel-wide,
+.uniliga-data-timestamp {
+    grid-column: 1 / -1;
+}
+
+.bracket-scroll {
+    overflow-x: auto;
+    padding: 0.5rem 0;
+    scrollbar-color: var(--line-strong) transparent;
+    scrollbar-width: thin;
+}
+
+.playoff-bracket {
+    display: flex;
+    align-items: stretch;
+    min-width: max-content;
+    padding: 0 0.35rem;
+}
+
+.bracket-round {
+    display: flex;
+    width: 270px;
+    min-height: 430px;
+    flex: 0 0 270px;
+    flex-direction: column;
+    padding: 1rem 1.15rem 1.35rem;
+}
+
+.bracket-round + .bracket-round {
+    border-left: 1px solid var(--line);
+}
+
+.bracket-round > header {
+    margin-bottom: 0.7rem;
+}
+
+.bracket-round > header span {
+    color: var(--accent-bright);
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.bracket-round > header h3 {
+    margin: 0.2rem 0 0;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    letter-spacing: -0.025em;
+}
+
+.bracket-round-matches {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: 1.1rem;
+}
+
+.bracket-match {
+    position: relative;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.04), transparent 70%), var(--surface-raised);
+    box-shadow: 0 9px 24px rgba(0, 0, 0, 0.18);
+}
+
+.bracket-round:not(:last-child) .bracket-match::after,
+.bracket-round:not(:first-child) .bracket-match::before {
+    position: absolute;
+    top: 50%;
+    width: 1.2rem;
+    height: 1px;
+    background: var(--line-strong);
+    content: "";
+}
+
+.bracket-round:not(:last-child) .bracket-match::after {
+    right: -1.2rem;
+}
+
+.bracket-round:not(:first-child) .bracket-match::before {
+    left: -1.2rem;
+}
+
+.bracket-match-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--line);
+    padding: 0.52rem 0.62rem;
+    color: var(--muted);
+    font-size: 0.58rem;
+    font-weight: 700;
+}
+
+.bracket-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.bracket-status::before {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--yellow);
+    content: "";
+}
+
+.bracket-status.is-finished::before {
+    background: var(--green);
+}
+
+.bracket-status.is-live {
+    color: var(--accent-bright);
+}
+
+.bracket-status.is-live::before {
+    background: var(--accent-bright);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.bracket-status.is-cancelled::before {
+    background: var(--red);
+}
+
+.bracket-teams {
+    padding: 0.34rem 0;
+}
+
+.bracket-team {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    min-height: 41px;
+    padding: 0.42rem 0.62rem;
+    color: var(--muted);
+}
+
+.bracket-team + .bracket-team {
+    border-top: 1px solid var(--line);
+}
+
+.bracket-team.is-winner {
+    color: var(--text);
+    background: var(--green-soft);
+}
+
+.bracket-team-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.bracket-team-identity img {
+    width: 23px;
+    height: 23px;
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    object-fit: cover;
+}
+
+.bracket-team-identity span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bracket-team strong {
+    color: inherit;
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+}
+
+.bracket-match-link {
+    display: block;
+    border-top: 1px solid var(--line);
+    padding: 0.5rem 0.62rem;
+    color: var(--muted);
+    font-size: 0.58rem;
+    text-decoration: none;
+}
+
+.bracket-match-link:hover {
+    color: var(--accent-bright);
+}
+
+.bracket-empty {
+    padding: 3.5rem 1.2rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.uniliga-data-timestamp {
+    color: var(--muted);
+    font-size: 0.62rem;
+    text-align: right;
 }
 
 .table-wrap {
@@ -1433,6 +1706,21 @@ img {
         padding: 0.95rem;
     }
 
+    .uniliga-phase-nav {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .uniliga-phase-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .uniliga-phase-nav > p {
+        max-width: none;
+        padding: 0 0.3rem 0.3rem;
+        text-align: left;
+    }
+
     .content-grid {
         gap: 0.75rem;
     }
@@ -1477,6 +1765,13 @@ img {
 
     .site-footer {
         width: calc(100% - 2rem);
+    }
+
+    .bracket-round {
+        width: 245px;
+        min-height: 400px;
+        flex-basis: 245px;
+        padding-inline: 1rem;
     }
 }
 

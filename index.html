@@ -158,12 +158,38 @@
                 <div>
                     <p class="eyebrow">University Esports</p>
                     <h1 id="uniliga-championship-title">Uniliga CS2</h1>
-                    <p class="hero-copy">Team-Standings und individuelle Performance der laufenden Championship.</p>
+                    <p id="uniliga-hero-copy" class="hero-copy">Gruppenphase und Playoffs der laufenden Championship.</p>
                 </div>
                 <div id="uniliga-updated" class="sync-status" aria-live="polite">
                     <span class="sync-icon" aria-hidden="true"></span>
                     Noch nicht geladen
                 </div>
+            </div>
+
+            <div class="uniliga-phase-nav">
+                <div class="uniliga-phase-tabs" role="group" aria-label="Uniliga-Phase wählen">
+                    <button
+                        id="uniliga-phase-groups"
+                        class="uniliga-phase-button active"
+                        type="button"
+                        data-phase="groups"
+                        aria-pressed="true"
+                    >
+                        <span>Gruppenphase</span>
+                        <small>Tabelle &amp; Statistiken</small>
+                    </button>
+                    <button
+                        id="uniliga-phase-playoffs"
+                        class="uniliga-phase-button"
+                        type="button"
+                        data-phase="playoffs"
+                        aria-pressed="false"
+                    >
+                        <span>Playoffs</span>
+                        <small>Bracket &amp; Statistiken</small>
+                    </button>
+                </div>
+                <p id="uniliga-phase-description">Liga-Tabelle nach dem Uniliga-Punktesystem 2–1–0.</p>
             </div>
 
             <div id="uniliga-summary" class="summary-grid" role="group" aria-label="Uniliga Zusammenfassung">
@@ -178,7 +204,7 @@
                     <small>mit Statistiken</small>
                 </article>
                 <article class="summary-card summary-card-accent">
-                    <span class="summary-label">Tabellenführer</span>
+                    <span id="summary-leading-team-label" class="summary-label">Tabellenführer</span>
                     <strong id="summary-leading-team">—</strong>
                     <small id="summary-leading-team-points">aktuelle Punkte</small>
                 </article>
@@ -194,7 +220,7 @@
                 <span>Uniliga-Daten werden geladen</span>
             </div>
             <div id="error-message-uniliga" class="error-message" role="alert" hidden></div>
-            <div id="uniliga-data-area" class="uniliga-grid"></div>
+            <div id="uniliga-data-area" class="uniliga-grid" aria-live="polite"></div>
         </section>
     </main>
 

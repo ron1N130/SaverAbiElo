@@ -46,8 +46,12 @@ const state = {
     saverAbiLoading: false,
     loadedPlayers: 0,
     totalPlayers: 0,
-    uniligaData: null,
-    uniligaLoading: false,
+    uniligaData: {
+        groups: null,
+        playoffs: null
+    },
+    uniligaPhase: "groups",
+    uniligaLoading: new Set(),
     teamIconMap: {},
     leetifyProfiles: new Map(),
     leetifyLoading: new Set(),
@@ -78,6 +82,9 @@ function cacheDom() {
     dom.uniligaArea = document.getElementById("uniliga-data-area");
     dom.uniligaUpdated = document.getElementById("uniliga-updated");
     dom.uniligaChampionshipTitle = document.getElementById("uniliga-championship-title");
+    dom.uniligaHeroCopy = document.getElementById("uniliga-hero-copy");
+    dom.uniligaPhaseButtons = [...document.querySelectorAll(".uniliga-phase-button")];
+    dom.uniligaPhaseDescription = document.getElementById("uniliga-phase-description");
 
     dom.summaryPlayerCount = document.getElementById("summary-player-count");
     dom.summaryAverageElo = document.getElementById("summary-average-elo");
@@ -88,6 +95,7 @@ function cacheDom() {
     dom.summaryTeamCount = document.getElementById("summary-team-count");
     dom.summaryUniligaPlayerCount = document.getElementById("summary-uniliga-player-count");
     dom.summaryLeadingTeam = document.getElementById("summary-leading-team");
+    dom.summaryLeadingTeamLabel = document.getElementById("summary-leading-team-label");
     dom.summaryLeadingTeamPoints = document.getElementById("summary-leading-team-points");
     dom.summaryTopRating = document.getElementById("summary-top-rating");
     dom.summaryTopPlayer = document.getElementById("summary-top-player");
@@ -808,38 +816,89 @@ function winRateClass(value) {
     return "text-bad";
 }
 
-function renderUniligaSummary(data) {
+function setUniligaPhaseControls(phase) {
+    dom.uniligaPhaseButtons.forEach((button) => {
+        const isActive = button.dataset.phase === phase;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
+    });
+
+    const isPlayoffs = phase === "playoffs";
+    dom.uniligaPhaseDescription.textContent = isPlayoffs
+        ? "K.-o.-Runden mit realen Match-Ergebnissen direkt von FACEIT."
+        : "Liga-Tabelle nach dem Uniliga-Punktesystem 2–1–0.";
+    dom.uniligaHeroCopy.textContent = isPlayoffs
+        ? "Turnierbaum, Match-Ergebnisse und individuelle Performance der Playoffs."
+        : "Tabelle, Bilanz und individuelle Performance der Gruppenphase.";
+}
+
+function resetUniligaSummary(phase) {
+    dom.summaryTeamCount.textContent = "—";
+    dom.summaryUniligaPlayerCount.textContent = "—";
+    dom.summaryLeadingTeamLabel.textContent = phase === "playoffs" ? "Champion" : "Tabellenführer";
+    dom.summaryLeadingTeam.textContent = "—";
+    dom.summaryLeadingTeamPoints.textContent = phase === "playoffs" ? "Finale noch offen" : "aktuelle Punkte";
+    dom.summaryTopRating.textContent = "—";
+    dom.summaryTopPlayer.textContent = "bester Spieler";
+}
+
+function renderUniligaSummary(data, phase) {
     const teams = data.teams || [];
     const players = data.players || [];
     const leader = teams[0];
     const topPlayer = players[0];
+    const bracketMatches = (data.bracket?.rounds || []).flatMap((round) => round.matches || []);
+    const finishedMatches = bracketMatches.filter((match) => match.status === "FINISHED").length;
+    const champion = data.bracket?.champion;
 
     dom.summaryTeamCount.textContent = number.format(teams.length);
     dom.summaryUniligaPlayerCount.textContent = number.format(players.length);
-    dom.summaryLeadingTeam.textContent = leader?.name || "—";
-    dom.summaryLeadingTeamPoints.textContent = leader ? `${number.format(leader.points ?? 0)} Punkte` : "aktuelle Punkte";
+    dom.summaryLeadingTeamLabel.textContent = phase === "playoffs" ? "Champion" : "Tabellenführer";
+    dom.summaryLeadingTeam.textContent = phase === "playoffs"
+        ? champion?.name || "Noch offen"
+        : leader?.name || "—";
+    dom.summaryLeadingTeamPoints.textContent = phase === "playoffs"
+        ? `${number.format(finishedMatches)} von ${number.format(bracketMatches.length)} Spielen beendet`
+        : leader
+            ? `${number.format(leader.points ?? 0)} Punkte`
+            : "aktuelle Punkte";
     dom.summaryTopRating.textContent = topPlayer ? safeFixed(topPlayer.rating, 2) : "—";
     dom.summaryTopPlayer.textContent = topPlayer?.nickname || "bester Spieler";
 }
 
-function renderUniligaData(data) {
-    const teams = [...data.teams].sort((a, b) => {
-        const points = (b.points ?? 0) - (a.points ?? 0);
-        if (points !== 0) return points;
-        const wins = (b.matchWins ?? 0) - (a.matchWins ?? 0);
-        if (wins !== 0) return wins;
-        return (b.avgRating ?? 0) - (a.avgRating ?? 0);
-    });
-    const players = [...data.players].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-    const updated = formatDate(data.lastUpdated);
+function teamIconUrl(teamName, fallbackAvatar = null) {
+    const iconName = state.teamIconMap[teamName];
+    if (iconName) return `/uniliga_icons/${encodeURIComponent(iconName)}`;
+    return fallbackAvatar
+        ? safeUrl(fallbackAvatar, "/default_team_icon.png")
+        : "/default_team_icon.png";
+}
 
-    const teamRows = teams.map((team, index) => {
+function renderUniligaTeamTable(data, phase) {
+    const isPlayoffs = phase === "playoffs";
+    const teams = [...data.teams].sort((teamA, teamB) => {
+        if (!isPlayoffs) {
+            const points = (teamB.points ?? 0) - (teamA.points ?? 0);
+            if (points !== 0) return points;
+        }
+        const wins = (teamB.matchWins ?? 0) - (teamA.matchWins ?? 0);
+        if (wins !== 0) return wins;
+        return (teamB.avgRating ?? 0) - (teamA.avgRating ?? 0);
+    });
+    const rows = teams.map((team, index) => {
         const teamName = team.name || `Team ${index + 1}`;
-        const iconName = state.teamIconMap[teamName];
-        const iconUrl = iconName
-            ? `/uniliga_icons/${encodeURIComponent(iconName)}`
-            : "/default_team_icon.png";
-        const record = `${team.matchWins ?? 0}–${team.matchDraws ?? 0}–${team.matchLosses ?? 0}`;
+        const iconUrl = teamIconUrl(teamName);
+        const groupCells = `
+            <td><strong>${number.format(team.points ?? 0)}</strong></td>
+            <td>${team.matchWins ?? 0}–${team.matchDraws ?? 0}–${team.matchLosses ?? 0}</td>
+            <td class="${winRateClass(team.matchWinRate)}">${safeFixed(team.matchWinRate, 1, "%")}</td>
+        `;
+        const playoffCells = `
+            <td><strong>${number.format(team.matchWins ?? 0)}</strong></td>
+            <td>${number.format(team.matchLosses ?? 0)}</td>
+            <td>${team.mapWins ?? 0}–${team.mapLosses ?? 0}</td>
+        `;
+
         return `
             <tr>
                 <td class="${index < 3 ? "table-rank-top" : ""}">${index + 1}</td>
@@ -850,15 +909,47 @@ function renderUniligaData(data) {
                     </span>
                 </td>
                 <td>${number.format(team.matchesPlayed ?? 0)}</td>
-                <td><strong>${number.format(team.points ?? 0)}</strong></td>
-                <td>${record}</td>
-                <td class="${winRateClass(team.matchWinRate)}">${safeFixed(team.matchWinRate, 1, "%")}</td>
+                ${isPlayoffs ? playoffCells : groupCells}
                 <td>${safeFixed(team.avgRating, 2)}</td>
             </tr>
         `;
     }).join("");
 
-    const playerRows = players.map((player, index) => {
+    return `
+        <section class="uniliga-panel">
+            <header class="uniliga-panel-header">
+                <div>
+                    <h2>${isPlayoffs ? "Playoff-Bilanz" : "Team Standings"}</h2>
+                    <p>${isPlayoffs ? "Siege, Maps und Teamform" : "Punkte, Bilanz und Teamform"}</p>
+                </div>
+                <span class="panel-status">${teams.length} Teams</span>
+            </header>
+            <div class="table-wrap">
+                <table class="stats-table">
+                    <caption class="sr-only">Uniliga Team Rangliste</caption>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Team</th>
+                            <th>Sp.</th>
+                            ${isPlayoffs
+                                ? "<th>S</th><th>N</th><th>Maps</th>"
+                                : "<th>Pkt.</th><th>S–U–N</th><th>WR</th>"}
+                            <th>Rating</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </section>
+    `;
+}
+
+function renderUniligaPlayerTable(data) {
+    const players = [...data.players].sort((playerA, playerB) =>
+        (playerB.rating ?? 0) - (playerA.rating ?? 0)
+    );
+    const rows = players.map((player, index) => {
         const avatar = escapeHtml(safeUrl(player.avatar, "/default_avatar.png"));
         return `
             <tr>
@@ -879,35 +970,7 @@ function renderUniligaData(data) {
         `;
     }).join("");
 
-    dom.uniligaArea.innerHTML = `
-        <section class="uniliga-panel">
-            <header class="uniliga-panel-header">
-                <div>
-                    <h2>Team Standings</h2>
-                    <p>Punkte, Bilanz und Teamform</p>
-                </div>
-                <span class="panel-status">${teams.length} Teams</span>
-            </header>
-            <div class="table-wrap">
-                <table class="stats-table">
-                    <caption class="sr-only">Uniliga Team Rangliste</caption>
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Team</th>
-                            <th>Sp.</th>
-                            <th>Pkt.</th>
-                            <th>S–U–N</th>
-                            <th>WR</th>
-                            <th>Rating</th>
-                        </tr>
-                    </thead>
-                    <tbody>${teamRows}</tbody>
-                </table>
-            </div>
-            <div class="last-updated">${updated ? `Stand ${updated} Uhr` : "Aktuelle Championship-Daten"}</div>
-        </section>
-
+    return `
         <section class="uniliga-panel">
             <header class="uniliga-panel-header">
                 <div>
@@ -931,25 +994,155 @@ function renderUniligaData(data) {
                             <th>WR</th>
                         </tr>
                     </thead>
-                    <tbody>${playerRows}</tbody>
+                    <tbody>${rows}</tbody>
                 </table>
             </div>
-            <div class="last-updated">${updated ? `Stand ${updated} Uhr` : "Aktuelle Championship-Daten"}</div>
         </section>
     `;
 }
 
-async function loadUniligaView() {
-    if (state.uniligaData || state.uniligaLoading) return;
+function bracketStatus(status) {
+    const statuses = {
+        FINISHED: { label: "Beendet", className: "is-finished" },
+        ONGOING: { label: "Live", className: "is-live" },
+        READY: { label: "Bereit", className: "is-upcoming" },
+        SCHEDULED: { label: "Geplant", className: "is-upcoming" },
+        UPCOMING: { label: "Geplant", className: "is-upcoming" },
+        CANCELLED: { label: "Abgesagt", className: "is-cancelled" }
+    };
+    return statuses[status] || { label: "Offen", className: "is-upcoming" };
+}
 
-    state.uniligaLoading = true;
+function renderPlayoffBracket(data) {
+    const rounds = Array.isArray(data.bracket?.rounds) ? data.bracket.rounds : [];
+    const totalMatches = rounds.reduce((sum, round) => sum + (round.matches?.length || 0), 0);
+
+    if (rounds.length === 0) {
+        return `
+            <section class="uniliga-panel uniliga-panel-wide">
+                <header class="uniliga-panel-header">
+                    <div>
+                        <h2>Playoff-Bracket</h2>
+                        <p>Der Turnierbaum wird eingeblendet, sobald FACEIT Matches veröffentlicht.</p>
+                    </div>
+                    <span class="panel-status">Noch offen</span>
+                </header>
+                <div class="bracket-empty">Noch keine Playoff-Paarungen verfügbar.</div>
+            </section>
+        `;
+    }
+
+    const roundColumns = rounds.map((round) => {
+        const matches = (round.matches || []).map((match) => {
+            const status = bracketStatus(match.status);
+            const date = formatDate(match.scheduledAt || match.finishedAt);
+            const matchUrl = `https://www.faceit.com/de/cs2/room/${encodeURIComponent(match.matchId)}`;
+            const teams = (match.teams || []).map((team) => {
+                const teamName = team.name || "TBD";
+                const iconUrl = teamIconUrl(teamName, team.avatar);
+                return `
+                    <div class="bracket-team ${team.winner ? "is-winner" : ""}">
+                        <span class="bracket-team-identity">
+                            <img src="${escapeHtml(iconUrl)}" alt="" loading="lazy" onerror="this.src='/default_team_icon.png'">
+                            <span>${escapeHtml(teamName)}</span>
+                        </span>
+                        <strong>${team.score ?? "–"}</strong>
+                    </div>
+                `;
+            }).join("");
+
+            return `
+                <article class="bracket-match">
+                    <div class="bracket-match-meta">
+                        <span class="bracket-status ${status.className}">${status.label}</span>
+                        <span>${match.bestOf ? `Bo${number.format(match.bestOf)}` : ""}</span>
+                    </div>
+                    <div class="bracket-teams">${teams}</div>
+                    <a class="bracket-match-link" href="${matchUrl}" target="_blank" rel="noreferrer">
+                        ${date ? `${escapeHtml(date)} Uhr` : "Match auf FACEIT"}
+                    </a>
+                </article>
+            `;
+        }).join("");
+
+        return `
+            <section class="bracket-round" aria-label="${escapeHtml(round.label)}">
+                <header>
+                    <span>Runde ${escapeHtml(round.round)}</span>
+                    <h3>${escapeHtml(round.label)}</h3>
+                </header>
+                <div class="bracket-round-matches">${matches}</div>
+            </section>
+        `;
+    }).join("");
+
+    return `
+        <section class="uniliga-panel uniliga-panel-wide bracket-panel">
+            <header class="uniliga-panel-header">
+                <div>
+                    <h2>Playoff-Bracket</h2>
+                    <p>Der echte K.-o.-Turnierbaum der Championship</p>
+                </div>
+                <span class="panel-status">${number.format(totalMatches)} Matches</span>
+            </header>
+            <div class="bracket-scroll">
+                <div class="playoff-bracket">${roundColumns}</div>
+            </div>
+        </section>
+    `;
+}
+
+function renderUniligaData(data, phase) {
+    const updated = formatDate(data.lastUpdated);
+    dom.uniligaArea.innerHTML = `
+        ${phase === "playoffs" ? renderPlayoffBracket(data) : ""}
+        ${renderUniligaTeamTable(data, phase)}
+        ${renderUniligaPlayerTable(data)}
+        <div class="uniliga-data-timestamp">
+            ${updated ? `Stand ${updated} Uhr` : "Aktuelle Championship-Daten"}
+        </div>
+    `;
+}
+
+function showUniligaPhase(data, phase) {
+    dom.uniligaChampionshipTitle.textContent =
+        typeof data.championshipName === "string" && data.championshipName.trim()
+            ? data.championshipName.trim()
+            : `Uniliga CS2 · ${phase === "playoffs" ? "Playoffs" : "Gruppenphase"}`;
+    renderUniligaSummary(data, phase);
+    renderUniligaData(data, phase);
+    const updated = formatDate(data.lastUpdated);
+    setStatus(
+        dom.uniligaUpdated,
+        updated ? `Stand ${updated} Uhr` : "Gerade synchronisiert",
+        "ready"
+    );
+}
+
+async function loadUniligaPhase(phase) {
+    const cachedData = state.uniligaData[phase];
+    if (cachedData) {
+        dom.uniligaLoading.hidden = true;
+        dom.uniligaError.hidden = true;
+        dom.uniligaArea.setAttribute("aria-busy", "false");
+        showUniligaPhase(cachedData, phase);
+        return;
+    }
+    if (state.uniligaLoading.has(phase)) return;
+
+    state.uniligaLoading.add(phase);
     dom.uniligaLoading.hidden = false;
     dom.uniligaError.hidden = true;
+    dom.uniligaArea.replaceChildren();
+    dom.uniligaArea.setAttribute("aria-busy", "true");
+    dom.uniligaChampionshipTitle.textContent =
+        phase === "playoffs" ? "Uniliga Liga 1 Playoffs" : "Uniliga Liga 1 Gruppenphase";
+    resetUniligaSummary(phase);
     setStatus(dom.uniligaUpdated, "Daten werden synchronisiert", "loading");
 
     try {
         const [response] = await Promise.all([
-            fetch("/api/uniliga-stats", {
+            fetch(`/api/uniliga-stats?phase=${encodeURIComponent(phase)}`, {
                 headers: { Accept: "application/json" }
             }),
             loadTeamIconMap()
@@ -961,28 +1154,38 @@ async function loadUniligaView() {
         if (!Array.isArray(data?.teams) || !Array.isArray(data?.players)) {
             throw new Error("Ungültiges Datenformat");
         }
+        if (phase === "playoffs" && !Array.isArray(data?.bracket?.rounds)) {
+            throw new Error("Playoff-Bracket fehlt");
+        }
 
-        state.uniligaData = data;
-        dom.uniligaChampionshipTitle.textContent =
-            typeof data.championshipName === "string" && data.championshipName.trim()
-                ? data.championshipName.trim()
-                : "Uniliga CS2";
-        renderUniligaSummary(data);
-        renderUniligaData(data);
-        const updated = formatDate(data.lastUpdated);
-        setStatus(
-            dom.uniligaUpdated,
-            updated ? `Stand ${updated} Uhr` : "Gerade synchronisiert",
-            "ready"
-        );
+        state.uniligaData[phase] = data;
+        if (state.uniligaPhase === phase) {
+            showUniligaPhase(data, phase);
+        }
     } catch (error) {
-        dom.uniligaError.textContent = `Uniliga-Daten konnten nicht geladen werden: ${error.message}`;
-        dom.uniligaError.hidden = false;
-        setStatus(dom.uniligaUpdated, "Synchronisierung fehlgeschlagen", "error");
+        if (state.uniligaPhase === phase) {
+            dom.uniligaError.textContent = `Uniliga-Daten konnten nicht geladen werden: ${error.message}`;
+            dom.uniligaError.hidden = false;
+            setStatus(dom.uniligaUpdated, "Synchronisierung fehlgeschlagen", "error");
+        }
     } finally {
-        state.uniligaLoading = false;
-        dom.uniligaLoading.hidden = true;
+        state.uniligaLoading.delete(phase);
+        if (state.uniligaPhase === phase) {
+            dom.uniligaLoading.hidden = true;
+            dom.uniligaArea.setAttribute("aria-busy", "false");
+        }
     }
+}
+
+function selectUniligaPhase(phase) {
+    if (!["groups", "playoffs"].includes(phase)) return;
+    state.uniligaPhase = phase;
+    setUniligaPhaseControls(phase);
+    loadUniligaPhase(phase);
+}
+
+function loadUniligaView() {
+    selectUniligaPhase(state.uniligaPhase);
 }
 
 function setSortMode(mode) {
@@ -1039,6 +1242,20 @@ function bindEvents() {
 
     dom.sortElo.addEventListener("click", () => setSortMode("elo"));
     dom.sortWorth.addEventListener("click", () => setSortMode("worth"));
+
+    dom.uniligaPhaseButtons.forEach((button, index) => {
+        button.addEventListener("click", () => selectUniligaPhase(button.dataset.phase));
+        button.addEventListener("keydown", (event) => {
+            if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+            event.preventDefault();
+            const direction = event.key === "ArrowRight" ? 1 : -1;
+            const nextIndex = (index + direction + dom.uniligaPhaseButtons.length)
+                % dom.uniligaPhaseButtons.length;
+            const nextButton = dom.uniligaPhaseButtons[nextIndex];
+            selectUniligaPhase(nextButton.dataset.phase);
+            nextButton.focus();
+        });
+    });
 
     dom.playerSearch.addEventListener("input", (event) => {
         state.search = event.currentTarget.value;
