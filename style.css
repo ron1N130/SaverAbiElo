@@ -1301,6 +1301,50 @@ img {
     grid-column: 1 / -1;
 }
 
+.bracket-stage + .bracket-stage {
+    border-top: 1px solid var(--line);
+}
+
+.bracket-stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.015);
+    padding: 0.85rem 1.15rem;
+}
+
+.bracket-stage-header span {
+    color: var(--muted);
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.bracket-stage-header h3 {
+    margin: 0.18rem 0 0;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    letter-spacing: -0.025em;
+}
+
+.bracket-stage-header small {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.32rem 0.52rem;
+    color: var(--muted);
+    font-size: 0.6rem;
+    font-weight: 700;
+}
+
+.bracket-stage.is-grand-final {
+    background:
+        radial-gradient(circle at 15% 50%, rgba(255, 95, 59, 0.1), transparent 34%),
+        rgba(255, 255, 255, 0.008);
+}
+
 .bracket-scroll {
     overflow-x: auto;
     padding: 0.5rem 0;
@@ -1340,7 +1384,7 @@ img {
     text-transform: uppercase;
 }
 
-.bracket-round > header h3 {
+.bracket-round > header h4 {
     margin: 0.2rem 0 0;
     font-family: var(--font-display);
     font-size: 1rem;
@@ -1353,6 +1397,10 @@ img {
     flex-direction: column;
     justify-content: space-around;
     gap: 1.1rem;
+}
+
+.bracket-stage.is-grand-final .bracket-round {
+    min-height: 250px;
 }
 
 .bracket-match {

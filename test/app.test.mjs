@@ -147,7 +147,7 @@ const uniligaPlayoffsFixture = {
         winRate: 100
     }],
     bracket: {
-        format: "single-elimination",
+        format: "double-elimination",
         champion: {
             id: "team-1",
             name: "AIX",
@@ -156,9 +156,9 @@ const uniligaPlayoffsFixture = {
         },
         rounds: [{
             round: "1",
-            label: "Halbfinale",
+            label: "Upper Finale",
             matches: [{
-                matchId: "1-semi-final",
+                matchId: "1-upper-final",
                 round: 1,
                 status: "FINISHED",
                 bestOf: 3,
@@ -170,11 +170,26 @@ const uniligaPlayoffsFixture = {
                 winnerId: "team-1"
             }]
         }, {
-            round: "2",
-            label: "Finale",
+            round: "1",
+            label: "Lower Finale",
+            matches: [{
+                matchId: "1-lower-final",
+                round: 1,
+                status: "FINISHED",
+                bestOf: 3,
+                scheduledAt: "2026-07-23T18:00:00.000Z",
+                teams: [
+                    { id: "team-2", name: "MUC", score: 2, winner: true },
+                    { id: "team-3", name: "OSGG", score: 0, winner: false }
+                ],
+                winnerId: "team-2"
+            }]
+        }, {
+            round: "1",
+            label: "Grand Final",
             matches: [{
                 matchId: "1-grand-final",
-                round: 2,
+                round: 1,
                 status: "FINISHED",
                 bestOf: 3,
                 scheduledAt: "2026-07-26T18:00:00.000Z",
@@ -183,6 +198,67 @@ const uniligaPlayoffsFixture = {
                     { id: "team-2", name: "MUC", score: 1, winner: false }
                 ],
                 winnerId: "team-1"
+            }]
+        }],
+        stages: [{
+            key: "upper",
+            label: "Upper Bracket",
+            group: "1",
+            rounds: [{
+                round: "1",
+                label: "Upper Finale",
+                matches: [{
+                    matchId: "1-upper-final",
+                    round: 1,
+                    status: "FINISHED",
+                    bestOf: 3,
+                    scheduledAt: "2026-07-20T18:00:00.000Z",
+                    teams: [
+                        { id: "team-1", name: "AIX", score: 2, winner: true },
+                        { id: "team-3", name: "OSGG", score: 0, winner: false }
+                    ],
+                    winnerId: "team-1"
+                }]
+            }]
+        }, {
+            key: "lower",
+            label: "Lower Bracket",
+            group: "2",
+            rounds: [{
+                round: "1",
+                label: "Lower Finale",
+                matches: [{
+                    matchId: "1-lower-final",
+                    round: 1,
+                    status: "FINISHED",
+                    bestOf: 3,
+                    scheduledAt: "2026-07-23T18:00:00.000Z",
+                    teams: [
+                        { id: "team-2", name: "MUC", score: 2, winner: true },
+                        { id: "team-3", name: "OSGG", score: 0, winner: false }
+                    ],
+                    winnerId: "team-2"
+                }]
+            }]
+        }, {
+            key: "grand-final",
+            label: "Grand Final",
+            group: "3",
+            rounds: [{
+                round: "1",
+                label: "Grand Final",
+                matches: [{
+                    matchId: "1-grand-final",
+                    round: 1,
+                    status: "FINISHED",
+                    bestOf: 3,
+                    scheduledAt: "2026-07-26T18:00:00.000Z",
+                    teams: [
+                        { id: "team-1", name: "AIX", score: 2, winner: true },
+                        { id: "team-2", name: "MUC", score: 1, winner: false }
+                    ],
+                    winnerId: "team-1"
+                }]
             }]
         }]
     }
@@ -279,7 +355,7 @@ test("uses the requested Uniliga championship and SaverAbi roster", async () => 
     assert.equal(players.includes("a5u"), false);
 });
 
-test("builds the playoff bracket from FACEIT rounds and results", () => {
+test("builds a single-elimination bracket from FACEIT rounds and results", () => {
     const bracket = buildPlayoffBracket([{
         match_id: "1-semi-a",
         round: 1,
@@ -313,6 +389,78 @@ test("builds the playoff bracket from FACEIT rounds and results", () => {
     assert.deepEqual(bracket.rounds.map((round) => round.label), ["Halbfinale", "Finale"]);
     assert.equal(bracket.rounds[0].matches[0].teams[0].winner, true);
     assert.equal(bracket.champion.name, "AIX");
+});
+
+test("separates FACEIT upper, lower, and grand-final groups", () => {
+    const createMatch = ({
+        id,
+        group,
+        round,
+        faction1,
+        faction2,
+        score1,
+        score2,
+        finishedAt
+    }) => ({
+        match_id: id,
+        group,
+        round,
+        status: "FINISHED",
+        best_of: group === 3 ? 5 : 3,
+        finished_at: finishedAt,
+        teams: {
+            faction1: { faction_id: faction1.toLowerCase(), name: faction1 },
+            faction2: { faction_id: faction2.toLowerCase(), name: faction2 }
+        },
+        results: {
+            winner: score1 > score2 ? "faction1" : "faction2",
+            score: { faction1: score1, faction2: score2 }
+        }
+    });
+    const bracket = buildPlayoffBracket([
+        createMatch({
+            id: "1-upper-final",
+            group: 1,
+            round: 3,
+            faction1: "AIX",
+            faction2: "ECO",
+            score1: 2,
+            score2: 0,
+            finishedAt: 1783017924
+        }),
+        createMatch({
+            id: "1-lower-final",
+            group: 2,
+            round: 4,
+            faction1: "RUB",
+            faction2: "ECO",
+            score1: 1,
+            score2: 2,
+            finishedAt: 1784233008
+        }),
+        createMatch({
+            id: "1-grand-final",
+            group: 3,
+            round: 1,
+            faction1: "ECO",
+            faction2: "AIX",
+            score1: 1,
+            score2: 3,
+            finishedAt: 1784836583
+        })
+    ]);
+
+    assert.equal(bracket.format, "double-elimination");
+    assert.deepEqual(
+        bracket.stages.map((stage) => stage.label),
+        ["Upper Bracket", "Lower Bracket", "Grand Final"]
+    );
+    assert.deepEqual(
+        bracket.stages.map((stage) => stage.rounds[0].label),
+        ["Upper Finale", "Lower Finale", "Grand Final"]
+    );
+    assert.equal(bracket.champion.name, "AIX");
+    assert.match(bracket.stages[2].rounds[0].matches[0].finishedAt, /^2026-/);
 });
 
 test("renders the leaderboard, filters players, and switches to Uniliga", async () => {
@@ -417,7 +565,7 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
 
     document.getElementById("uniliga-phase-playoffs").click();
     await waitFor(
-        () => document.querySelectorAll("#uniliga-data-area .bracket-round").length === 2,
+        () => document.querySelectorAll("#uniliga-data-area .bracket-round").length === 3,
         "Playoff bracket did not render"
     );
     assert.equal(
@@ -426,10 +574,14 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
     );
     assert.equal(document.getElementById("summary-leading-team-label").textContent, "Champion");
     assert.equal(document.getElementById("summary-leading-team").textContent, "AIX");
-    assert.equal(document.querySelectorAll(".bracket-match").length, 2);
+    assert.equal(document.querySelectorAll(".bracket-match").length, 3);
     assert.deepEqual(
-        [...document.querySelectorAll(".bracket-round h3")].map((heading) => heading.textContent),
-        ["Halbfinale", "Finale"]
+        [...document.querySelectorAll(".bracket-stage-header h3")].map((heading) => heading.textContent),
+        ["Upper Bracket", "Lower Bracket", "Grand Final"]
+    );
+    assert.deepEqual(
+        [...document.querySelectorAll(".bracket-round h4")].map((heading) => heading.textContent),
+        ["Upper Finale", "Lower Finale", "Grand Final"]
     );
 
     dom.window.close();

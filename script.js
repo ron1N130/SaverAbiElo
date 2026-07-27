@@ -150,7 +150,15 @@ function formatSigned(value, digits = 2) {
 
 function formatDate(value) {
     if (!value) return null;
-    const date = new Date(value);
+    const isNumericTimestamp =
+        typeof value === "number"
+        || (typeof value === "string" && /^\d+(?:\.\d+)?$/.test(value.trim()));
+    const numericTimestamp = isNumericTimestamp ? Number(value) : null;
+    const normalizedValue = Number.isFinite(numericTimestamp)
+        && Math.abs(numericTimestamp) < 1e12
+        ? numericTimestamp * 1000
+        : value;
+    const date = new Date(normalizedValue);
     if (Number.isNaN(date.getTime())) return null;
     return date.toLocaleString("de-DE", {
         day: "2-digit",
@@ -842,12 +850,26 @@ function resetUniligaSummary(phase) {
     dom.summaryTopPlayer.textContent = "bester Spieler";
 }
 
+function playoffBracketStages(data) {
+    const stages = data.bracket?.stages;
+    if (Array.isArray(stages) && stages.length > 0) {
+        return stages.filter((stage) => Array.isArray(stage?.rounds));
+    }
+
+    const rounds = data.bracket?.rounds;
+    return Array.isArray(rounds) && rounds.length > 0
+        ? [{ key: "main", label: null, rounds }]
+        : [];
+}
+
 function renderUniligaSummary(data, phase) {
     const teams = data.teams || [];
     const players = data.players || [];
     const leader = teams[0];
     const topPlayer = players[0];
-    const bracketMatches = (data.bracket?.rounds || []).flatMap((round) => round.matches || []);
+    const bracketMatches = playoffBracketStages(data)
+        .flatMap((stage) => stage.rounds)
+        .flatMap((round) => round.matches || []);
     const finishedMatches = bracketMatches.filter((match) => match.status === "FINISHED").length;
     const champion = data.bracket?.champion;
 
@@ -1014,7 +1036,8 @@ function bracketStatus(status) {
 }
 
 function renderPlayoffBracket(data) {
-    const rounds = Array.isArray(data.bracket?.rounds) ? data.bracket.rounds : [];
+    const stages = playoffBracketStages(data);
+    const rounds = stages.flatMap((stage) => stage.rounds);
     const totalMatches = rounds.reduce((sum, round) => sum + (round.matches?.length || 0), 0);
 
     if (rounds.length === 0) {
@@ -1032,46 +1055,69 @@ function renderPlayoffBracket(data) {
         `;
     }
 
-    const roundColumns = rounds.map((round) => {
-        const matches = (round.matches || []).map((match) => {
-            const status = bracketStatus(match.status);
-            const date = formatDate(match.scheduledAt || match.finishedAt);
-            const matchUrl = `https://www.faceit.com/de/cs2/room/${encodeURIComponent(match.matchId)}`;
-            const teams = (match.teams || []).map((team) => {
-                const teamName = team.name || "TBD";
-                const iconUrl = teamIconUrl(teamName, team.avatar);
+    const stageSections = stages.map((stage) => {
+        const roundColumns = stage.rounds.map((round) => {
+            const matches = (round.matches || []).map((match) => {
+                const status = bracketStatus(match.status);
+                const date = formatDate(match.scheduledAt || match.finishedAt);
+                const matchUrl = `https://www.faceit.com/de/cs2/room/${encodeURIComponent(match.matchId)}`;
+                const teams = (match.teams || []).map((team) => {
+                    const teamName = team.name || "TBD";
+                    const iconUrl = teamIconUrl(teamName, team.avatar);
+                    return `
+                        <div class="bracket-team ${team.winner ? "is-winner" : ""}">
+                            <span class="bracket-team-identity">
+                                <img src="${escapeHtml(iconUrl)}" alt="" loading="lazy" onerror="this.src='/default_team_icon.png'">
+                                <span>${escapeHtml(teamName)}</span>
+                            </span>
+                            <strong>${team.score ?? "–"}</strong>
+                        </div>
+                    `;
+                }).join("");
+
                 return `
-                    <div class="bracket-team ${team.winner ? "is-winner" : ""}">
-                        <span class="bracket-team-identity">
-                            <img src="${escapeHtml(iconUrl)}" alt="" loading="lazy" onerror="this.src='/default_team_icon.png'">
-                            <span>${escapeHtml(teamName)}</span>
-                        </span>
-                        <strong>${team.score ?? "–"}</strong>
-                    </div>
+                    <article class="bracket-match">
+                        <div class="bracket-match-meta">
+                            <span class="bracket-status ${status.className}">${status.label}</span>
+                            <span>${match.bestOf ? `Bo${number.format(match.bestOf)}` : ""}</span>
+                        </div>
+                        <div class="bracket-teams">${teams}</div>
+                        <a class="bracket-match-link" href="${matchUrl}" target="_blank" rel="noreferrer">
+                            ${date ? `${escapeHtml(date)} Uhr` : "Match auf FACEIT"}
+                        </a>
+                    </article>
                 `;
             }).join("");
 
             return `
-                <article class="bracket-match">
-                    <div class="bracket-match-meta">
-                        <span class="bracket-status ${status.className}">${status.label}</span>
-                        <span>${match.bestOf ? `Bo${number.format(match.bestOf)}` : ""}</span>
-                    </div>
-                    <div class="bracket-teams">${teams}</div>
-                    <a class="bracket-match-link" href="${matchUrl}" target="_blank" rel="noreferrer">
-                        ${date ? `${escapeHtml(date)} Uhr` : "Match auf FACEIT"}
-                    </a>
-                </article>
+                <section class="bracket-round" aria-label="${escapeHtml(round.label)}">
+                    <header>
+                        <span>Runde ${escapeHtml(round.round)}</span>
+                        <h4>${escapeHtml(round.label)}</h4>
+                    </header>
+                    <div class="bracket-round-matches">${matches}</div>
+                </section>
             `;
         }).join("");
 
-        return `
-            <section class="bracket-round" aria-label="${escapeHtml(round.label)}">
-                <header>
-                    <span>Runde ${escapeHtml(round.round)}</span>
-                    <h3>${escapeHtml(round.label)}</h3>
+        const stageHeader = stage.label
+            ? `
+                <header class="bracket-stage-header">
+                    <div>
+                        <span>${stage.key === "grand-final" ? "Championship Match" : "Double Elimination"}</span>
+                        <h3>${escapeHtml(stage.label)}</h3>
+                    </div>
+                    <small>${number.format(stage.rounds.length)} ${stage.rounds.length === 1 ? "Runde" : "Runden"}</small>
                 </header>
-                <div class="bracket-round-matches">${matches}</div>
+            `
+            : "";
+
+        return `
+            <section class="bracket-stage ${stage.key === "grand-final" ? "is-grand-final" : ""}">
+                ${stageHeader}
+                <div class="bracket-scroll">
+                    <div class="playoff-bracket">${roundColumns}</div>
+                </div>
             </section>
         `;
     }).join("");
@@ -1081,13 +1127,13 @@ function renderPlayoffBracket(data) {
             <header class="uniliga-panel-header">
                 <div>
                     <h2>Playoff-Bracket</h2>
-                    <p>Der echte K.-o.-Turnierbaum der Championship</p>
+                    <p>${data.bracket?.format === "double-elimination"
+                        ? "Upper Bracket, Lower Bracket und Grand Final"
+                        : "Der echte K.-o.-Turnierbaum der Championship"}</p>
                 </div>
                 <span class="panel-status">${number.format(totalMatches)} Matches</span>
             </header>
-            <div class="bracket-scroll">
-                <div class="playoff-bracket">${roundColumns}</div>
-            </div>
+            ${stageSections}
         </section>
     `;
 }
@@ -1154,7 +1200,11 @@ async function loadUniligaPhase(phase) {
         if (!Array.isArray(data?.teams) || !Array.isArray(data?.players)) {
             throw new Error("Ungültiges Datenformat");
         }
-        if (phase === "playoffs" && !Array.isArray(data?.bracket?.rounds)) {
+        if (
+            phase === "playoffs"
+            && !Array.isArray(data?.bracket?.rounds)
+            && !Array.isArray(data?.bracket?.stages)
+        ) {
             throw new Error("Playoff-Bracket fehlt");
         }
 

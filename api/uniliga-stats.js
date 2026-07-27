@@ -12,7 +12,7 @@ const GROUP_STAGE_CHAMPIONSHIP_NAME =
 const GROUP_STAGE_CHAMPIONSHIP_ID =
     process.env.UNILIGA_GROUP_STAGE_ID || "0a49e9c4-808c-4172-bfcb-997c5982770e";
 const PLAYOFFS_CHAMPIONSHIP_ID = "4ee001a9-f6f3-4936-916b-798d3171cca8";
-const CACHE_VERSION = 15;
+const CACHE_VERSION = 16;
 const CACHE_TTL_SECONDS = 4 * 60 * 60;
 const API_DELAY = 500;
 const MATCH_DETAIL_BATCH_SIZE = 10;
@@ -191,6 +191,36 @@ function playoffRoundLabel(index, totalRounds, rawRound) {
     return labels[distanceFromFinal] || `Runde ${rawRound ?? index + 1}`;
 }
 
+function stageRoundLabel(stageKey, index, totalRounds, rawRound) {
+    const distanceFromFinal = totalRounds - index - 1;
+    if (stageKey === "grand-final") return "Grand Final";
+    if (stageKey === "upper") {
+        const labels = ["Upper Finale", "Upper Halbfinale", "Upper Viertelfinale", "Upper Achtelfinale"];
+        return labels[distanceFromFinal] || `Upper Runde ${rawRound ?? index + 1}`;
+    }
+    if (stageKey === "lower") {
+        if (distanceFromFinal === 0) return "Lower Finale";
+        if (distanceFromFinal === 1) return "Lower Halbfinale";
+        return `Lower Runde ${index + 1}`;
+    }
+    return playoffRoundLabel(index, totalRounds, rawRound);
+}
+
+function normalizeFaceitTimestamp(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) {
+        const milliseconds = Math.abs(numericValue) < 1e12
+            ? numericValue * 1000
+            : numericValue;
+        const date = new Date(milliseconds);
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function matchTeamEntries(match) {
     if (Array.isArray(match?.teams)) {
         return match.teams.map((team, index) => [`faction${index + 1}`, team]);
@@ -239,20 +269,17 @@ function normalizeBracketMatch(match) {
         group: match?.group || null,
         status: String(match?.status || "UNKNOWN").toUpperCase(),
         bestOf: Number(match?.best_of) || null,
-        scheduledAt: match?.scheduled_at || null,
-        finishedAt: match?.finished_at || null,
+        scheduledAt: normalizeFaceitTimestamp(match?.scheduled_at),
+        finishedAt: normalizeFaceitTimestamp(match?.finished_at),
         teams,
         winnerId: teams.find((team) => team.winner)?.id || null
     };
 }
 
-export function buildPlayoffBracket(matches) {
-    const normalizedMatches = (Array.isArray(matches) ? matches : [])
-        .map(normalizeBracketMatch)
-        .filter((match) => match.matchId);
+function buildStageRounds(matches, stageKey) {
     const roundMap = new Map();
 
-    for (const match of normalizedMatches) {
+    for (const match of matches) {
         const key = String(match.round ?? "1");
         if (!roundMap.has(key)) roundMap.set(key, []);
         roundMap.get(key).push(match);
@@ -260,19 +287,74 @@ export function buildPlayoffBracket(matches) {
 
     const groupedRounds = [...roundMap.entries()]
         .sort(([roundA], [roundB]) => roundSortValue(roundA) - roundSortValue(roundB));
-    const rounds = groupedRounds.map(([rawRound, roundMatches], index) => ({
+    return groupedRounds.map(([rawRound, roundMatches], index) => ({
         round: rawRound,
-        label: playoffRoundLabel(index, groupedRounds.length, rawRound),
+        label: stageRoundLabel(stageKey, index, groupedRounds.length, rawRound),
         matches: roundMatches.sort((matchA, matchB) =>
-            String(matchA.scheduledAt || "").localeCompare(String(matchB.scheduledAt || ""))
+            String(matchA.scheduledAt || matchA.finishedAt || "")
+                .localeCompare(String(matchB.scheduledAt || matchB.finishedAt || ""))
         )
     }));
-    const finalRound = rounds.at(-1);
-    const finalMatch = finalRound?.matches.find((match) => match.winnerId) || null;
+}
+
+function stageDefinition(group, hasMultipleGroups) {
+    if (!hasMultipleGroups) {
+        return { key: "main", label: "Playoff-Bracket" };
+    }
+
+    const definitions = {
+        "1": { key: "upper", label: "Upper Bracket" },
+        "2": { key: "lower", label: "Lower Bracket" },
+        "3": { key: "grand-final", label: "Grand Final" }
+    };
+    return definitions[String(group)] || {
+        key: `group-${group}`,
+        label: `Bracket ${group}`
+    };
+}
+
+export function buildPlayoffBracket(matches) {
+    const normalizedMatches = (Array.isArray(matches) ? matches : [])
+        .map(normalizeBracketMatch)
+        .filter((match) => match.matchId);
+    const groupMap = new Map();
+
+    for (const match of normalizedMatches) {
+        const group = String(match.group ?? "main");
+        if (!groupMap.has(group)) groupMap.set(group, []);
+        groupMap.get(group).push(match);
+    }
+
+    const groupedMatches = [...groupMap.entries()].sort(([groupA], [groupB]) => {
+        const numericA = Number(groupA);
+        const numericB = Number(groupB);
+        if (Number.isFinite(numericA) && Number.isFinite(numericB)) return numericA - numericB;
+        return groupA.localeCompare(groupB);
+    });
+    const hasMultipleGroups = groupedMatches.length > 1;
+    const stages = groupedMatches.map(([group, stageMatches]) => {
+        const definition = stageDefinition(group, hasMultipleGroups);
+        return {
+            ...definition,
+            group: group === "main" ? null : group,
+            rounds: buildStageRounds(stageMatches, definition.key)
+        };
+    });
+    const finalStage = stages.find((stage) => stage.key === "grand-final") || stages.at(-1);
+    const finalMatches = (finalStage?.rounds || [])
+        .flatMap((round) => round.matches)
+        .filter((match) => match.winnerId)
+        .sort((matchA, matchB) =>
+            String(matchA.scheduledAt || matchA.finishedAt || "")
+                .localeCompare(String(matchB.scheduledAt || matchB.finishedAt || ""))
+        );
+    const finalMatch = finalMatches.at(-1) || null;
     const champion = finalMatch?.teams.find((team) => team.winner) || null;
+    const rounds = stages.flatMap((stage) => stage.rounds);
 
     return {
-        format: "single-elimination",
+        format: hasMultipleGroups ? "double-elimination" : "single-elimination",
+        stages,
         rounds,
         champion
     };
