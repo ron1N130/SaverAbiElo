@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 import leetifyHandler from "../api/leetify-data.js";
-import { buildPlayoffBracket } from "../api/uniliga-stats.js";
+import { buildGroupStandings, buildPlayoffBracket } from "../api/uniliga-stats.js";
 
 const playerFixtures = {
     Alpha: {
@@ -87,13 +87,14 @@ const uniligaGroupsFixture = {
     teams: [{
         id: "team-1",
         name: "AIX",
+        standingPosition: 1,
         matchesPlayed: 3,
         matchWins: 3,
         matchDraws: 0,
         matchLosses: 0,
         matchWinRate: 100,
         avgRating: 1.2,
-        points: 6
+        points: 9
     }],
     players: [{
         nickname: "Alpha",
@@ -463,6 +464,305 @@ test("separates FACEIT upper, lower, and grand-final groups", () => {
     assert.match(bracket.stages[2].rounds[0].matches[0].finishedAt, /^2026-/);
 });
 
+test("orders the double-elimination bracket by its real match paths", () => {
+    const createMatch = ({
+        id,
+        group,
+        round,
+        firstId,
+        firstName,
+        secondId,
+        secondName,
+        firstScore,
+        secondScore,
+        bestOf = 3,
+        finishedAt
+    }) => ({
+        match_id: id,
+        group,
+        round,
+        status: "FINISHED",
+        best_of: bestOf,
+        finished_at: finishedAt,
+        teams: {
+            faction1: { faction_id: firstId, name: firstName },
+            faction2: { faction_id: secondId, name: secondName }
+        },
+        results: {
+            winner: firstScore > secondScore ? "faction1" : "faction2",
+            score: { faction1: firstScore, faction2: secondScore }
+        }
+    });
+    const data = [
+        createMatch({
+            id: "ub-2",
+            group: 1,
+            round: 1,
+            firstId: "dg",
+            firstName: "DG One",
+            secondId: "ued",
+            secondName: "UED Wolves",
+            firstScore: 2,
+            secondScore: 0,
+            finishedAt: 20
+        }),
+        createMatch({
+            id: "ub-4",
+            group: 1,
+            round: 1,
+            firstId: "muc",
+            firstName: "MUC University",
+            secondId: "rub",
+            secondName: "RUB Serpents S",
+            firstScore: 2,
+            secondScore: 0,
+            finishedAt: 21
+        }),
+        createMatch({
+            id: "ub-3",
+            group: 1,
+            round: 1,
+            firstId: "bye",
+            firstName: "Bye",
+            secondId: "aix",
+            secondName: "AIX",
+            firstScore: 0,
+            secondScore: 1,
+            finishedAt: 19
+        }),
+        createMatch({
+            id: "ub-1",
+            group: 1,
+            round: 1,
+            firstId: "bye",
+            firstName: "Bye",
+            secondId: "eco",
+            secondName: "eSports Cologne",
+            firstScore: 0,
+            secondScore: 1,
+            finishedAt: 18
+        }),
+        createMatch({
+            id: "ub-5",
+            group: 1,
+            round: 2,
+            firstId: "dg",
+            firstName: "DG One",
+            secondId: "eco",
+            secondName: "eSports Cologne",
+            firstScore: 0,
+            secondScore: 2,
+            finishedAt: 30
+        }),
+        createMatch({
+            id: "ub-6",
+            group: 1,
+            round: 2,
+            firstId: "aix",
+            firstName: "AIX",
+            secondId: "muc",
+            secondName: "MUC University",
+            firstScore: 2,
+            secondScore: 0,
+            finishedAt: 31
+        }),
+        createMatch({
+            id: "ub-7",
+            group: 1,
+            round: 3,
+            firstId: "eco",
+            firstName: "eSports Cologne",
+            secondId: "aix",
+            secondName: "AIX",
+            firstScore: 0,
+            secondScore: 2,
+            finishedAt: 40
+        }),
+        createMatch({
+            id: "lb-1",
+            group: 2,
+            round: 1,
+            firstId: "ued",
+            firstName: "UED Wolves",
+            secondId: "bye",
+            secondName: "Bye",
+            firstScore: 1,
+            secondScore: 0,
+            finishedAt: 22
+        }),
+        createMatch({
+            id: "lb-2",
+            group: 2,
+            round: 1,
+            firstId: "rub",
+            firstName: "RUB Serpents S",
+            secondId: "bye",
+            secondName: "Bye",
+            firstScore: 1,
+            secondScore: 0,
+            finishedAt: 23
+        }),
+        createMatch({
+            id: "lb-3",
+            group: 2,
+            round: 2,
+            firstId: "ued",
+            firstName: "UED Wolves",
+            secondId: "muc",
+            secondName: "MUC University",
+            firstScore: 2,
+            secondScore: 1,
+            finishedAt: 32
+        }),
+        createMatch({
+            id: "lb-4",
+            group: 2,
+            round: 2,
+            firstId: "dg",
+            firstName: "DG One",
+            secondId: "rub",
+            secondName: "RUB Serpents S",
+            firstScore: 0,
+            secondScore: 2,
+            finishedAt: 33
+        }),
+        createMatch({
+            id: "lb-5",
+            group: 2,
+            round: 3,
+            firstId: "rub",
+            firstName: "RUB Serpents S",
+            secondId: "ued",
+            secondName: "UED Wolves",
+            firstScore: 2,
+            secondScore: 0,
+            finishedAt: 41
+        }),
+        createMatch({
+            id: "lb-6",
+            group: 2,
+            round: 4,
+            firstId: "rub",
+            firstName: "RUB Serpents S",
+            secondId: "eco",
+            secondName: "eSports Cologne",
+            firstScore: 1,
+            secondScore: 2,
+            finishedAt: 50
+        }),
+        createMatch({
+            id: "final-1",
+            group: 3,
+            round: 1,
+            firstId: "aix",
+            firstName: "AIX",
+            secondId: "eco",
+            secondName: "eSports Cologne",
+            firstScore: 3,
+            secondScore: 1,
+            bestOf: 5,
+            finishedAt: 60
+        })
+    ];
+    const bracket = buildPlayoffBracket(data);
+    const [upper, lower, grandFinal] = bracket.stages;
+    const teamNames = (match) => match.teams.map((team) => team.name);
+
+    assert.deepEqual(
+        upper.rounds[0].matches.map(teamNames),
+        [
+            ["eSports Cologne", "Bye"],
+            ["DG One", "UED Wolves"],
+            ["AIX", "Bye"],
+            ["MUC University", "RUB Serpents S"]
+        ]
+    );
+    assert.deepEqual(
+        upper.rounds[1].matches.map(teamNames),
+        [
+            ["eSports Cologne", "DG One"],
+            ["AIX", "MUC University"]
+        ]
+    );
+    assert.deepEqual(
+        lower.rounds.map((round) => round.matches.map(teamNames)),
+        [
+            [["Bye", "UED Wolves"], ["Bye", "RUB Serpents S"]],
+            [["MUC University", "UED Wolves"], ["DG One", "RUB Serpents S"]],
+            [["UED Wolves", "RUB Serpents S"]],
+            [["eSports Cologne", "RUB Serpents S"]]
+        ]
+    );
+    assert.equal(grandFinal.rounds[0].matches[0].bestOf, 5);
+    assert.deepEqual(teamNames(grandFinal.rounds[0].matches[0]), ["AIX", "eSports Cologne"]);
+});
+
+test("uses official FACEIT group positions and three points per win", () => {
+    const matches = [{
+        match_id: "group-1",
+        status: "FINISHED",
+        teams: {
+            faction1: { faction_id: "eco", name: "eSports Cologne" },
+            faction2: { faction_id: "muc", name: "MUC University" }
+        },
+        results: {
+            winner: "faction1",
+            score: { faction1: 1, faction2: 0 }
+        }
+    }];
+    const ranking = {
+        items: [{
+            position: 1,
+            played: 9,
+            won: 8,
+            lost: 1,
+            draw: 0,
+            points: 24,
+            win_rate: 88.9,
+            team: { team_id: "eco", name: "eSports Cologne" }
+        }, {
+            position: 2,
+            played: 9,
+            won: 7,
+            lost: 2,
+            draw: 0,
+            points: 21,
+            win_rate: 77.8,
+            team: { team_id: "muc", name: "MUC University" }
+        }]
+    };
+    const standings = buildGroupStandings(matches, ranking);
+
+    assert.deepEqual(
+        standings.map((team) => ({
+            position: team.standingPosition,
+            name: team.name,
+            played: team.matchesPlayed,
+            won: team.matchWins,
+            lost: team.matchLosses,
+            points: team.points
+        })),
+        [{
+            position: 1,
+            name: "eSports Cologne",
+            played: 9,
+            won: 8,
+            lost: 1,
+            points: 24
+        }, {
+            position: 2,
+            name: "MUC University",
+            played: 9,
+            won: 7,
+            lost: 2,
+            points: 21
+        }]
+    );
+
+    const fallback = buildGroupStandings(matches);
+    assert.equal(fallback[0].points, 3);
+});
+
 test("renders the leaderboard, filters players, and switches to Uniliga", async () => {
     const [html, script] = await Promise.all([
         readFile(new URL("../index.html", import.meta.url), "utf8"),
@@ -556,6 +856,8 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
 
     assert.equal(document.getElementById("summary-team-count").textContent, "1");
     assert.equal(document.getElementById("summary-leading-team").textContent, "AIX");
+    assert.equal(document.getElementById("summary-leading-team-points").textContent, "9 Punkte");
+    assert.match(document.getElementById("uniliga-phase-description").textContent, /3 Punkte/);
     assert.equal(
         document.getElementById("uniliga-championship-title").textContent,
         "Uniliga Liga 1 Sommerseason 2026"

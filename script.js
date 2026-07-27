@@ -36,7 +36,7 @@ const clubs = {
 const cacheKeys = {
     players: "saverabi:players:v3"
 };
-const UNILIGA_API_SCHEMA_VERSION = 16;
+const UNILIGA_API_SCHEMA_VERSION = 17;
 
 const state = {
     players: [],
@@ -835,7 +835,7 @@ function setUniligaPhaseControls(phase) {
     const isPlayoffs = phase === "playoffs";
     dom.uniligaPhaseDescription.textContent = isPlayoffs
         ? "K.-o.-Runden mit realen Match-Ergebnissen direkt von FACEIT."
-        : "Liga-Tabelle nach dem Uniliga-Punktesystem 2–1–0.";
+        : "Offizielle FACEIT-Tabelle · 3 Punkte pro Sieg.";
     dom.uniligaHeroCopy.textContent = isPlayoffs
         ? "Turnierbaum, Match-Ergebnisse und individuelle Performance der Playoffs."
         : "Tabelle, Bilanz und individuelle Performance der Gruppenphase.";
@@ -901,8 +901,14 @@ function renderUniligaTeamTable(data, phase) {
     const isPlayoffs = phase === "playoffs";
     const teams = [...data.teams].sort((teamA, teamB) => {
         if (!isPlayoffs) {
+            const positionA = teamA.standingPosition ?? Number.MAX_SAFE_INTEGER;
+            const positionB = teamB.standingPosition ?? Number.MAX_SAFE_INTEGER;
+            if (positionA !== positionB) return positionA - positionB;
             const points = (teamB.points ?? 0) - (teamA.points ?? 0);
             if (points !== 0) return points;
+            const differenceA = (teamA.matchWins ?? 0) - (teamA.matchLosses ?? 0);
+            const differenceB = (teamB.matchWins ?? 0) - (teamB.matchLosses ?? 0);
+            if (differenceA !== differenceB) return differenceB - differenceA;
         }
         const wins = (teamB.matchWins ?? 0) - (teamA.matchWins ?? 0);
         if (wins !== 0) return wins;
@@ -910,30 +916,36 @@ function renderUniligaTeamTable(data, phase) {
     });
     const rows = teams.map((team, index) => {
         const teamName = team.name || `Team ${index + 1}`;
-        const iconUrl = teamIconUrl(teamName);
-        const groupCells = `
-            <td><strong>${number.format(team.points ?? 0)}</strong></td>
-            <td>${team.matchWins ?? 0}–${team.matchDraws ?? 0}–${team.matchLosses ?? 0}</td>
-            <td class="${winRateClass(team.matchWinRate)}">${safeFixed(team.matchWinRate, 1, "%")}</td>
-        `;
-        const playoffCells = `
-            <td><strong>${number.format(team.matchWins ?? 0)}</strong></td>
-            <td>${number.format(team.matchLosses ?? 0)}</td>
-            <td>${team.mapWins ?? 0}–${team.mapLosses ?? 0}</td>
-        `;
+        const iconUrl = teamIconUrl(teamName, team.avatar);
+        const matchDifference = (team.matchWins ?? 0) - (team.matchLosses ?? 0);
+        const phaseCells = isPlayoffs
+            ? `
+                <td>${number.format(team.matchesPlayed ?? 0)}</td>
+                <td><strong>${number.format(team.matchWins ?? 0)}</strong></td>
+                <td>${number.format(team.matchLosses ?? 0)}</td>
+                <td>${team.mapWins ?? 0}–${team.mapLosses ?? 0}</td>
+                <td>${safeFixed(team.avgRating, 2)}</td>
+            `
+            : `
+                <td>${number.format(team.matchesPlayed ?? 0)}</td>
+                <td><strong>${number.format(team.matchWins ?? 0)}</strong></td>
+                <td>${number.format(team.matchLosses ?? 0)}</td>
+                <td class="${matchDifference > 0 ? "text-great" : matchDifference < 0 ? "text-bad" : ""}">
+                    ${matchDifference > 0 ? "+" : ""}${number.format(matchDifference)}
+                </td>
+                <td><strong>${number.format(team.points ?? 0)}</strong></td>
+            `;
 
         return `
             <tr>
-                <td class="${index < 3 ? "table-rank-top" : ""}">${index + 1}</td>
+                <td class="${index < 3 ? "table-rank-top" : ""}">${team.standingPosition ?? index + 1}</td>
                 <td>
                     <span class="table-identity">
                         <img src="${escapeHtml(iconUrl)}" alt="" loading="lazy" onerror="this.src='/default_team_icon.png'">
                         <span>${escapeHtml(teamName)}</span>
                     </span>
                 </td>
-                <td>${number.format(team.matchesPlayed ?? 0)}</td>
-                ${isPlayoffs ? playoffCells : groupCells}
-                <td>${safeFixed(team.avgRating, 2)}</td>
+                ${phaseCells}
             </tr>
         `;
     }).join("");
@@ -943,7 +955,7 @@ function renderUniligaTeamTable(data, phase) {
             <header class="uniliga-panel-header">
                 <div>
                     <h2>${isPlayoffs ? "Playoff-Bilanz" : "Team Standings"}</h2>
-                    <p>${isPlayoffs ? "Siege, Maps und Teamform" : "Punkte, Bilanz und Teamform"}</p>
+                    <p>${isPlayoffs ? "Siege, Maps und Teamform" : "Offizielle Platzierung der Gruppenphase"}</p>
                 </div>
                 <span class="panel-status">${teams.length} Teams</span>
             </header>
@@ -954,11 +966,9 @@ function renderUniligaTeamTable(data, phase) {
                         <tr>
                             <th>#</th>
                             <th>Team</th>
-                            <th>Sp.</th>
                             ${isPlayoffs
-                                ? "<th>S</th><th>N</th><th>Maps</th>"
-                                : "<th>Pkt.</th><th>S–U–N</th><th>WR</th>"}
-                            <th>Rating</th>
+                                ? "<th>Sp.</th><th>S</th><th>N</th><th>Maps</th><th>Rating</th>"
+                                : "<th>Sp.</th><th>S</th><th>N</th><th>+/−</th><th>Pkt.</th>"}
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>

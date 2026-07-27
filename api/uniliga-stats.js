@@ -12,7 +12,7 @@ const GROUP_STAGE_CHAMPIONSHIP_NAME =
 const GROUP_STAGE_CHAMPIONSHIP_ID =
     process.env.UNILIGA_GROUP_STAGE_ID || "0a49e9c4-808c-4172-bfcb-997c5982770e";
 const PLAYOFFS_CHAMPIONSHIP_ID = "4ee001a9-f6f3-4936-916b-798d3171cca8";
-const CACHE_VERSION = 16;
+const CACHE_VERSION = 17;
 const CACHE_TTL_SECONDS = 4 * 60 * 60;
 const CLIENT_CACHE_SECONDS = 5 * 60;
 const API_DELAY = 500;
@@ -174,6 +174,39 @@ async function fetchChampionshipMatches(championshipId, type) {
     return matches.slice(0, MAX_MATCHES_TO_FETCH);
 }
 
+async function fetchChampionshipGroupRanking(championshipId) {
+    const leaderboards = await fetchFaceitApi(
+        `/leaderboards/championships/${championshipId}?offset=0&limit=100`
+    );
+    const groups = [...new Set(
+        (leaderboards?.items || [])
+            .map((leaderboard) => leaderboard?.group)
+            .filter((group) => group !== null && group !== undefined && group !== "")
+            .map(Number)
+            .filter(Number.isFinite)
+    )];
+
+    if (groups.length === 0) groups.push(1);
+
+    const rankings = await Promise.all(groups.map(async (group) => {
+        const ranking = await fetchFaceitApi(
+            `/leaderboards/championships/${championshipId}/groups/${group}?offset=0&limit=100`
+        );
+        return {
+            group,
+            leaderboard: ranking?.leaderboard || null,
+            items: Array.isArray(ranking?.items) ? ranking.items : []
+        };
+    }));
+
+    return {
+        items: rankings.flatMap(({ group, items }) =>
+            items.map((item) => ({ ...item, group }))
+        ),
+        leaderboards: rankings.map(({ leaderboard }) => leaderboard).filter(Boolean)
+    };
+}
+
 function roundSortValue(round) {
     const numericRound = Number(round);
     if (Number.isFinite(numericRound)) return numericRound;
@@ -232,6 +265,14 @@ function matchTeamEntries(match) {
     return [];
 }
 
+function teamId(team) {
+    return team?.faction_id || team?.team_id || team?.id || null;
+}
+
+function isByeTeam(team) {
+    return String(team?.id || team?.name || "").trim().toLowerCase() === "bye";
+}
+
 function normalizeBracketMatch(match) {
     const entries = matchTeamEntries(match).slice(0, 2);
     while (entries.length < 2) {
@@ -241,7 +282,7 @@ function normalizeBracketMatch(match) {
     const winnerReference = match?.results?.winner ?? null;
     const score = match?.results?.score;
     const teams = entries.map(([slot, team], index) => {
-        const id = team?.faction_id || team?.team_id || team?.id || null;
+        const id = teamId(team);
         const rawScore = Array.isArray(score) ? score[index] : score?.[slot];
         const parsedScore = Number(rawScore);
 
@@ -277,6 +318,131 @@ function normalizeBracketMatch(match) {
     };
 }
 
+function matchDateValue(match) {
+    return String(match?.scheduledAt || match?.finishedAt || "");
+}
+
+function sortMatchesByDate(matches) {
+    return [...matches].sort((matchA, matchB) =>
+        matchDateValue(matchA).localeCompare(matchDateValue(matchB))
+    );
+}
+
+function matchHasBye(match) {
+    return (match?.teams || []).some(isByeTeam);
+}
+
+function reorderMatchTeams(match, preferredIds) {
+    const positions = new Map(preferredIds.map((id, index) => [id, index]));
+    match.teams = [...(match.teams || [])].sort((teamA, teamB) => {
+        const positionA = positions.get(teamA.id) ?? Number.MAX_SAFE_INTEGER;
+        const positionB = positions.get(teamB.id) ?? Number.MAX_SAFE_INTEGER;
+        return positionA - positionB;
+    });
+}
+
+function orderUpperBracketRounds(rounds) {
+    for (let roundIndex = rounds.length - 2; roundIndex >= 0; roundIndex -= 1) {
+        const previousMatches = rounds[roundIndex].matches;
+        const nextMatches = rounds[roundIndex + 1].matches;
+        const usedMatches = new Set();
+        const orderedPreviousMatches = [];
+
+        for (const nextMatch of nextMatches) {
+            const nextTeamPositions = new Map(
+                (nextMatch.teams || []).map((team, index) => [team.id, index])
+            );
+            const feeders = previousMatches
+                .filter((match) =>
+                    match.winnerId
+                    && nextTeamPositions.has(match.winnerId)
+                    && !usedMatches.has(match.matchId)
+                )
+                .sort((matchA, matchB) => {
+                    const byePriority = Number(matchHasBye(matchB)) - Number(matchHasBye(matchA));
+                    if (byePriority !== 0) return byePriority;
+                    return (nextTeamPositions.get(matchA.winnerId) ?? Number.MAX_SAFE_INTEGER)
+                        - (nextTeamPositions.get(matchB.winnerId) ?? Number.MAX_SAFE_INTEGER);
+                });
+
+            if (feeders.length > 0) {
+                reorderMatchTeams(nextMatch, feeders.map((match) => match.winnerId));
+                feeders.forEach((match) => {
+                    usedMatches.add(match.matchId);
+                    orderedPreviousMatches.push(match);
+                });
+            }
+        }
+
+        rounds[roundIndex].matches = [
+            ...orderedPreviousMatches,
+            ...previousMatches.filter((match) => !usedMatches.has(match.matchId))
+        ];
+    }
+
+    for (const round of rounds) {
+        for (const match of round.matches) {
+            if (matchHasBye(match)) {
+                match.teams = [...match.teams].sort((teamA, teamB) =>
+                    Number(isByeTeam(teamA)) - Number(isByeTeam(teamB))
+                );
+            }
+        }
+    }
+
+    return rounds;
+}
+
+function orderLowerBracketRounds(rounds) {
+    if (rounds.length === 0) return rounds;
+
+    for (const match of rounds[0].matches) {
+        if (matchHasBye(match)) {
+            match.teams = [...match.teams].sort((teamA, teamB) =>
+                Number(isByeTeam(teamB)) - Number(isByeTeam(teamA))
+            );
+        }
+    }
+
+    for (let roundIndex = 1; roundIndex < rounds.length; roundIndex += 1) {
+        const previousMatches = rounds[roundIndex - 1].matches;
+        const previousPositions = new Map(
+            previousMatches.map((match, index) => [match.winnerId, index])
+        );
+        const currentMatches = [...rounds[roundIndex].matches].sort((matchA, matchB) => {
+            const feederPosition = (match) => Math.min(
+                ...(match.teams || [])
+                    .map((team) => previousPositions.get(team.id))
+                    .filter(Number.isFinite),
+                Number.MAX_SAFE_INTEGER
+            );
+            return feederPosition(matchA) - feederPosition(matchB);
+        });
+
+        for (const match of currentMatches) {
+            const carriedWinners = previousMatches
+                .filter((previousMatch) =>
+                    previousMatch.winnerId
+                    && (match.teams || []).some((team) => team.id === previousMatch.winnerId)
+                )
+                .map((previousMatch) => previousMatch.winnerId);
+
+            if (carriedWinners.length >= 2) {
+                reorderMatchTeams(match, carriedWinners);
+            } else if (carriedWinners.length === 1) {
+                const newEntrants = match.teams
+                    .map((team) => team.id)
+                    .filter((id) => id !== carriedWinners[0]);
+                reorderMatchTeams(match, [...newEntrants, carriedWinners[0]]);
+            }
+        }
+
+        rounds[roundIndex].matches = currentMatches;
+    }
+
+    return rounds;
+}
+
 function buildStageRounds(matches, stageKey) {
     const roundMap = new Map();
 
@@ -288,14 +454,15 @@ function buildStageRounds(matches, stageKey) {
 
     const groupedRounds = [...roundMap.entries()]
         .sort(([roundA], [roundB]) => roundSortValue(roundA) - roundSortValue(roundB));
-    return groupedRounds.map(([rawRound, roundMatches], index) => ({
+    const rounds = groupedRounds.map(([rawRound, roundMatches], index) => ({
         round: rawRound,
         label: stageRoundLabel(stageKey, index, groupedRounds.length, rawRound),
-        matches: roundMatches.sort((matchA, matchB) =>
-            String(matchA.scheduledAt || matchA.finishedAt || "")
-                .localeCompare(String(matchB.scheduledAt || matchB.finishedAt || ""))
-        )
+        matches: sortMatchesByDate(roundMatches)
     }));
+
+    if (stageKey === "lower") return orderLowerBracketRounds(rounds);
+    if (stageKey === "upper" || stageKey === "main") return orderUpperBracketRounds(rounds);
+    return rounds;
 }
 
 function stageDefinition(group, hasMultipleGroups) {
@@ -361,9 +528,11 @@ export function buildPlayoffBracket(matches) {
     };
 }
 
-function newTeamStats(name = "TBD") {
+function newTeamStats(name = "TBD", avatar = null) {
     return {
         name,
+        avatar,
+        standingPosition: null,
         mapWins: 0,
         mapLosses: 0,
         mapsPlayed: 0,
@@ -376,29 +545,176 @@ function newTeamStats(name = "TBD") {
     };
 }
 
-function ensureTeam(teamStats, teamId, fallbackName = "TBD") {
-    if (!teamStats[teamId]) {
-        teamStats[teamId] = newTeamStats(teamInfoMap[teamId]?.name || fallbackName);
+function ensureTeam(teamStats, id, fallbackName = "TBD", fallbackAvatar = null) {
+    if (!teamStats[id]) {
+        const name =
+            teamInfoMap[id]?.name
+            || (fallbackName && fallbackName !== "TBD" ? fallbackName : "TBD");
+        teamStats[id] = newTeamStats(name, fallbackAvatar);
     }
-    if (teamStats[teamId].name === "TBD") {
-        teamStats[teamId].name = teamInfoMap[teamId]?.name || fallbackName;
+    if (teamStats[id].name === "TBD" && fallbackName && fallbackName !== "TBD") {
+        teamStats[id].name = fallbackName;
     }
-    return teamStats[teamId];
+    if (!teamStats[id].avatar && fallbackAvatar) {
+        teamStats[id].avatar = fallbackAvatar;
+    }
+    return teamStats[id];
 }
 
 function isFinishedMatch(match) {
     return ["FINISHED", "COMPLETED"].includes(String(match?.status || "").toUpperCase());
 }
 
-async function aggregateMatchStats(matches, phase) {
+function matchWinnerId(match, entries) {
+    const winnerReference = match?.results?.winner;
+    const winnerEntry = entries.find(([slot, team]) =>
+        winnerReference === slot || winnerReference === teamId(team)
+    );
+    if (winnerEntry) return teamId(winnerEntry[1]);
+
+    const score = match?.results?.score;
+    const scoredEntries = entries.map(([slot, team], index) => ({
+        id: teamId(team),
+        score: Number(Array.isArray(score) ? score[index] : score?.[slot])
+    })).filter((entry) => Number.isFinite(entry.score));
+
+    if (scoredEntries.length === 2 && scoredEntries[0].score !== scoredEntries[1].score) {
+        return scoredEntries.sort((entryA, entryB) => entryB.score - entryA.score)[0].id;
+    }
+    return null;
+}
+
+function rankingEntity(item) {
+    return item?.team || item?.player || item?.entity || {};
+}
+
+function numberOrNull(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function normalizeTeamName(name) {
+    return String(name || "").toLocaleLowerCase("de-DE").replace(/[^a-z0-9]+/g, "");
+}
+
+function applyOfficialGroupRanking(teamStats, rankingData) {
+    const items = Array.isArray(rankingData?.items) ? rankingData.items : [];
+
+    for (const item of items) {
+        const entity = rankingEntity(item);
+        const id =
+            entity?.team_id
+            || entity?.teamId
+            || entity?.id
+            || item?.team_id
+            || item?.teamId
+            || null;
+        const name = entity?.name || entity?.nickname || item?.name || null;
+        const matchingId = id && teamStats[id]
+            ? id
+            : Object.keys(teamStats).find((candidateId) =>
+                normalizeTeamName(teamStats[candidateId].name) === normalizeTeamName(name)
+            );
+        if (!matchingId) continue;
+
+        const team = ensureTeam(teamStats, matchingId, name, entity?.avatar || null);
+        const position = numberOrNull(item?.position);
+        const played = numberOrNull(item?.played);
+        const won = numberOrNull(item?.won);
+        const lost = numberOrNull(item?.lost);
+        const draw = numberOrNull(item?.draw);
+        const points = numberOrNull(item?.points);
+        const winRate = numberOrNull(item?.win_rate);
+
+        if (position !== null) team.standingPosition = position;
+        if (played !== null) team.matchesPlayed = played;
+        if (won !== null) team.matchWins = won;
+        if (lost !== null) team.matchLosses = lost;
+        if (draw !== null) team.matchDraws = draw;
+        if (points !== null) team.points = points;
+        if (winRate !== null) team.officialWinRate = winRate;
+    }
+}
+
+export function buildGroupStandings(matches, rankingData = null) {
+    const teamStats = {};
+
+    for (const match of Array.isArray(matches) ? matches : []) {
+        const entries = matchTeamEntries(match)
+            .filter(([, team]) => teamId(team) && !isByeTeam({
+                id: teamId(team),
+                name: team?.name
+            }));
+
+        for (const [, team] of entries) {
+            ensureTeam(teamStats, teamId(team), team?.name, team?.avatar || null);
+        }
+
+        if (!isFinishedMatch(match) || entries.length !== 2) continue;
+        const [firstTeam, secondTeam] = entries.map(([, team]) =>
+            ensureTeam(teamStats, teamId(team), team?.name, team?.avatar || null)
+        );
+        const winnerId = matchWinnerId(match, entries);
+
+        firstTeam.matchesPlayed += 1;
+        secondTeam.matchesPlayed += 1;
+        if (winnerId === teamId(entries[0][1])) {
+            firstTeam.matchWins += 1;
+            secondTeam.matchLosses += 1;
+            firstTeam.points += 3;
+        } else if (winnerId === teamId(entries[1][1])) {
+            secondTeam.matchWins += 1;
+            firstTeam.matchLosses += 1;
+            secondTeam.points += 3;
+        } else {
+            firstTeam.matchDraws += 1;
+            secondTeam.matchDraws += 1;
+            firstTeam.points += 1;
+            secondTeam.points += 1;
+        }
+    }
+
+    applyOfficialGroupRanking(teamStats, rankingData);
+
+    return Object.entries(teamStats).map(([id, team]) => {
+        const { players: _players, ...teamData } = team;
+        return { id, ...teamData };
+    }).sort((teamA, teamB) => {
+        const positionA = teamA.standingPosition ?? Number.MAX_SAFE_INTEGER;
+        const positionB = teamB.standingPosition ?? Number.MAX_SAFE_INTEGER;
+        if (positionA !== positionB) return positionA - positionB;
+        if (teamA.points !== teamB.points) return teamB.points - teamA.points;
+        const differenceA = teamA.matchWins - teamA.matchLosses;
+        const differenceB = teamB.matchWins - teamB.matchLosses;
+        if (differenceA !== differenceB) return differenceB - differenceA;
+        return teamA.name.localeCompare(teamB.name, "de");
+    });
+}
+
+async function aggregateMatchStats(matches, phase, groupRanking = null) {
     const playerMatchStats = {};
     const playerDetails = {};
-    const teamStats = {};
-    const matchTeamNames = {};
+    const teamStats = phase === "groups"
+        ? Object.fromEntries(buildGroupStandings(matches, groupRanking).map((team) => [
+            team.id,
+            {
+                ...newTeamStats(team.name, team.avatar),
+                ...team,
+                players: new Set()
+            }
+        ]))
+        : {};
+    const matchTeamDetails = {};
     for (const match of matches) {
         for (const [, team] of matchTeamEntries(match)) {
-            const teamId = team?.faction_id || team?.team_id || team?.id;
-            if (teamId && team?.name) matchTeamNames[teamId] = team.name;
+            const id = teamId(team);
+            if (id && team?.name) {
+                matchTeamDetails[id] = {
+                    name: team.name,
+                    avatar: team.avatar || null
+                };
+            }
         }
     }
     const matchesForStats = phase === "playoffs"
@@ -420,8 +736,18 @@ async function aggregateMatchStats(matches, phase) {
                 const teamId2 = maps[0].teams[1]?.team_id;
                 if (!teamId1 || !teamId2) return;
 
-                const team1 = ensureTeam(teamStats, teamId1, matchTeamNames[teamId1]);
-                const team2 = ensureTeam(teamStats, teamId2, matchTeamNames[teamId2]);
+                const team1 = ensureTeam(
+                    teamStats,
+                    teamId1,
+                    matchTeamDetails[teamId1]?.name,
+                    matchTeamDetails[teamId1]?.avatar
+                );
+                const team2 = ensureTeam(
+                    teamStats,
+                    teamId2,
+                    matchTeamDetails[teamId2]?.name,
+                    matchTeamDetails[teamId2]?.avatar
+                );
                 let team1MapWins = 0;
                 let team2MapWins = 0;
 
@@ -431,22 +757,20 @@ async function aggregateMatchStats(matches, phase) {
                     if (winner === teamId2) team2MapWins += 1;
                 }
 
-                team1.matchesPlayed += 1;
-                team2.matchesPlayed += 1;
-                if (team1MapWins > team2MapWins) {
-                    team1.matchWins += 1;
-                    team2.matchLosses += 1;
-                    team1.points += phase === "groups" ? 2 : 1;
-                } else if (team2MapWins > team1MapWins) {
-                    team2.matchWins += 1;
-                    team1.matchLosses += 1;
-                    team2.points += phase === "groups" ? 2 : 1;
-                } else {
-                    team1.matchDraws += 1;
-                    team2.matchDraws += 1;
-                    if (phase === "groups") {
+                if (phase !== "groups") {
+                    team1.matchesPlayed += 1;
+                    team2.matchesPlayed += 1;
+                    if (team1MapWins > team2MapWins) {
+                        team1.matchWins += 1;
+                        team2.matchLosses += 1;
                         team1.points += 1;
+                    } else if (team2MapWins > team1MapWins) {
+                        team2.matchWins += 1;
+                        team1.matchLosses += 1;
                         team2.points += 1;
+                    } else {
+                        team1.matchDraws += 1;
+                        team2.matchDraws += 1;
                     }
                 }
 
@@ -462,7 +786,12 @@ async function aggregateMatchStats(matches, phase) {
                         const teamId = team?.team_id;
                         if (!teamId) continue;
 
-                        const currentTeam = ensureTeam(teamStats, teamId, matchTeamNames[teamId]);
+                        const currentTeam = ensureTeam(
+                            teamStats,
+                            teamId,
+                            matchTeamDetails[teamId]?.name,
+                            matchTeamDetails[teamId]?.avatar
+                        );
                         currentTeam.mapsPlayed += 1;
                         if (winningTeamId === teamId) currentTeam.mapWins += 1;
                         else if (winningTeamId) currentTeam.mapLosses += 1;
@@ -528,6 +857,8 @@ async function aggregateMatchStats(matches, phase) {
         return {
             id: teamId,
             name: team.name,
+            avatar: team.avatar,
+            standingPosition: team.standingPosition,
             mapsPlayed: team.mapsPlayed,
             mapWins: team.mapWins,
             mapLosses: team.mapLosses,
@@ -538,16 +869,24 @@ async function aggregateMatchStats(matches, phase) {
             matchWins: team.matchWins,
             matchLosses: team.matchLosses,
             matchDraws: team.matchDraws,
-            matchWinRate: team.matchesPlayed > 0
-                ? +((team.matchWins / team.matchesPlayed) * 100).toFixed(1)
-                : 0,
+            matchWinRate: team.officialWinRate
+                ?? (team.matchesPlayed > 0
+                    ? +((team.matchWins / team.matchesPlayed) * 100).toFixed(1)
+                    : 0),
             avgRating: ratedPlayers > 0 ? +(ratingTotal / ratedPlayers).toFixed(2) : 0,
             points: team.points
         };
     }).sort((teamA, teamB) => {
         if (phase === "groups") {
+            const positionA = teamA.standingPosition ?? Number.MAX_SAFE_INTEGER;
+            const positionB = teamB.standingPosition ?? Number.MAX_SAFE_INTEGER;
+            if (positionA !== positionB) return positionA - positionB;
             const points = teamB.points - teamA.points;
             if (points !== 0) return points;
+            const matchDifference =
+                (teamB.matchWins - teamB.matchLosses)
+                - (teamA.matchWins - teamA.matchLosses);
+            if (matchDifference !== 0) return matchDifference;
         }
         const wins = teamB.matchWins - teamA.matchWins;
         if (wins !== 0) return wins;
@@ -589,13 +928,17 @@ export default async function handler(req, res) {
     try {
         const phaseConfig = PHASES[phase];
         const championshipId = phaseConfig.championshipId;
-        const championshipPromise = fetchFaceitApi(`/championships/${championshipId}`)
-            .catch(() => null);
-        const matches = await fetchChampionshipMatches(championshipId, phaseConfig.matchType);
-        const [championship, stats] = await Promise.all([
-            championshipPromise,
-            aggregateMatchStats(matches, phase)
+        const [championship, matches, groupRanking] = await Promise.all([
+            fetchFaceitApi(`/championships/${championshipId}`).catch(() => null),
+            fetchChampionshipMatches(championshipId, phaseConfig.matchType),
+            phase === "groups"
+                ? fetchChampionshipGroupRanking(championshipId).catch((error) => {
+                    console.error("[API Uniliga] Offizielle Gruppentabelle nicht verfügbar:", error.message);
+                    return null;
+                })
+                : Promise.resolve(null)
         ]);
+        const stats = await aggregateMatchStats(matches, phase, groupRanking);
         const championshipName =
             championship?.name
             || matches.find((match) => match?.competition_name)?.competition_name

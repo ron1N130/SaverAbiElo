@@ -5,7 +5,7 @@
     "team_id": "ca962ace-3165-43cd-bddb-ddeecd6a8a29"
   },
   {
-    "name": "MUC",
+    "name": "MUC University",
     "icon": "muc.png",
     "team_id": "c82a0c07-1df5-459c-b1ac-19c5b8b31232"
   },
@@ -15,7 +15,7 @@
     "team_id": "53535a12-d35d-4549-8ec9-67c2436a3cbc"
   },
   {
-    "name": "ECO",
+    "name": "eSports Cologne",
     "icon": "eco.png",
     "team_id": "67f2f166-6006-4fe3-954f-48c77d372da0"
   },
@@ -25,7 +25,7 @@
     "team_id": "a1714e75-33cb-4b9f-8ee8-d4ecb12d1d0d"
   },
   {
-    "name": "Uni Bielefeld",
+    "name": "Bielefeld Alliance",
     "icon": "uni_bielefeld.png",
     "team_id": "6cc2b819-9873-4c01-899e-f0c15c5369f2" 
   },
@@ -48,5 +48,15 @@
     "name": "RUB Serpents S",
     "icon": "rub_serpents_s.png",
     "team_id": "21db7105-6917-4659-841c-1346457ecae7"
+  },
+  {
+    "name": "Gauss-Kanonen",
+    "icon": null,
+    "team_id": "0d63b92e-7036-4db7-b1c4-f741f670d6e2"
+  },
+  {
+    "name": "AIX Tyloe",
+    "icon": null,
+    "team_id": "2830dff9-25f4-4e0a-9d88-820963581618"
   }
 ]
