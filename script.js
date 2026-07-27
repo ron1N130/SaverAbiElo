@@ -1,8 +1,24 @@
 const thresholds = {
-    rating: { okay: 1.05, good: 1.15, great: 1.3, max: 1.8 },
+    rating: {
+        okay: 0.91,
+        good: 1.11,
+        great: 1.25,
+        max: 1.8,
+        precision: 2,
+        greatExclusive: true,
+        badLabel: "Schlecht"
+    },
     dpr: { okay: 0.7, good: 0.63, great: 0.55, max: 0.95, lowerIsBetter: true },
     kast: { okay: 66, good: 75, great: 80, max: 100 },
-    impact: { okay: 1.3, good: 1.45, great: 1.55, max: 2 },
+    impact: {
+        okay: 0.91,
+        good: 1.11,
+        great: 1.25,
+        max: 2,
+        precision: 2,
+        greatExclusive: true,
+        badLabel: "Schlecht"
+    },
     adr: { okay: 70, good: 85, great: 90, max: 125 },
     kpr: { okay: 0.6, good: 0.8, great: 0.9, max: 1.25 },
     winRate: { okay: 50, good: 60, great: 70 }
@@ -368,18 +384,24 @@ function metricState(stat, value) {
     if (!config || value === null) {
         return { key: "bad", label: "Keine Daten" };
     }
+    const normalizedValue = Number.isInteger(config.precision)
+        ? Number(value.toFixed(config.precision))
+        : value;
 
     if (config.lowerIsBetter) {
-        if (value <= config.great) return { key: "great", label: "Elite" };
-        if (value <= config.good) return { key: "good", label: "Stark" };
-        if (value <= config.okay) return { key: "okay", label: "Solide" };
-        return { key: "bad", label: "Schwach" };
+        if (normalizedValue <= config.great) return { key: "great", label: "Elite" };
+        if (normalizedValue <= config.good) return { key: "good", label: "Stark" };
+        if (normalizedValue <= config.okay) return { key: "okay", label: "Solide" };
+        return { key: "bad", label: config.badLabel || "Schwach" };
     }
 
-    if (value >= config.great) return { key: "great", label: "Elite" };
-    if (value >= config.good) return { key: "good", label: "Stark" };
-    if (value >= config.okay) return { key: "okay", label: "Solide" };
-    return { key: "bad", label: "Schwach" };
+    const isGreat = config.greatExclusive
+        ? normalizedValue > config.great
+        : normalizedValue >= config.great;
+    if (isGreat) return { key: "great", label: "Elite" };
+    if (normalizedValue >= config.good) return { key: "good", label: "Stark" };
+    if (normalizedValue >= config.okay) return { key: "okay", label: "Solide" };
+    return { key: "bad", label: config.badLabel || "Schwach" };
 }
 
 function metricProgress(stat, value) {

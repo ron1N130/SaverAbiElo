@@ -234,6 +234,22 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
         /leetify\.com/
     );
 
+    const tierCases = [
+        [0.9, "bad", "Schlecht"],
+        [0.91, "okay", "Solide"],
+        [1.1, "okay", "Solide"],
+        [1.11, "good", "Stark"],
+        [1.25, "good", "Stark"],
+        [1.26, "great", "Elite"]
+    ];
+    for (const stat of ["rating", "impact"]) {
+        for (const [value, key, label] of tierCases) {
+            const metric = dom.window.metricState(stat, value);
+            assert.equal(metric.key, key, `${stat} ${value} should be ${key}`);
+            assert.equal(metric.label, label, `${stat} ${value} should be ${label}`);
+        }
+    }
+
     const search = document.getElementById("player-search");
     search.value = "Bravo";
     search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
