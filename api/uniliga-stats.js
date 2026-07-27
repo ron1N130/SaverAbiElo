@@ -297,8 +297,8 @@ function ensureTeam(teamStats, teamId, fallbackName = "TBD") {
     if (!teamStats[teamId]) {
         teamStats[teamId] = newTeamStats(teamInfoMap[teamId]?.name || fallbackName);
     }
-    if (teamStats[teamId].name === "TBD" && teamInfoMap[teamId]?.name) {
-        teamStats[teamId].name = teamInfoMap[teamId].name;
+    if (teamStats[teamId].name === "TBD") {
+        teamStats[teamId].name = teamInfoMap[teamId]?.name || fallbackName;
     }
     return teamStats[teamId];
 }
@@ -311,6 +311,13 @@ async function aggregateMatchStats(matches, phase) {
     const playerMatchStats = {};
     const playerDetails = {};
     const teamStats = {};
+    const matchTeamNames = {};
+    for (const match of matches) {
+        for (const [, team] of matchTeamEntries(match)) {
+            const teamId = team?.faction_id || team?.team_id || team?.id;
+            if (teamId && team?.name) matchTeamNames[teamId] = team.name;
+        }
+    }
     const matchesForStats = phase === "playoffs"
         ? matches.filter(isFinishedMatch)
         : matches;
@@ -330,8 +337,8 @@ async function aggregateMatchStats(matches, phase) {
                 const teamId2 = maps[0].teams[1]?.team_id;
                 if (!teamId1 || !teamId2) return;
 
-                const team1 = ensureTeam(teamStats, teamId1);
-                const team2 = ensureTeam(teamStats, teamId2);
+                const team1 = ensureTeam(teamStats, teamId1, matchTeamNames[teamId1]);
+                const team2 = ensureTeam(teamStats, teamId2, matchTeamNames[teamId2]);
                 let team1MapWins = 0;
                 let team2MapWins = 0;
 
@@ -372,7 +379,7 @@ async function aggregateMatchStats(matches, phase) {
                         const teamId = team?.team_id;
                         if (!teamId) continue;
 
-                        const currentTeam = ensureTeam(teamStats, teamId);
+                        const currentTeam = ensureTeam(teamStats, teamId, matchTeamNames[teamId]);
                         currentTeam.mapsPlayed += 1;
                         if (winningTeamId === teamId) currentTeam.mapWins += 1;
                         else if (winningTeamId) currentTeam.mapLosses += 1;
