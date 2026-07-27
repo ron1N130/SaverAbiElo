@@ -36,7 +36,7 @@ const clubs = {
 const cacheKeys = {
     players: "saverabi:players:v3"
 };
-const UNILIGA_API_SCHEMA_VERSION = 17;
+const UNILIGA_API_SCHEMA_VERSION = 18;
 
 const state = {
     players: [],

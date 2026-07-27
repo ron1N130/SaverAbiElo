@@ -12,12 +12,40 @@ const GROUP_STAGE_CHAMPIONSHIP_NAME =
 const GROUP_STAGE_CHAMPIONSHIP_ID =
     process.env.UNILIGA_GROUP_STAGE_ID || "0a49e9c4-808c-4172-bfcb-997c5982770e";
 const PLAYOFFS_CHAMPIONSHIP_ID = "4ee001a9-f6f3-4936-916b-798d3171cca8";
-const CACHE_VERSION = 17;
+const CACHE_VERSION = 18;
 const CACHE_TTL_SECONDS = 4 * 60 * 60;
 const CLIENT_CACHE_SECONDS = 5 * 60;
 const API_DELAY = 500;
 const MATCH_DETAIL_BATCH_SIZE = 10;
 const MAX_MATCHES_TO_FETCH = 500;
+const UPPER_BRACKET_SEED_ORDER = new Map([
+    ["67f2f166-6006-4fe3-954f-48c77d372da0", 0],
+    ["a1714e75-33cb-4b9f-8ee8-d4ecb12d1d0d", 1],
+    ["4ba7238f-79f6-4629-a528-4a6c7a31bfa5", 1],
+    ["ca962ace-3165-43cd-bddb-ddeecd6a8a29", 2],
+    ["c82a0c07-1df5-459c-b1ac-19c5b8b31232", 3],
+    ["21db7105-6917-4659-841c-1346457ecae7", 3]
+]);
+const UPPER_BRACKET_NAME_ORDER = new Map([
+    ["esportscologne", 0],
+    ["dgone", 1],
+    ["uedwolves", 1],
+    ["aix", 2],
+    ["mucuniversity", 3],
+    ["rubserpentss", 3]
+]);
+const GROUP_STAGE_TIEBREAK_ORDER = new Map([
+    ["67f2f166-6006-4fe3-954f-48c77d372da0", 0],
+    ["c82a0c07-1df5-459c-b1ac-19c5b8b31232", 1],
+    ["ca962ace-3165-43cd-bddb-ddeecd6a8a29", 2],
+    ["4ba7238f-79f6-4629-a528-4a6c7a31bfa5", 3],
+    ["6cc2b819-9873-4c01-899e-f0c15c5369f2", 4],
+    ["a1714e75-33cb-4b9f-8ee8-d4ecb12d1d0d", 5],
+    ["21db7105-6917-4659-841c-1346457ecae7", 6],
+    ["0d63b92e-7036-4db7-b1c4-f741f670d6e2", 7],
+    ["14b1b44b-cbe8-4e75-a7cb-51c3d83d780d", 8],
+    ["2830dff9-25f4-4e0a-9d88-820963581618", 9]
+]);
 
 const PHASES = Object.freeze({
     groups: {
@@ -341,7 +369,7 @@ function reorderMatchTeams(match, preferredIds) {
     });
 }
 
-function orderUpperBracketRounds(rounds) {
+function orderKnockoutRoundsBackward(rounds) {
     for (let roundIndex = rounds.length - 2; roundIndex >= 0; roundIndex -= 1) {
         const previousMatches = rounds[roundIndex].matches;
         const nextMatches = rounds[roundIndex + 1].matches;
@@ -387,6 +415,66 @@ function orderUpperBracketRounds(rounds) {
                     Number(isByeTeam(teamA)) - Number(isByeTeam(teamB))
                 );
             }
+        }
+    }
+
+    return rounds;
+}
+
+function upperBracketSeed(match) {
+    return Math.min(
+        ...(match?.teams || []).map((team) =>
+            UPPER_BRACKET_SEED_ORDER.get(team.id)
+            ?? UPPER_BRACKET_NAME_ORDER.get(normalizeTeamName(team.name))
+            ?? Number.MAX_SAFE_INTEGER
+        ),
+        Number.MAX_SAFE_INTEGER
+    );
+}
+
+function orderUpperBracketRounds(rounds) {
+    if (rounds.length === 0) return rounds;
+    const hasPublishedSeeds = rounds[0].matches.some((match) =>
+        upperBracketSeed(match) !== Number.MAX_SAFE_INTEGER
+    );
+    if (!hasPublishedSeeds) return orderKnockoutRoundsBackward(rounds);
+
+    rounds[0].matches = [...rounds[0].matches].sort((matchA, matchB) => {
+        const seedDifference = upperBracketSeed(matchA) - upperBracketSeed(matchB);
+        return seedDifference || matchDateValue(matchA).localeCompare(matchDateValue(matchB));
+    });
+
+    for (const match of rounds[0].matches) {
+        if (matchHasBye(match)) {
+            match.teams = [...match.teams].sort((teamA, teamB) =>
+                Number(isByeTeam(teamA)) - Number(isByeTeam(teamB))
+            );
+        }
+    }
+
+    for (let roundIndex = 1; roundIndex < rounds.length; roundIndex += 1) {
+        const previousMatches = rounds[roundIndex - 1].matches;
+        const previousPositions = new Map(
+            previousMatches.map((match, index) => [match.winnerId, index])
+        );
+        rounds[roundIndex].matches = [...rounds[roundIndex].matches].sort((matchA, matchB) => {
+            const feederPosition = (match) => Math.min(
+                ...(match.teams || [])
+                    .map((team) => previousPositions.get(team.id))
+                    .filter(Number.isFinite),
+                Number.MAX_SAFE_INTEGER
+            );
+            return feederPosition(matchA) - feederPosition(matchB);
+        });
+
+        for (const match of rounds[roundIndex].matches) {
+            const carriedWinners = previousMatches
+                .filter((previousMatch) =>
+                    previousMatch.winnerId
+                    && (match.teams || []).some((team) => team.id === previousMatch.winnerId)
+                )
+                .map((previousMatch) => previousMatch.winnerId);
+            if (carriedWinners.length > 0) reorderMatchTeams(match, carriedWinners);
         }
     }
 
@@ -461,7 +549,17 @@ function buildStageRounds(matches, stageKey) {
     }));
 
     if (stageKey === "lower") return orderLowerBracketRounds(rounds);
-    if (stageKey === "upper" || stageKey === "main") return orderUpperBracketRounds(rounds);
+    if (stageKey === "upper") return orderUpperBracketRounds(rounds);
+    if (stageKey === "main") return orderKnockoutRoundsBackward(rounds);
+    if (stageKey === "grand-final") {
+        for (const round of rounds) {
+            for (const match of round.matches) {
+                match.teams = [...match.teams].sort((teamA, teamB) =>
+                    Number(teamB.winner) - Number(teamA.winner)
+                );
+            }
+        }
+    }
     return rounds;
 }
 
@@ -639,6 +737,12 @@ function applyOfficialGroupRanking(teamStats, rankingData) {
 
 export function buildGroupStandings(matches, rankingData = null) {
     const teamStats = {};
+    const headToHeadPoints = new Map();
+    const addHeadToHeadPoints = (firstId, secondId, points) => {
+        if (!headToHeadPoints.has(firstId)) headToHeadPoints.set(firstId, new Map());
+        const opponents = headToHeadPoints.get(firstId);
+        opponents.set(secondId, (opponents.get(secondId) || 0) + points);
+    };
 
     for (const match of Array.isArray(matches) ? matches : []) {
         const entries = matchTeamEntries(match)
@@ -663,24 +767,42 @@ export function buildGroupStandings(matches, rankingData = null) {
             firstTeam.matchWins += 1;
             secondTeam.matchLosses += 1;
             firstTeam.points += 3;
+            addHeadToHeadPoints(teamId(entries[0][1]), teamId(entries[1][1]), 3);
+            addHeadToHeadPoints(teamId(entries[1][1]), teamId(entries[0][1]), 0);
         } else if (winnerId === teamId(entries[1][1])) {
             secondTeam.matchWins += 1;
             firstTeam.matchLosses += 1;
             secondTeam.points += 3;
+            addHeadToHeadPoints(teamId(entries[1][1]), teamId(entries[0][1]), 3);
+            addHeadToHeadPoints(teamId(entries[0][1]), teamId(entries[1][1]), 0);
         } else {
             firstTeam.matchDraws += 1;
             secondTeam.matchDraws += 1;
             firstTeam.points += 1;
             secondTeam.points += 1;
+            addHeadToHeadPoints(teamId(entries[0][1]), teamId(entries[1][1]), 1);
+            addHeadToHeadPoints(teamId(entries[1][1]), teamId(entries[0][1]), 1);
         }
     }
 
     applyOfficialGroupRanking(teamStats, rankingData);
 
-    return Object.entries(teamStats).map(([id, team]) => {
+    const standings = Object.entries(teamStats).map(([id, team]) => {
         const { players: _players, ...teamData } = team;
         return { id, ...teamData };
-    }).sort((teamA, teamB) => {
+    });
+    const directDuelPoints = (team) => standings
+        .filter((opponent) =>
+            opponent.id !== team.id
+            && opponent.points === team.points
+            && opponent.matchWins - opponent.matchLosses
+                === team.matchWins - team.matchLosses
+        )
+        .reduce((sum, opponent) =>
+            sum + (headToHeadPoints.get(team.id)?.get(opponent.id) || 0)
+        , 0);
+
+    standings.sort((teamA, teamB) => {
         const positionA = teamA.standingPosition ?? Number.MAX_SAFE_INTEGER;
         const positionB = teamB.standingPosition ?? Number.MAX_SAFE_INTEGER;
         if (positionA !== positionB) return positionA - positionB;
@@ -688,8 +810,20 @@ export function buildGroupStandings(matches, rankingData = null) {
         const differenceA = teamA.matchWins - teamA.matchLosses;
         const differenceB = teamB.matchWins - teamB.matchLosses;
         if (differenceA !== differenceB) return differenceB - differenceA;
+        const directDuelDifference = directDuelPoints(teamB) - directDuelPoints(teamA);
+        if (directDuelDifference !== 0) return directDuelDifference;
+        const officialTiebreakA =
+            GROUP_STAGE_TIEBREAK_ORDER.get(teamA.id) ?? Number.MAX_SAFE_INTEGER;
+        const officialTiebreakB =
+            GROUP_STAGE_TIEBREAK_ORDER.get(teamB.id) ?? Number.MAX_SAFE_INTEGER;
+        if (officialTiebreakA !== officialTiebreakB) return officialTiebreakA - officialTiebreakB;
         return teamA.name.localeCompare(teamB.name, "de");
     });
+
+    standings.forEach((team, index) => {
+        if (team.standingPosition === null) team.standingPosition = index + 1;
+    });
+    return standings;
 }
 
 async function aggregateMatchStats(matches, phase, groupRanking = null) {
