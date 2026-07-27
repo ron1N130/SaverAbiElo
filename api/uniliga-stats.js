@@ -12,7 +12,7 @@ const GROUP_STAGE_CHAMPIONSHIP_NAME =
 const GROUP_STAGE_CHAMPIONSHIP_ID =
     process.env.UNILIGA_GROUP_STAGE_ID || "0a49e9c4-808c-4172-bfcb-997c5982770e";
 const PLAYOFFS_CHAMPIONSHIP_ID = "4ee001a9-f6f3-4936-916b-798d3171cca8";
-const CACHE_VERSION = 18;
+const CACHE_VERSION = 19;
 const CACHE_TTL_SECONDS = 4 * 60 * 60;
 const CLIENT_CACHE_SECONDS = 5 * 60;
 const API_DELAY = 500;
@@ -810,13 +810,13 @@ export function buildGroupStandings(matches, rankingData = null) {
         const differenceA = teamA.matchWins - teamA.matchLosses;
         const differenceB = teamB.matchWins - teamB.matchLosses;
         if (differenceA !== differenceB) return differenceB - differenceA;
-        const directDuelDifference = directDuelPoints(teamB) - directDuelPoints(teamA);
-        if (directDuelDifference !== 0) return directDuelDifference;
         const officialTiebreakA =
             GROUP_STAGE_TIEBREAK_ORDER.get(teamA.id) ?? Number.MAX_SAFE_INTEGER;
         const officialTiebreakB =
             GROUP_STAGE_TIEBREAK_ORDER.get(teamB.id) ?? Number.MAX_SAFE_INTEGER;
         if (officialTiebreakA !== officialTiebreakB) return officialTiebreakA - officialTiebreakB;
+        const directDuelDifference = directDuelPoints(teamB) - directDuelPoints(teamA);
+        if (directDuelDifference !== 0) return directDuelDifference;
         return teamA.name.localeCompare(teamB.name, "de");
     });
 

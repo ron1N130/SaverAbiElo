@@ -763,6 +763,41 @@ test("uses official FACEIT group positions and three points per win", () => {
     assert.equal(fallback[0].points, 3);
 });
 
+test("keeps FACEIT's published order for teams with identical records", () => {
+    const bielefeldId = "6cc2b819-9873-4c01-899e-f0c15c5369f2";
+    const dgId = "a1714e75-33cb-4b9f-8ee8-d4ecb12d1d0d";
+    const rubId = "21db7105-6917-4659-841c-1346457ecae7";
+    const match = (id, winnerId, loserId, winnerName, loserName) => ({
+        match_id: id,
+        status: "FINISHED",
+        teams: {
+            faction1: { faction_id: winnerId, name: winnerName },
+            faction2: { faction_id: loserId, name: loserName }
+        },
+        results: {
+            winner: "faction1",
+            score: { faction1: 1, faction2: 0 }
+        }
+    });
+    const matches = [
+        match("tie-1", bielefeldId, dgId, "Bielefeld Alliance", "DG One"),
+        match("tie-2", bielefeldId, rubId, "Bielefeld Alliance", "RUB Serpents S"),
+        match("tie-3", rubId, dgId, "RUB Serpents S", "DG One")
+    ];
+    const ranking = {
+        items: [
+            { team: { team_id: bielefeldId }, played: 9, won: 4, lost: 5, points: 12 },
+            { team: { team_id: dgId }, played: 9, won: 4, lost: 5, points: 12 },
+            { team: { team_id: rubId }, played: 9, won: 4, lost: 5, points: 12 }
+        ]
+    };
+
+    assert.deepEqual(
+        buildGroupStandings(matches, ranking).map((team) => team.name),
+        ["Bielefeld Alliance", "DG One", "RUB Serpents S"]
+    );
+});
+
 test("renders the leaderboard, filters players, and switches to Uniliga", async () => {
     const [html, script] = await Promise.all([
         readFile(new URL("../index.html", import.meta.url), "utf8"),
