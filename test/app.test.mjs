@@ -80,6 +80,8 @@ const leetifyFixture = {
 
 const uniligaFixture = {
     lastUpdated: "2026-07-27T08:00:00.000Z",
+    championshipId: "4ee001a9-f6f3-4936-916b-798d3171cca8",
+    championshipName: "University Esports Summer Championship 2026",
     teams: [{
         id: "team-1",
         name: "AIX",
@@ -179,6 +181,19 @@ test("Leetify proxy validates and returns a no-store profile subset", async () =
     }
 });
 
+test("uses the requested Uniliga championship and SaverAbi roster", async () => {
+    const [uniligaSource, playersSource] = await Promise.all([
+        readFile(new URL("../api/uniliga-stats.js", import.meta.url), "utf8"),
+        readFile(new URL("../players.json", import.meta.url), "utf8")
+    ]);
+    const players = JSON.parse(playersSource);
+
+    assert.match(uniligaSource, /4ee001a9-f6f3-4936-916b-798d3171cca8/);
+    assert.equal(players.includes("s3sh"), true);
+    assert.equal(players.includes("2911-"), true);
+    assert.equal(players.includes("a5u"), false);
+});
+
 test("renders the leaderboard, filters players, and switches to Uniliga", async () => {
     const [html, script] = await Promise.all([
         readFile(new URL("../index.html", import.meta.url), "utf8"),
@@ -264,6 +279,10 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
 
     assert.equal(document.getElementById("summary-team-count").textContent, "1");
     assert.equal(document.getElementById("summary-leading-team").textContent, "AIX");
+    assert.equal(
+        document.getElementById("uniliga-championship-title").textContent,
+        "University Esports Summer Championship 2026"
+    );
     assert.equal(document.getElementById("uniliga-content").hidden, false);
     assert.equal(document.getElementById("saverabi-content").hidden, true);
 

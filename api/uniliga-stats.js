@@ -13,7 +13,7 @@ console.log('[API Uniliga - Punkte Final V5] Modul Imports geladen.'); // Log ve
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL = process.env.REDIS_URL;
 const API_BASE_URL = "https://open.faceit.com/data/v4";
-const UNILIGA_CHAMPIONSHIP_ID = "98b62e7a-1168-4d83-b8c2-f4c99216df93";
+const UNILIGA_CHAMPIONSHIP_ID = "4ee001a9-f6f3-4936-916b-798d3171cca8";
 const CACHE_VERSION = 14; // Version erhöht für Debugging-Logs
 const CACHE_TTL_SECONDS = 4 * 60 * 60; // 4 Stunden
 const API_DELAY = 500;
@@ -79,6 +79,11 @@ export default async function handler(req, res) {
     // 2. Live-Daten holen und verarbeiten
     try {
         console.log(`[API Uniliga] Fetching live data...`);
+        const championshipDetailsPromise = fetchFaceitApi(`/championships/${championshipId}`)
+            .catch((error) => {
+                console.warn(`[API Uniliga] Championship details unavailable: ${error.message}`);
+                return null;
+            });
         let allMatches = []; let offset = 0; const limit = 100; let fetchMore = true;
         // Matchliste holen
         while (fetchMore && allMatches.length < MAX_MATCHES_TO_FETCH) {
@@ -89,6 +94,10 @@ export default async function handler(req, res) {
             else { allMatches.push(...matchResponse.items); offset += matchResponse.items.length; if (matchResponse.items.length < limit || allMatches.length >= MAX_MATCHES_TO_FETCH) fetchMore = false; }
         }
         console.log(`[API Uniliga] Total matches found: ${allMatches.length}. Fetching details...`);
+        const championshipDetails = await championshipDetailsPromise;
+        const championshipName = championshipDetails?.name
+            || allMatches.find((match) => match?.competition_name)?.competition_name
+            || "Uniliga CS2";
 
         // Datenstrukturen initialisieren
         const playerMatchStats = {};
@@ -312,7 +321,10 @@ export default async function handler(req, res) {
 
         // e) Finale Antwort vorbereiten
         const responseData = {
-            version: CACHE_VERSION, lastUpdated: new Date().toISOString(), championshipId: championshipId,
+            version: CACHE_VERSION,
+            lastUpdated: new Date().toISOString(),
+            championshipId: championshipId,
+            championshipName,
             players: sortedPlayerStats,
             teams: sortedTeamStats // Enthält jetzt .points, .matchesPlayed, .matchWins, .matchLosses, .matchDraws
         };

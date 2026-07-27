@@ -77,6 +77,7 @@ function cacheDom() {
     dom.uniligaError = document.getElementById("error-message-uniliga");
     dom.uniligaArea = document.getElementById("uniliga-data-area");
     dom.uniligaUpdated = document.getElementById("uniliga-updated");
+    dom.uniligaChampionshipTitle = document.getElementById("uniliga-championship-title");
 
     dom.summaryPlayerCount = document.getElementById("summary-player-count");
     dom.summaryAverageElo = document.getElementById("summary-average-elo");
@@ -962,6 +963,10 @@ async function loadUniligaView() {
         }
 
         state.uniligaData = data;
+        dom.uniligaChampionshipTitle.textContent =
+            typeof data.championshipName === "string" && data.championshipName.trim()
+                ? data.championshipName.trim()
+                : "Uniliga CS2";
         renderUniligaSummary(data);
         renderUniligaData(data);
         const updated = formatDate(data.lastUpdated);
