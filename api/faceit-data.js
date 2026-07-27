@@ -3,7 +3,6 @@
 // ◼ Nutzt zentrale Statistik-Berechnung aus /api/utils/stats.js
 // ◼ Cache Version 7 (Erhöht wegen neuer Cache-Logik/Struktur)
 // ◼ Implementiert Cache-Invalidierung basierend auf Spieler-Aktivität (Annahme: details.last_modified)
-// ◼ Nutzt MATCHES_MAX Konstante
 // ◼ Reduzierte Cache-TTL auf 1 Tag
 // ◼ Detailliertes Logging
 // -------------------------------------------------
@@ -15,7 +14,6 @@ const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 const REDIS_URL      = process.env.REDIS_URL;
 const API_BASE_URL   = "https://open.faceit.com/data/v4";
 const CACHE_VERSION = 16;
-const MATCHES_MAX    = 20; // Anzahl der zu berücksichtigenden Matches << HIER ANPASSEN FALLS NÖTIG
 const TARGET_MATCHES_COUNT = 15;
 const FETCH_BUFFER = 5;
 const CACHE_TTL_SECONDS = 24 * 60 * 60; // Cache-Ablaufzeit: 24 Stunden (als Fallback)
@@ -26,7 +24,7 @@ async function fetchJson(url, headers) {
     if (!res.ok) {
         // Versuche, Fehlerdetails aus der Antwort zu lesen
         let errorBody = '';
-        try { errorBody = await res.text(); } catch(e) {/* ignore */}
+        try { errorBody = await res.text(); } catch {/* ignore */}
         console.error(`[Fetch Error] URL: ${url}, Status: ${res.status}, Body: ${errorBody}`);
         throw new Error(`Workspace ${url} → ${res.status}`);
     }
@@ -95,6 +93,7 @@ export default async function handler(req, res) {
         const resp = {
             nickname: details.nickname, avatar: details.avatar || "default_avatar.png",
             faceitUrl: details.faceit_url?.replace("{lang}", "en") ?? `https://faceit.com/en/players/${details.nickname}`,
+            steam64Id: details.steam_id_64 ?? null,
             elo: details.games?.cs2?.faceit_elo ?? "N/A", level: details.games?.cs2?.skill_level ?? "N/A",
             sortElo: parseInt(details.games?.cs2?.faceit_elo, 10) || 0,
             calculatedRating: null, kd: null, dpr: null, kpr: null, adr: null,
@@ -268,7 +267,7 @@ export default async function handler(req, res) {
             });
         }
 
-        res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300, max-age=0");
+        res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400, max-age=0");
         resp.fetchDurationMs = Date.now() - handlerStartTime;
         console.log(`[API FD] Responding for ${nickname}. Status: ${resp.error ? 'ERROR' : 'OK'}, Cache: ${resp.cacheStatus}, Matches Considered: ${resp.matchesConsidered}, Duration: ${resp.fetchDurationMs}ms`);
         return res.status(200).json(resp);

@@ -1,734 +1,1050 @@
-// -------------------------------------------------------------
-// Globale Variablen und Hilfsfunktionen
-// -------------------------------------------------------------
 const thresholds = {
-    // Bereinigt - letzte Definition aus deinem Code übernommen
-    rating: { bad: 0.85, okay: 1.05, good: 1.15, great: 1.3, max: 1.8 },
-    dpr: { bad: 0.75, okay: 0.7, good: 0.63, great: 0.55, max: 1 }, // Niedriger ist besser (letzte Definition)
-    kast: { bad: 58, okay: 66, good: 75, great: 80, max: 100 },
-    kd: { bad: 0.8, okay: 1.0, good: 1.2, great: 1.4, max: 2.0 }, // KD wieder relevant für Anzeige (letzte Definition)
-    adr: { bad: 65, okay: 70, good: 85, great: 90, max: 120 },
-    kpr: { bad: 0.5, okay: 0.6, good: 0.8, great: 0.9, max: 1.2 },
-    impact: { bad: 1, okay: 1.3, good: 1.45, great: 1.55, max: 1.8 }, // Bleibt intern für Berechnung (letzte Definition)
-    elo: { bad: 1800, okay: 2000, good: 2600, great: 2900, max: 4000 },
-    hsp: { bad: 15, okay: 35, good: 44, great: 0.55, max: 60 }, // Beachte: great hier 0.55 statt 55? Überprüfen! Falls % gemeint war, eher 55
-    winRate: { bad: 40, okay: 50, good: 60, great: 70, max: 100 } // Wird jetzt für Match-Winrate verwendet
+    rating: { okay: 1.05, good: 1.15, great: 1.3, max: 1.8 },
+    dpr: { okay: 0.7, good: 0.63, great: 0.55, max: 0.95, lowerIsBetter: true },
+    kast: { okay: 66, good: 75, great: 80, max: 100 },
+    impact: { okay: 1.3, good: 1.45, great: 1.55, max: 2 },
+    adr: { okay: 70, good: 85, great: 90, max: 125 },
+    kpr: { okay: 0.6, good: 0.8, great: 0.9, max: 1.25 },
+    winRate: { okay: 50, good: 60, great: 70 }
 };
 
-let teamIconMap = {}; // Speichert das Mapping von Teamnamen zu Icon-Dateinamen
-let allPlayersData = []; // Globale Speicherung der Spielerdaten für SaverAbi
-let currentSortMode = 'elo'; // Start-Sortiermodus ('elo' oder 'worth')
+const clubs = {
+    "Royal Madrid": "royal_madrid.png",
+    "Bastard München": "bastard_munchen.png",
+    PXG: "pxg.png",
+    Ubers: "ubers.png",
+    Barcha: "barcha.png",
+    "Manshine City": "manshine.png"
+};
 
-function safe(v, digits = 2, suf = "") {
-    if (v === null || typeof v === 'undefined') return "—";
-    const num = parseFloat(v);
-    return Number.isFinite(num) ? num.toFixed(digits) + suf : "—";
+const cacheKeys = {
+    players: "saverabi:players:v3"
+};
+
+const state = {
+    players: [],
+    sortMode: "elo",
+    search: "",
+    selectedNickname: null,
+    saverAbiLoaded: false,
+    saverAbiLoading: false,
+    loadedPlayers: 0,
+    totalPlayers: 0,
+    uniligaData: null,
+    uniligaLoading: false,
+    teamIconMap: {},
+    leetifyProfiles: new Map(),
+    leetifyLoading: new Set(),
+    leetifyErrors: new Map()
+};
+
+const dom = {};
+const number = new Intl.NumberFormat("de-DE");
+const compactNumber = new Intl.NumberFormat("de-DE", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1
+});
+
+function cacheDom() {
+    dom.views = [...document.querySelectorAll(".view-content")];
+    dom.tabs = [...document.querySelectorAll(".nav-tab")];
+    dom.playerList = document.getElementById("player-list");
+    dom.playerSearch = document.getElementById("player-search");
+    dom.playerDetail = document.getElementById("player-detail-card-container");
+    dom.playerLoading = document.getElementById("loading-indicator-saverabi");
+    dom.playerError = document.getElementById("error-message-saverabi");
+    dom.playerProgress = document.getElementById("player-load-progress");
+    dom.saverUpdated = document.getElementById("saverabi-updated");
+    dom.sortElo = document.getElementById("sort-elo-btn");
+    dom.sortWorth = document.getElementById("sort-worth-btn");
+    dom.uniligaLoading = document.getElementById("loading-indicator-uniliga");
+    dom.uniligaError = document.getElementById("error-message-uniliga");
+    dom.uniligaArea = document.getElementById("uniliga-data-area");
+    dom.uniligaUpdated = document.getElementById("uniliga-updated");
+
+    dom.summaryPlayerCount = document.getElementById("summary-player-count");
+    dom.summaryAverageElo = document.getElementById("summary-average-elo");
+    dom.summaryLeader = document.getElementById("summary-leader");
+    dom.summaryLeaderElo = document.getElementById("summary-leader-elo");
+    dom.summaryEliteCount = document.getElementById("summary-elite-count");
+
+    dom.summaryTeamCount = document.getElementById("summary-team-count");
+    dom.summaryUniligaPlayerCount = document.getElementById("summary-uniliga-player-count");
+    dom.summaryLeadingTeam = document.getElementById("summary-leading-team");
+    dom.summaryLeadingTeamPoints = document.getElementById("summary-leading-team-points");
+    dom.summaryTopRating = document.getElementById("summary-top-rating");
+    dom.summaryTopPlayer = document.getElementById("summary-top-player");
 }
 
-function safeWorth(v) {
-    if (v === null || typeof v === 'undefined') return "—";
-    const num = parseFloat(v);
-    if (!Number.isFinite(num)) return "—";
-
-    // Teile durch 1000, um den Wert in "Tausend" zu erhalten
-    const worthInThousands = num / 1000;
-
-    // Formatiere mit 1 Dezimalstelle und füge ' Mio USD' hinzu
-    // Verwende 'de-DE' Locale, um das Komma als Dezimaltrennzeichen zu nutzen
-    return worthInThousands.toLocaleString('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' Mio USD';
+function toNumber(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
 }
 
-
-function toNum(v) {
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
+function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
 }
 
-// -------------------------------------------------------------
-// Hilfsfunktionen (oder eigener Abschnitt für Datenladen)
-// -------------------------------------------------------------
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+    })[character]);
+}
 
-async function loadTeamIconMap() {
-    // Nur laden, wenn die Map noch leer ist
-    if (Object.keys(teamIconMap).length > 0) {
-        console.log("[LOG] Team icon map already loaded.");
-        return;
-    }
-
+function safeUrl(value, fallback) {
     try {
-        const response = await fetch('/uniliga_teams.json');
-        console.log("[DEBUG] Fetching /uniliga_teams.json. Response status:", response.status); // DEBUG Log
-        if (!response.ok) {
-            throw new Error(`Fehler beim Laden der Team-Icons (${response.status}) from ${response.url}`);
+        const url = new URL(value, window.location.origin);
+        if (url.protocol === "http:" || url.protocol === "https:") {
+            return url.href;
         }
-        const textData = await response.text(); // **NEU:** Lese als Text
-        console.log("[DEBUG] /uniliga_teams.json raw text:", textData); // **NEU:** Logge rohen Text
-        const teamsData = JSON.parse(textData); // **NEU:** Parse den Text
-        console.log("[LOG] uniliga_teams.json raw data:", teamsData); // LOG Rohdaten nach Parse
-
-        teamIconMap = teamsData.reduce((map, team) => {
-            if (team.name && team.icon) {
-                map[team.name] = team.icon;
-            }
-            return map;
-        }, {});
-        console.log("[LOG] Team icon map created:", teamIconMap); // LOG Ergebnis Map
-
-    } catch (err) {
-        console.error("Fehler beim Laden oder Verarbeiten von uniliga_teams.json:", err);
-        teamIconMap = {}; // Sicherstellen, dass die Map leer ist bei Fehler
+    } catch {
+        // Fall through to the trusted local fallback.
     }
+    return fallback;
 }
 
-
-// -------------------------------------------------------------
-// DOM-Elemente Cachen
-// -------------------------------------------------------------
-let playerListContainerEl, detailCardContainer, mainContentArea,
-    loadingIndicatorSaverAbi, errorMessageSaverAbi,
-    loadingIndicatorUniliga, errorMessageUniliga, uniligaDataArea,
-    saverAbiContent, uniligaContent,
-    toggleButtons, sortEloButton, sortWorthButton, saverAbiListHeader;
-
-function cacheDOMElements() {
-    console.log("[LOG] Caching DOM elements...");
-    // ... (keine Änderungen hier)
-    playerListContainerEl = document.getElementById("player-list");
-    detailCardContainer = document.getElementById("player-detail-card-container");
-    mainContentArea = document.getElementById("main-content-area");
-    loadingIndicatorSaverAbi = document.getElementById("loading-indicator-saverabi");
-    errorMessageSaverAbi = document.getElementById("error-message-saverabi");
-    saverAbiContent = document.getElementById("saverabi-content");
-    loadingIndicatorUniliga = document.getElementById("loading-indicator-uniliga");
-    errorMessageUniliga = document.getElementById("error-message-uniliga");
-    uniligaDataArea = document.getElementById("uniliga-data-area");
-    uniligaContent = document.getElementById("uniliga-content");
-    toggleButtons = document.querySelectorAll(".toggle-button");
-    saverAbiListHeader = document.getElementById("saverabi-list-header");
-
-    sortEloButton = document.getElementById("sort-elo-btn");
-    sortWorthButton = document.getElementById("sort-worth-btn");
-
-    if (!playerListContainerEl || !loadingIndicatorSaverAbi || !saverAbiContent || !uniligaContent || !uniligaDataArea || !sortEloButton || !sortWorthButton || !saverAbiListHeader || !detailCardContainer || !mainContentArea) {
-        console.error("FEHLER: Wichtige DOM-Elemente wurden nicht gefunden (inkl. Sortierbuttons/Header/Card Container)!");
-    } else {
-        console.log("[LOG] DOM elements cached successfully.");
-    }
+function safeFixed(value, digits = 2, suffix = "") {
+    const parsed = toNumber(value);
+    return parsed === null ? "—" : `${parsed.toFixed(digits)}${suffix}`;
 }
 
-// -------------------------------------------------------------
-// Funktionen für die SaverAbi-Ansicht
-// -------------------------------------------------------------
+function formatWorth(value) {
+    const parsed = toNumber(value);
+    return parsed === null ? "—" : `${compactNumber.format(parsed / 1000)} Mio. $`;
+}
+
+function formatSigned(value, digits = 2) {
+    const parsed = toNumber(value);
+    if (parsed === null) return "—";
+    return `${parsed > 0 ? "+" : ""}${parsed.toFixed(digits)}`;
+}
+
+function formatDate(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
+
+function setStatus(element, text, status = "loading") {
+    if (!element) return;
+    const icon = element.querySelector(".sync-icon");
+    element.classList.toggle("is-ready", status === "ready");
+    element.classList.toggle("is-error", status === "error");
+    element.replaceChildren(icon, document.createTextNode(text));
+}
+
+function calculateWorth(player) {
+    const elo = toNumber(player.sortElo);
+    const rating = toNumber(player.rating);
+    const impact = toNumber(player.impact);
+    if (elo === null || rating === null || impact === null) return null;
+
+    const bonusThreshold = 2000;
+    const weightedElo = elo + (
+        elo > bonusThreshold
+            ? Math.pow(elo - bonusThreshold, 1.8) * 0.05
+            : 0
+    );
+    return Math.max(0, weightedElo * rating * (impact - 0.2));
+}
+
+function normalizePlayer(data, fallbackNickname) {
+    if (!data || data.error) {
+        return {
+            nickname: data?.nickname || fallbackNickname,
+            error: data?.error || "Spielerdaten nicht verfügbar",
+            sortElo: -1,
+            worth: null
+        };
+    }
+
+    const player = {
+        ...data,
+        nickname: data.nickname || fallbackNickname,
+        sortElo: toNumber(data.elo) ?? toNumber(data.sortElo) ?? -1,
+        rating: toNumber(data.calculatedRating ?? data.rating),
+        dpr: toNumber(data.dpr),
+        kast: toNumber(data.kast),
+        kd: toNumber(data.kd),
+        adr: toNumber(data.adr),
+        kpr: toNumber(data.kpr),
+        hsp: toNumber(data.hsPercent ?? data.hsp),
+        impact: toNumber(data.impact),
+        matchesConsidered: toNumber(data.matchesConsidered) ?? 0
+    };
+
+    player.worth = calculateWorth(player);
+    return player;
+}
+
 async function getPlayerData(nickname) {
     try {
-        const res = await fetch(`/api/faceit-data?nickname=${encodeURIComponent(nickname)}`);
-        console.log(`[DEBUG] Fetching /api/faceit-data for ${nickname}. Response status:`, res.status); // DEBUG Log
-
-        if (!res.ok) {
-            let errorMsg = `HTTP ${res.status}`;
-            try {
-                 const errDataText = await res.text(); // **NEU:** Lese Fehlerantwort als Text
-                 console.error(`[DEBUG] /api/faceit-data error raw text for ${nickname}:`, errDataText); // **NEU:** Logge rohen Fehlertext
-                 const errData = JSON.parse(errDataText); // **NEU:** Versuche Text zu parsen
-                 errorMsg = errData.error || errDataText || errorMsg;
-            } catch (parseError) {
-                 // Konnte JSON nicht parsen, nutze den rohen Text oder HTTP Status
-                 errorMsg = errDataText || errorMsg;
-                 console.error(`[DEBUG] Failed to parse error response for ${nickname}:`, parseError);
-            }
-            throw new Error(errorMsg);
+        const response = await fetch(`/api/faceit-data?nickname=${encodeURIComponent(nickname)}`, {
+            headers: { Accept: "application/json" }
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+            throw new Error(data?.error || `HTTP ${response.status}`);
         }
-        const textData = await res.text(); // **NEU:** Lese als Text
-        console.log(`[DEBUG] /api/faceit-data raw text for ${nickname}:`, textData); // **NEU:** Logge rohen Text
-        const p = JSON.parse(textData); // **NEU:** Parse den Text
-
-        if (p.error) {
-            return { nickname, error: p.error, sortElo: -1, worth: null };
-        }
-        // Konvertiere relevante Felder sicher in Zahlen
-        p.sortElo = toNum(p.elo);
-        p.rating = toNum(p.calculatedRating ?? p.rating);
-        p.dpr = toNum(p.dpr);
-        p.kast = toNum(p.kast);
-        p.kd = toNum(p.kd);
-        p.adr = toNum(p.adr);
-        p.kpr = toNum(p.kpr);
-        p.hsp = toNum(p.hsPercent);
-        p.impact = toNum(p.impact);
-
-
-        // Berechne den "Geldwert"
-        // Berechne den "Geldwert"
-        if (p.sortElo !== null && typeof p.rating === 'number' && typeof p.impact === 'number') {
-            const elo = p.sortElo;
-            const rating = p.rating;
-            const impact = p.impact;
-
-            const bonusThreshold = thresholds?.elo?.okay ?? 2000;
-            const bonusPower = 1.8;
-            const bonusScale = 0.05;
-
-            const weightedElo = elo + (elo > bonusThreshold ? Math.pow(elo - bonusThreshold, bonusPower) * bonusScale : 0);
-
-            const impactFactor = impact - 0.2;
-            let finalWorth = weightedElo * rating * impactFactor;
-
-            finalWorth = Math.max(0, finalWorth);
-
-            p.worth = finalWorth;
-
-        } else {
-             p.worth = null;
-        }
-        if (p.sortElo === null) p.sortElo = -1;
-
-        return p;
-    } catch (err) {
-        console.error(`getPlayerData error for ${nickname}:`, err.message);
-        return { nickname, error: err.message || "Netzwerkfehler", sortElo: -1, worth: null };
+        return normalizePlayer(data, nickname);
+    } catch (error) {
+        return normalizePlayer({
+            nickname,
+            error: error.message || "Netzwerkfehler"
+        }, nickname);
     }
 }
 
-// Sortierfunktionen (unverändert)
-function sortPlayersByElo(players) {
-    return [...players].sort((a, b) => (b.sortElo ?? -1) - (a.sortElo ?? -1));
+function hashString(value) {
+    let hash = 0;
+    for (const character of value) {
+        hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
+    }
+    return Math.abs(hash);
 }
 
-function sortPlayersByWorth(players) {
-    return [...players].sort((a, b) => {
-        const worthA = a.worth ?? -Infinity;
-        const worthB = b.worth ?? -Infinity;
-        return worthB - worthA;
+function clubForPlayer(player, rank) {
+    if (rank === 1) return ["Royal Madrid", clubs["Royal Madrid"]];
+    if (rank <= 4) {
+        const names = ["Royal Madrid", "Bastard München"];
+        const name = names[hashString(player.nickname) % names.length];
+        return [name, clubs[name]];
+    }
+    if (rank <= 12) {
+        const names = ["PXG", "Ubers", "Barcha", "Manshine City"];
+        const name = names[hashString(player.nickname) % names.length];
+        return [name, clubs[name]];
+    }
+    return null;
+}
+
+function rankedPlayers() {
+    const sorted = [...state.players].sort((a, b) => {
+        if (a.error && !b.error) return 1;
+        if (!a.error && b.error) return -1;
+
+        const aValue = state.sortMode === "worth" ? a.worth : a.sortElo;
+        const bValue = state.sortMode === "worth" ? b.worth : b.sortElo;
+        return (bValue ?? -Infinity) - (aValue ?? -Infinity);
     });
+
+    return sorted.map((player, index) => ({
+        player,
+        rank: index + 1
+    }));
 }
 
-function displayPlayerList(players) {
-    console.log(`[LOG] displayPlayerList Aufgerufen mit ${players?.length ?? 0} Spieler-Objekten. Sortierung: ${currentSortMode}`);
-    if (!playerListContainerEl) { console.error("FEHLER: playerListContainerEl ist null in displayPlayerList!"); return; }
-    if (!saverAbiListHeader) { console.error("FEHLER: saverAbiListHeader ist null!"); return;}
+function eloProgress(elo) {
+    const value = toNumber(elo) ?? 0;
+    return clamp(((value - 800) / (3600 - 800)) * 100, 4, 100);
+}
 
-    playerListContainerEl.innerHTML = '';
+function renderSkeletonRows(count = 7) {
+    dom.playerList.className = "player-list skeleton-list";
+    dom.playerList.innerHTML = Array.from({ length: count }, () => `
+        <li class="skeleton-row" aria-hidden="true">
+            <span class="skeleton skeleton-rank"></span>
+            <span class="skeleton skeleton-avatar"></span>
+            <span class="skeleton skeleton-copy"></span>
+            <span class="skeleton skeleton-value"></span>
+        </li>
+    `).join("");
+}
 
-    saverAbiListHeader.textContent = 'Spielerliste'; // Header bleibt immer gleich
+function renderPlayerList() {
+    const query = state.search.trim().toLocaleLowerCase("de-DE");
+    const rows = rankedPlayers().filter(({ player }) => (
+        !query || player.nickname.toLocaleLowerCase("de-DE").includes(query)
+    ));
 
-    if (!players || players.length === 0) { console.log("[LOG] Keine Spielerdaten zum Anzeigen vorhanden."); return; }
+    dom.playerList.className = "player-list";
 
-    players.forEach((player) => {
-        const li = document.createElement('li');
-        li.dataset.nickname = player.nickname;
+    if (rows.length === 0) {
+        dom.playerList.innerHTML = `
+            <li class="empty-list">
+                ${state.players.length === 0 ? "Noch keine Daten geladen." : "Kein Spieler gefunden."}
+            </li>
+        `;
+        return;
+    }
+
+    dom.playerList.innerHTML = rows.map(({ player, rank }) => {
+        const nickname = escapeHtml(player.nickname);
+        const avatar = escapeHtml(safeUrl(player.avatar, "/default_avatar.png"));
+        const isSelected = player.nickname === state.selectedNickname;
 
         if (player.error) {
-            li.classList.add('error-item');
-            li.innerHTML = `<span class='player-info'><img src='default_avatar.png' class='avatar' alt="Standard Avatar"/><span class='player-name'>${player.nickname}</span></span><div class='player-list-right error-text'>Fehler</div>`; // Angepasste Fehlermeldung
-        } else {
-            const displayValue = currentSortMode === 'elo'
-                ? `${player.sortElo ?? 'N/A'}`
-                : `${safeWorth(player.worth)}`;
-
-            const eloProgressBarHtml = `<div class='elo-progress-container' data-elo='${player.sortElo ?? 0}'><div class='elo-progress-bar'></div></div>`;
-
-            const clubIconHtml = currentSortMode !== 'elo' && player.assignedClubIcon // Icon nur im Bluelock-Modus
-                ? `<img src='/icons/${player.assignedClubIcon}' class='club-icon' alt="Club Icon" onerror="this.style.display='none';"/>`
-                : '';
-
-            li.innerHTML = `
-                <span class='player-info'>
-                    <img src='${player.avatar || 'default_avatar.png'}' class='avatar' alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" />
-                    <span class='player-name'>${player.nickname}</span>
-                    ${clubIconHtml}
-                </span>
-                <div class='player-list-right'>
-                    <span class='player-value'>${displayValue}</span>
-                    ${eloProgressBarHtml}
-                </div>`;
-
-            const eloBarContainer = li.querySelector('.elo-progress-container');
-            if (eloBarContainer) updateEloProgressBarForList(eloBarContainer);
+            return `
+                <li class="player-list-item">
+                    <div class="player-row is-error" aria-label="${nickname}: Daten nicht verfügbar">
+                        <span class="rank">${rank}</span>
+                        <span class="player-identity">
+                            <span class="avatar-wrap">
+                                <img src="/default_avatar.png" class="avatar" alt="">
+                            </span>
+                            <span class="player-copy">
+                                <span class="player-name">${nickname}</span>
+                                <span class="player-subline">Daten nicht verfügbar</span>
+                            </span>
+                        </span>
+                        <span class="error-pill">Fehler</span>
+                    </div>
+                </li>
+            `;
         }
-        playerListContainerEl.appendChild(li);
-    });
-    console.log("[LOG] displayPlayerList Rendering abgeschlossen.");
+
+        const club = state.sortMode === "worth" ? clubForPlayer(player, rank) : null;
+        const clubIcon = club
+            ? `<img src="/icons/${escapeHtml(club[1])}" class="club-icon" alt="${escapeHtml(club[0])}">`
+            : "";
+        const displayValue = state.sortMode === "worth"
+            ? formatWorth(player.worth)
+            : number.format(player.sortElo);
+        const subline = [
+            player.level ? `Level ${escapeHtml(player.level)}` : null,
+            player.matchesConsidered ? `${number.format(player.matchesConsidered)} Matches` : null
+        ].filter(Boolean).join(" · ") || "Aktuelle FACEIT-Daten";
+
+        return `
+            <li class="player-list-item">
+                <button
+                    class="player-row${isSelected ? " is-selected" : ""}"
+                    type="button"
+                    data-nickname="${nickname}"
+                    aria-current="${isSelected ? "true" : "false"}"
+                >
+                    <span class="rank${rank <= 3 ? " rank-top" : ""}">${rank}</span>
+                    <span class="player-identity">
+                        <span class="avatar-wrap">
+                            <img src="${avatar}" class="avatar" alt="" loading="lazy" onerror="this.src='/default_avatar.png'">
+                            ${clubIcon}
+                        </span>
+                        <span class="player-copy">
+                            <span class="player-name">${nickname}</span>
+                            <span class="player-subline">${subline}</span>
+                        </span>
+                    </span>
+                    <span class="player-value-wrap">
+                        <span class="player-value">${escapeHtml(displayValue)}</span>
+                        <span class="elo-track" aria-hidden="true">
+                            <span class="elo-fill" style="width:${eloProgress(player.sortElo)}%"></span>
+                        </span>
+                    </span>
+                </button>
+            </li>
+        `;
+    }).join("");
 }
 
+function renderSaverAbiSummary() {
+    const validPlayers = state.players.filter((player) => !player.error && player.sortElo >= 0);
+    const byElo = [...validPlayers].sort((a, b) => b.sortElo - a.sortElo);
+    const leader = byElo[0];
+    const averageElo = validPlayers.length
+        ? Math.round(validPlayers.reduce((sum, player) => sum + player.sortElo, 0) / validPlayers.length)
+        : null;
 
-// Club Zuweisung für Bluelock Ranking (unverändert, aber stelle sicher, dass die Map korrekt geladen wird)
-const clubIconMap = {
-    "Royal Madrid": "royal_madrid.png",
-    "Bastard Munchen": "bastard_munchen.png",
-    "PXG": "pxg.png",
-    "Ubers": "ubers.png",
-    "Barcha": "barcha.png",
-    "Manshine City": "manshine.png",
-};
-const otherClubs = Object.keys(clubIconMap).filter(clubName =>
-    clubName !== "Royal Madrid" && clubName !== "Bastard Munchen"
-);
-
-function assignClubsToPlayers(players) {
-    console.log("[LOG] Beginne Club Zuweisung...");
-    if (!players || players.length === 0) {
-        console.log("[LOG] Keine Spieler für Club Zuweisung vorhanden.");
-        return;
-    }
-    players.forEach((player, index) => {
-        const rank = index + 1;
-        let assignedClubName = null;
-        if (rank === 1) {
-            assignedClubName = "Royal Madrid";
-        } else if (rank >= 2 && rank <= 4) {
-            const potentialClubs = ["Royal Madrid", "Bastard Munchen"];
-            assignedClubName = potentialClubs[Math.floor(Math.random() * potentialClubs.length)];
-        } else if (rank >= 5 && rank <= 12) {
-            if (otherClubs.length > 0) {
-                assignedClubName = otherClubs[Math.floor(Math.random() * otherClubs.length)];
-            } else {
-                console.warn(`[LOG] Keine "otherClubs" definiert für Rang ${rank}. Spieler ${player.nickname} erhält kein Icon.`);
-                assignedClubName = null;
-            }
-        } else {
-            assignedClubName = null;
-        }
-        player.assignedClubIcon = assignedClubName ? clubIconMap[assignedClubName] : null;
-    });
-     console.log("[LOG] Club Zuweisung abgeschlossen.");
+    dom.summaryPlayerCount.textContent = number.format(validPlayers.length);
+    dom.summaryAverageElo.textContent = averageElo === null ? "—" : number.format(averageElo);
+    dom.summaryLeader.textContent = leader?.nickname || "—";
+    dom.summaryLeaderElo.textContent = leader ? `${number.format(leader.sortElo)} Elo` : "höchstes Elo";
+    dom.summaryEliteCount.textContent = number.format(
+        validPlayers.filter((player) => player.sortElo >= 2000).length
+    );
 }
 
-// updateEloProgressBarForList (unverändert)
-function updateEloProgressBarForList(containerEl) {
-    if (!containerEl) return;
-    const val = parseInt(containerEl.dataset.elo, 10) || 0;
-    const cfg = thresholds.elo;
-    const pct = Math.min(100, (val / cfg.max) * 100);
-    const bar = containerEl.querySelector('.elo-progress-bar');
-    if (!bar) return;
-    bar.style.width = pct + '%';
-    let color = 'var(--bar-bad)';
-    if (val >= cfg.great) color = 'var(--bar-great)';
-    else if (val >= cfg.good) color = 'var(--bar-good)';
-    else if (val >= cfg.okay) color = 'var(--bar-okay)';
-    bar.style.backgroundColor = color;
+function metricState(stat, value) {
+    const config = thresholds[stat];
+    if (!config || value === null) {
+        return { key: "bad", label: "Keine Daten" };
+    }
+
+    if (config.lowerIsBetter) {
+        if (value <= config.great) return { key: "great", label: "Elite" };
+        if (value <= config.good) return { key: "good", label: "Stark" };
+        if (value <= config.okay) return { key: "okay", label: "Solide" };
+        return { key: "bad", label: "Schwach" };
+    }
+
+    if (value >= config.great) return { key: "great", label: "Elite" };
+    if (value >= config.good) return { key: "good", label: "Stark" };
+    if (value >= config.okay) return { key: "okay", label: "Solide" };
+    return { key: "bad", label: "Schwach" };
 }
 
-// displayDetailCard (unverändert - Layout-Fixes kommen via CSS)
-function displayDetailCard(player) {
-    console.log("[LOG] displayDetailCard called for player:", player?.nickname || 'N/A');
-    if (!detailCardContainer || !mainContentArea) { console.error("FEHLER: Detail Card Container oder Main Content Area nicht gefunden."); return; }
-    const saverAbiContentEl = document.getElementById('saverabi-content');
-    if (!saverAbiContentEl || !saverAbiContentEl.classList.contains('active')) {
-        console.log("[LOG] SaverAbi view is not active, hiding detail card.");
-        detailCardContainer.style.display = 'none';
-        if (mainContentArea) mainContentArea.classList.remove('detail-visible');
-        return;
+function metricProgress(stat, value) {
+    const config = thresholds[stat];
+    if (!config || value === null) return 0;
+    if (config.lowerIsBetter) {
+        return clamp(((config.max - value) / (config.max - config.great)) * 82 + 18, 8, 100);
     }
-
-    detailCardContainer.style.display = 'block';
-    if (mainContentArea) mainContentArea.classList.add('detail-visible');
-
-    if (!player || player.error) {
-        console.warn("[LOG] Displaying error card for player:", player?.nickname || 'N/A', "Error:", player?.error);
-        detailCardContainer.innerHTML = `<div class='player-card-hltv error-card'>${player?.nickname || 'Spieler'} – Fehler: ${player?.error || 'Unbekannt'}</div>`;
-        return;
-    }
-
-    console.log("[LOG] Rendering detail card for", player.nickname);
-    const faceitUrl = player.faceitUrl || `https://faceit.com/en/players/${encodeURIComponent(player.nickname)}`;
-    const matchesText = player.matchesConsidered ? `Letzte ${player.matchesConsidered} Matches` : 'Aktuelle Stats';
-
-    detailCardContainer.innerHTML = `
-        <div class="player-card-hltv new-layout">
-          <div class="card-header">
-            <a href="${faceitUrl}" target="_blank" rel="noopener noreferrer"><img src="${player.avatar || 'default_avatar.png'}" class="avatar" alt="Avatar von ${player.nickname}" onerror="this.src='default_avatar.png'" /></a>
-            <div><a href="${faceitUrl}" target="_blank" rel="noopener noreferrer" class="player-name">${player.nickname}</a><div class="stats-label">${matchesText}</div></div>
-          </div>
-          <div class="stats-grid">
-              <div class="stat-item" data-stat="rating"><div class="label">Rating 2.0</div><div class="value">${safe(player.rating, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
-              <div class="stat-item" data-stat="dpr"><div class="label">DPR</div><div class="value">${safe(player.dpr, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
-              <div class="stat-item" data-stat="kast"><div class="label">KAST</div><div class="value">${safe(player.kast, 1, '%')}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
-              <div class="stat-item" data-stat="impact"><div class="label">IMPACT</div><div class="value">${safe(player.impact -0.2, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
-              <div class="stat-item" data-stat="adr"><div class="label">ADR</div><div class="value">${safe(player.adr, 1)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
-              <div class="stat-item" data-stat="kpr"><div class="label">KPR</div><div class="value">${safe(player.kpr, 2)}</div><div class="stat-progress-container"><div class="stat-progress-bar"></div></div><span class="stat-indicator-label"></span></div>
-           </div>
-           </div>
-        </div>`;
-    updateStatProgressBars(detailCardContainer, player);
-    console.log("[LOG] Detail card rendered.");
+    return clamp((value / config.max) * 100, 8, 100);
 }
 
-// updateStatProgressBars (unverändert)
-function updateStatProgressBars(card, player) {
-    // ... (keine Änderungen hier)
-     card.querySelectorAll('.stat-item[data-stat]').forEach(item => {
-        const stat = item.dataset.stat; const val = player[stat]; const cfg = thresholds[stat];
-        const bar = item.querySelector('.stat-progress-bar'); const lbl = item.querySelector('.stat-indicator-label');
-        if (!cfg || !bar || !lbl) { if(lbl) lbl.textContent = '---'; if(bar) { bar.style.left = '0%'; bar.style.width = '0%'; bar.style.backgroundColor = 'transparent'; bar.style.boxShadow = 'none'; bar.style.borderRadius = '0';} return; }
-        let category = 0; let text = 'BAD'; let color = 'var(--bar-bad)'; let barLeft = '0%'; const barWidth = '33.333%'; let borderRadiusStyle = '0';
-        if (val != null && !isNaN(val)) {
-            if (stat === 'dpr') { // Lower DPR is better
-                if (val <= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
-                else if (val <= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
-                else if (val <= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
-                else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
-            }
-            else { // Higher is better for other stats
-                let compareVal = val;
-                if (stat === 'hsp' && val <= 1) {
-                     compareVal = val * 100;
-                     console.log(`[LOG] HSP value ${val} adjusted to ${compareVal} for threshold comparison.`);
-                }
+function renderStatCard({ stat, label, value, digits, suffix = "" }) {
+    const displayValue = stat === "impact" && value !== null ? value - 0.2 : value;
+    const status = metricState(stat, displayValue);
+    const progress = metricProgress(stat, displayValue);
 
-                if (compareVal >= cfg.great) { category = 2; text = 'GREAT'; color = 'var(--bar-great)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
-                else if (compareVal >= cfg.good) { category = 2; text = 'GOOD'; color = 'var(--bar-good)'; barLeft = '66.666%'; borderRadiusStyle = '0 4px 4px 0'; }
-                else if (compareVal >= cfg.okay) { category = 1; text = 'OKAY'; color = 'var(--bar-okay)'; barLeft = '33.333%'; borderRadiusStyle = '0'; }
-                else { category = 0; text = 'BAD'; color = 'var(--bar-bad)'; barLeft = '0%'; borderRadiusStyle = '4px 0 0 4px'; }
-            }
-        } else {
-            text = '---'; category = -1; color = 'transparent'; barLeft = '0%'; borderRadiusStyle = '0';
-        }
-        bar.style.left = barLeft; bar.style.width = barWidth; bar.style.backgroundColor = color; bar.style.boxShadow = (category !== -1) ? `0 0 8px ${color}` : 'none'; bar.style.borderRadius = borderRadiusStyle;
-        lbl.textContent = text; lbl.style.color = (category !== -1) ? color : 'var(--text-secondary)';
-    });
+    return `
+        <article class="stat-card state-${status.key}">
+            <div class="stat-topline">
+                <span class="stat-label">${label}</span>
+            </div>
+            <strong class="stat-value">${safeFixed(displayValue, digits, suffix)}</strong>
+            <div class="stat-track" aria-hidden="true">
+                <span class="stat-fill" style="width:${progress}%"></span>
+            </div>
+            <div class="stat-footer">
+                <span class="stat-state">${status.label}</span>
+                <span class="stat-reference">Form</span>
+            </div>
+        </article>
+    `;
 }
 
+function renderLeetifyMetric({ label, value, digits = 1, suffix = "", signed = false }) {
+    const displayValue = signed
+        ? formatSigned(value, digits)
+        : safeFixed(value, digits, suffix);
 
-// loadSaverAbiView (unverändert bis auf Error Handling/Logging)
-async function loadSaverAbiView() {
-    console.log("[LOG] loadSaverAbiView called");
-    if (!loadingIndicatorSaverAbi || !errorMessageSaverAbi || !playerListContainerEl || !detailCardContainer || !mainContentArea || !saverAbiContent || !sortEloButton || !sortWorthButton || !saverAbiListHeader) {
-        console.error("FEHLER: Benötigte Elemente für SaverAbi View fehlen!");
-        if(errorMessageSaverAbi) { errorMessageSaverAbi.textContent = "Fehler: UI-Elemente nicht initialisiert."; errorMessageSaverAbi.style.display = 'block'; }
-        return;
-    }
-
-    loadingIndicatorSaverAbi.style.display = 'block';
-    errorMessageSaverAbi.style.display = 'none';
-    playerListContainerEl.innerHTML = '';
-    detailCardContainer.style.display = 'none';
-    if(mainContentArea) mainContentArea.classList.remove('detail-visible');
-    allPlayersData = [];
-
-    try {
-        console.log("[LOG] Fetching /players.json...");
-        const namesRes = await fetch('/players.json');
-        console.log("[DEBUG] /players.json status:", namesRes.status); // DEBUG Log
-        if (!namesRes.ok) throw new Error(`Fehler Laden Spielerliste (${namesRes.status})`);
-        const namesText = await namesRes.text(); // **NEU:** Lese als Text
-        console.log("[DEBUG] /players.json raw text:", namesText); // **NEU:** Logge rohen Text
-        const names = JSON.parse(namesText); // **NEU:** Parse den Text
-
-        console.log("[LOG] Player names loaded:", names);
-        if (!Array.isArray(names) || names.length === 0) throw new Error("Spielerliste leer/ungültig.");
-
-        console.log("[LOG] Fetching player data for all players...");
-        const promises = names.map(name => getPlayerData(name));
-        const results = await Promise.all(promises);
-        console.log("[LOG] Player data fetch results (raw):", results);
-        allPlayersData = results;
-
-        const validPlayerCount = allPlayersData.filter(p => !p.error).length;
-        console.log(`[LOG] Gültige Spielerdaten empfangen: ${validPlayerCount} / ${allPlayersData.length}`);
-        if(validPlayerCount === 0 && allPlayersData.length > 0) { console.warn("[LOG] Keine gültigen Spielerdaten von der API erhalten, nur Fehler."); }
-
-        sortAndDisplayPlayers();
-
-        if (playerListContainerEl) {
-             playerListContainerEl.removeEventListener('click', handlePlayerListClick);
-             playerListContainerEl.addEventListener('click', handlePlayerListClick);
-             console.log("[LOG] Click listener added to player list.");
-        } else {
-             console.warn("[LOG] Konnte Click listener für Spielerliste nicht hinzufügen.");
-        }
-    } catch (err) {
-        console.error("Schwerwiegender Fehler in loadSaverAbiView:", err);
-        if(errorMessageSaverAbi){ errorMessageSaverAbi.textContent = `Fehler: ${err.message}`; errorMessageSaverAbi.style.display = 'block'; }
-        if(playerListContainerEl) playerListContainerEl.innerHTML = '';
-    }
-    finally {
-        console.log("[LOG] loadSaverAbiView finally block reached.");
-        if (loadingIndicatorSaverAbi) {
-            loadingIndicatorSaverAbi.style.display = 'none';
-            console.log("[LOG] Loading indicator hidden.");
-        }
-        const sortButtonContainer = document.getElementById('saverabi-sort-controls');
-        if (sortButtonContainer) {
-            sortButtonContainer.style.display = 'flex';
-        }
-    }
+    return `
+        <div class="leetify-metric">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(displayValue)}</strong>
+        </div>
+    `;
 }
 
-// sortAndDisplayPlayers (Club-Icon Zuweisung hinzugefügt)
-function sortAndDisplayPlayers() {
-    console.log(`[LOG] Sorting and displaying players based on: ${currentSortMode}`);
-    let sortedPlayers;
-    if (currentSortMode === 'elo') {
-        sortedPlayers = sortPlayersByElo(allPlayersData);
-         // Icons entfernen, wenn im Elo-Modus
-        sortedPlayers.forEach(player => player.assignedClubIcon = null);
-    } else { // 'worth' (Bluelock Ranking)
-        sortedPlayers = sortPlayersByWorth(allPlayersData);
-        // Icons zuweisen, wenn im Bluelock-Modus
-        assignClubsToPlayers(sortedPlayers);
-    }
-    console.log("[LOG] Sorted player data for display:", sortedPlayers);
-    displayPlayerList(sortedPlayers); // Diese Funktion kümmert sich um das Rendering basierend auf assignedClubIcon
+function renderLeetifySection(player) {
+    const steam64Id = player.steam64Id;
+    const profile = steam64Id ? state.leetifyProfiles.get(steam64Id) : null;
+    const error = steam64Id ? state.leetifyErrors.get(steam64Id) : null;
 
-    if (sortEloButton && sortWorthButton) {
-        sortEloButton.classList.toggle('active', currentSortMode === 'elo');
-        sortWorthButton.classList.toggle('active', currentSortMode === 'worth');
-    }
-}
-
-// handlePlayerListClick (unverändert)
-function handlePlayerListClick(e) {
-    // ... (keine Änderungen hier)
-    const li = e.target.closest('li');
-    if (!li || !li.dataset.nickname) return;
-    const nickname = li.dataset.nickname;
-    const playerData = allPlayersData.find(p => p.nickname === nickname);
-    if (playerData) {
-        displayDetailCard(playerData);
+    let content;
+    if (!steam64Id) {
+        content = `
+            <p class="leetify-message">
+                Keine Steam-Verknüpfung verfügbar.
+            </p>
+        `;
+    } else if (error) {
+        content = `
+            <p class="leetify-message is-error">
+                ${escapeHtml(error)}
+            </p>
+        `;
+    } else if (!profile) {
+        content = `
+            <div class="leetify-loading" role="status">
+                <span class="spinner" aria-hidden="true"></span>
+                Leetify-Profil wird geladen
+            </div>
+        `;
+    } else if (!profile.available) {
+        content = `
+            <p class="leetify-message">
+                ${escapeHtml(profile.reason || "Kein öffentliches Leetify-Profil verfügbar.")}
+            </p>
+        `;
     } else {
-        console.warn(`[LOG] Keine Daten gefunden für geklickten Spieler: ${nickname}`);
+        const ratings = [
+            {
+                label: "Leetify Rating",
+                value: profile.leetifyRating,
+                digits: 2,
+                signed: true
+            },
+            { label: "Aim Rating", value: profile.aimRating },
+            { label: "Positioning Rating", value: profile.positioningRating },
+            { label: "Utility Rating", value: profile.utilityRating }
+        ];
+        const mechanics = [
+            {
+                label: "Time to Damage",
+                value: profile.timeToDamage,
+                digits: 0,
+                suffix: " ms"
+            },
+            {
+                label: "Crosshair Placement",
+                value: profile.crosshairPlacement,
+                digits: 1,
+                suffix: "°"
+            },
+            {
+                label: "Counter-Strafing",
+                value: profile.counterStrafing,
+                digits: 1,
+                suffix: "%"
+            },
+            {
+                label: "Spray Accuracy",
+                value: profile.sprayAccuracy,
+                digits: 1,
+                suffix: "%"
+            }
+        ];
+
+        content = `
+            <div class="leetify-metric-grid">
+                ${ratings.map(renderLeetifyMetric).join("")}
+            </div>
+            <div class="leetify-mechanics">
+                ${mechanics.map(renderLeetifyMetric).join("")}
+            </div>
+        `;
     }
+
+    const profileUrl = profile?.profileUrl
+        ? escapeHtml(safeUrl(profile.profileUrl, "https://leetify.com/"))
+        : "https://leetify.com/";
+
+    return `
+        <section class="leetify-section" aria-label="Leetify Statistiken">
+            <header class="leetify-header">
+                <a
+                    class="leetify-attribution"
+                    href="https://leetify.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Data Provided by Leetify"
+                >
+                    <img src="/leetify-badge.png" alt="Data Provided by Leetify">
+                </a>
+                ${profile?.available ? `
+                    <a
+                        class="leetify-profile-link"
+                        href="${profileUrl}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        View on Leetify
+                    </a>
+                ` : ""}
+            </header>
+            ${content}
+        </section>
+    `;
 }
 
-// -------------------------------------------------------------
-// Funktionen für die Uniliga-Ansicht
-// -------------------------------------------------------------
-
-let currentUniligaData = null;
-
-async function loadUniligaView() {
-    console.log("[LOG] loadUniligaView WURDE AUFGERUFEN!");
-    if (!loadingIndicatorUniliga || !errorMessageUniliga || !uniligaDataArea) {
-        console.error("FEHLER: Benötigte Elemente für Uniliga View fehlen!");
-        if (errorMessageUniliga) { errorMessageUniliga.textContent = "Fehler: UI-Elemente nicht initialisiert."; errorMessageUniliga.style.display = 'block'; }
+async function loadLeetifyProfile(player) {
+    const steam64Id = player?.steam64Id;
+    if (
+        !steam64Id
+        || state.leetifyProfiles.has(steam64Id)
+        || state.leetifyLoading.has(steam64Id)
+        || state.leetifyErrors.has(steam64Id)
+    ) {
         return;
     }
-    loadingIndicatorUniliga.style.display = 'block';
-    errorMessageUniliga.style.display = 'none';
-    uniligaDataArea.innerHTML = '';
+
+    state.leetifyLoading.add(steam64Id);
 
     try {
-        // Using a cache busting parameter to ensure fresh data during development/testing
-        const apiUrl = `/api/uniliga-stats?cacheBust=${Date.now()}`;
-        console.log(`[LOG] VERSUCHE FETCH (mit Cache Bust): ${apiUrl}...`);
-
-        const [apiResponse, iconMapLoaded] = await Promise.all([
-            fetch(apiUrl),
-            loadTeamIconMap() // Stellt sicher, dass die Team-Icon Map geladen ist
-        ]);
-        console.log("[DEBUG] Uniliga API response status:", apiResponse.status); // DEBUG Log
-        if (!apiResponse.ok) {
-            let errorMsg = `Fehler beim Laden der Uniliga-Daten (${apiResponse.status})`;
-             try {
-                 const errDataText = await apiResponse.text(); // **NEU:** Lese Fehlerantwort als Text
-                 console.error(`[DEBUG] Uniliga API error raw text:`, errDataText); // **NEU:** Logge rohen Fehlertext
-                 const errData = JSON.parse(errDataText); // **NEU:** Versuche Text zu parsen
-                 errorMsg = errData.error || errData.message || errDataText || errorMsg;
-            } catch (parseError) {
-                 errorMsg = errDataText || errorMsg;
-                 console.error(`[DEBUG] Failed to parse error response for Uniliga:`, parseError);
-            }
-            throw new Error(errorMsg);
+        const response = await fetch(
+            `/api/leetify-data?steam64_id=${encodeURIComponent(steam64Id)}`,
+            { headers: { Accept: "application/json" } }
+        );
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+            throw new Error(data?.error || `HTTP ${response.status}`);
         }
-        const textData = await apiResponse.text(); // **NEU:** Lese als Text
-        console.log("[DEBUG] Uniliga API raw text:", textData); // **NEU:** Logge rohen Text
-        const data = JSON.parse(textData); // **NEU:** Parse den Text
-
-         if (data && data.message && data.message.includes('Minimaler Test')) {
-             console.warn("[LOG] Minimale Test-Antwort vom Backend erhalten. Echter Code wird nicht ausgeführt.");
-             errorMessageUniliga.textContent = "Backend führt Test-Code aus. Bitte Backend korrigieren.";
-             errorMessageUniliga.style.display = 'block';
-             uniligaDataArea.innerHTML = '<p>Backend-Test aktiv.</p>';
-             currentUniligaData = null;
-             return;
-         }
-        console.log("[LOG] Uniliga API data received (teams):", JSON.stringify(data.teams, null, 2));
-        console.log("[LOG] Uniliga API data received (players):", JSON.stringify(data.players, null, 2));
-        if (!data || !data.teams || data.teams.length === 0 || !data.players || data.players.length === 0) {
-            throw new Error("Ungültiges Datenformat von der API empfangen.");
-        }
-        currentUniligaData = data;
-        console.log("[LOG] Final teamIconMap before display:", teamIconMap);
-        displayUniligaData(currentUniligaData);
-    } catch (err) {
-        console.error("Fehler in loadUniligaView:", err);
-        if (errorMessageUniliga) { errorMessageUniliga.textContent = `Fehler: ${err.message}`; errorMessageUniliga.style.display = 'block'; }
-        uniligaDataArea.innerHTML = '<p>Daten konnten nicht geladen werden.</p>';
-        currentUniligaData = null;
+        state.leetifyProfiles.set(steam64Id, data);
+    } catch (error) {
+        state.leetifyErrors.set(
+            steam64Id,
+            error.message || "Leetify-Daten konnten nicht geladen werden."
+        );
     } finally {
-        console.log("[LOG] loadUniligaView finally block reached.");
-        if (loadingIndicatorUniliga) { loadingIndicatorUniliga.style.display = 'none'; console.log("[LOG] Uniliga loading indicator hidden."); }
+        state.leetifyLoading.delete(steam64Id);
+        if (state.selectedNickname === player.nickname) {
+            renderPlayerDetail(player);
+        }
     }
 }
 
-function displayUniligaData(data) {
-    console.log("[LOG] displayUniligaData called with data:", data);
-    if (!uniligaDataArea) { console.error("FEHLER: uniligaDataArea ist null in displayUniligaData!"); return; }
-    if (!data || !data.teams || data.teams.length === 0 || !data.players || data.players.length === 0) {
-        console.warn("[LOG] Keine gültigen oder leere Uniliga-Daten zum Anzeigen vorhanden.");
-        uniligaDataArea.innerHTML = '<p>Keine vollständigen Daten zum Anzeigen gefunden.</p>';
+function renderPlayerDetail(player) {
+    if (!player || player.error) return;
+
+    state.selectedNickname = player.nickname;
+    const rank = rankedPlayers().find((entry) => entry.player.nickname === player.nickname)?.rank;
+    const avatar = escapeHtml(safeUrl(player.avatar, "/default_avatar.png"));
+    const faceitUrl = escapeHtml(safeUrl(
+        player.faceitUrl,
+        `https://www.faceit.com/en/players/${encodeURIComponent(player.nickname)}`
+    ));
+    const matches = player.matchesConsidered
+        ? `Form aus ${number.format(player.matchesConsidered)} Matches`
+        : "Aktuelle FACEIT-Statistiken";
+    const stats = [
+        { stat: "rating", label: "Rating 2.0", value: player.rating, digits: 2 },
+        { stat: "dpr", label: "DPR", value: player.dpr, digits: 2 },
+        { stat: "kast", label: "KAST", value: player.kast, digits: 1, suffix: "%" },
+        { stat: "impact", label: "Impact", value: player.impact, digits: 2 },
+        { stat: "adr", label: "ADR", value: player.adr, digits: 1 },
+        { stat: "kpr", label: "KPR", value: player.kpr, digits: 2 }
+    ];
+
+    dom.playerDetail.innerHTML = `
+        <article class="profile-card">
+            <header class="profile-hero">
+                <img src="${avatar}" class="profile-avatar" alt="Avatar von ${escapeHtml(player.nickname)}" onerror="this.src='/default_avatar.png'">
+                <div class="profile-title">
+                    <p class="panel-kicker">#${rank ?? "—"} im Ranking</p>
+                    <h2>${escapeHtml(player.nickname)}</h2>
+                    <p>${matches}</p>
+                </div>
+                <a class="faceit-link" href="${faceitUrl}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(player.nickname)} auf FACEIT öffnen">
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M14 5h5v5M19 5l-9 9M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>
+                    </svg>
+                </a>
+            </header>
+            <div class="profile-meta">
+                <div class="profile-meta-item">
+                    <span>Elo</span>
+                    <strong>${number.format(player.sortElo)}</strong>
+                </div>
+                <div class="profile-meta-item">
+                    <span>Level</span>
+                    <strong>${escapeHtml(player.level ?? "—")}</strong>
+                </div>
+                <div class="profile-meta-item">
+                    <span>Marktwert</span>
+                    <strong>${escapeHtml(formatWorth(player.worth))}</strong>
+                </div>
+            </div>
+            <div class="stats-grid">
+                ${stats.map(renderStatCard).join("")}
+            </div>
+            ${renderLeetifySection(player)}
+        </article>
+    `;
+
+    renderPlayerList();
+    void loadLeetifyProfile(player);
+}
+
+function updatePlayerProgress() {
+    if (!state.totalPlayers) {
+        dom.playerProgress.textContent = "Wird geladen";
+        return;
+    }
+    dom.playerProgress.textContent = state.loadedPlayers < state.totalPlayers
+        ? `${state.loadedPlayers} / ${state.totalPlayers}`
+        : `${state.totalPlayers} Spieler`;
+}
+
+function readPlayerCache() {
+    try {
+        const raw = localStorage.getItem(cacheKeys.players);
+        if (!raw) return null;
+        const cached = JSON.parse(raw);
+        const maxAge = 5 * 60 * 1000;
+        if (!cached.savedAt || Date.now() - cached.savedAt > maxAge || !Array.isArray(cached.players)) {
+            return null;
+        }
+        return cached;
+    } catch {
+        return null;
+    }
+}
+
+function writePlayerCache() {
+    try {
+        localStorage.setItem(cacheKeys.players, JSON.stringify({
+            savedAt: Date.now(),
+            players: state.players
+        }));
+    } catch {
+        // A blocked or full browser cache must not break the leaderboard.
+    }
+}
+
+async function loadSaverAbiView() {
+    if (state.saverAbiLoaded || state.saverAbiLoading) return;
+
+    const cached = readPlayerCache();
+    if (cached) {
+        state.players = cached.players;
+        state.totalPlayers = cached.players.length;
+        state.loadedPlayers = cached.players.length;
+        state.saverAbiLoaded = true;
+        renderSaverAbiSummary();
+        renderPlayerList();
+        updatePlayerProgress();
+        const leader = rankedPlayers().find(({ player }) => !player.error)?.player;
+        if (leader) renderPlayerDetail(leader);
+        dom.playerLoading.hidden = true;
+        setStatus(dom.saverUpdated, "Vor wenigen Minuten synchronisiert", "ready");
         return;
     }
 
-    let teamTableHtml = `
-    <h3>Team Rangliste</h3>
-    <div class="table-container">
-        <table class="stats-table team-ranking-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Team</th>
-                    <th>Spiele</th>
-                    <th>Pkt</th>
-                    <th>S</th>
-                    <th>U</th> <th>N</th>
-                    <th>WR %</th>
-                    <th>Avg. R.</th>
-                </tr>
-            </thead>
-            <tbody>`;
-    const sortedTeams = [...data.teams].sort((a, b) => {
-        // Sorting logic now uses match stats as implemented in backend
-        const pointsDiff = (b.points ?? 0) - (a.points ?? 0);
-        if (pointsDiff !== 0) return pointsDiff;
-        const winsDiff = (b.matchWins ?? 0) - (a.matchWins ?? 0);
-        if (winsDiff !== 0) return winsDiff;
-        const drawsDiff = (b.matchDraws ?? 0) - (a.matchDraws ?? 0);
-        if (drawsDiff !== 0) return drawsDiff;
+    state.saverAbiLoading = true;
+    dom.playerError.hidden = true;
+    dom.playerLoading.hidden = false;
+    renderSkeletonRows();
+    setStatus(dom.saverUpdated, "Daten werden synchronisiert", "loading");
+
+    try {
+        const namesResponse = await fetch("/players.json", {
+            headers: { Accept: "application/json" }
+        });
+        if (!namesResponse.ok) throw new Error(`Spielerliste: HTTP ${namesResponse.status}`);
+
+        const names = await namesResponse.json();
+        if (!Array.isArray(names) || names.length === 0) {
+            throw new Error("Die Spielerliste ist leer.");
+        }
+
+        state.players = [];
+        state.totalPlayers = names.length;
+        state.loadedPlayers = 0;
+        updatePlayerProgress();
+
+        let nextIndex = 0;
+        const worker = async () => {
+            while (nextIndex < names.length) {
+                const index = nextIndex++;
+                const player = await getPlayerData(names[index]);
+                state.players.push(player);
+                state.loadedPlayers += 1;
+                updatePlayerProgress();
+                renderSaverAbiSummary();
+                renderPlayerList();
+            }
+        };
+
+        const concurrency = Math.min(6, names.length);
+        await Promise.all(Array.from({ length: concurrency }, worker));
+
+        state.saverAbiLoaded = true;
+        writePlayerCache();
+
+        const leader = rankedPlayers().find(({ player }) => !player.error)?.player;
+        if (!state.selectedNickname && leader) renderPlayerDetail(leader);
+
+        const latestUpdate = state.players
+            .map((player) => player.lastUpdated)
+            .filter(Boolean)
+            .sort()
+            .at(-1);
+        setStatus(
+            dom.saverUpdated,
+            formatDate(latestUpdate) ? `Stand ${formatDate(latestUpdate)} Uhr` : "Gerade synchronisiert",
+            "ready"
+        );
+    } catch (error) {
+        dom.playerError.textContent = `Leaderboard konnte nicht geladen werden: ${error.message}`;
+        dom.playerError.hidden = false;
+        setStatus(dom.saverUpdated, "Synchronisierung fehlgeschlagen", "error");
+        renderPlayerList();
+    } finally {
+        state.saverAbiLoading = false;
+        dom.playerLoading.hidden = true;
+        updatePlayerProgress();
+    }
+}
+
+async function loadTeamIconMap() {
+    if (Object.keys(state.teamIconMap).length > 0) return;
+    try {
+        const response = await fetch("/uniliga_teams.json", {
+            headers: { Accept: "application/json" }
+        });
+        if (!response.ok) return;
+        const teams = await response.json();
+        if (!Array.isArray(teams)) return;
+        state.teamIconMap = Object.fromEntries(
+            teams
+                .filter((team) => team.name && team.icon)
+                .map((team) => [team.name, team.icon])
+        );
+    } catch {
+        state.teamIconMap = {};
+    }
+}
+
+function winRateClass(value) {
+    const winRate = toNumber(value);
+    if (winRate === null) return "";
+    if (winRate >= thresholds.winRate.great) return "text-great";
+    if (winRate >= thresholds.winRate.good) return "text-good";
+    if (winRate >= thresholds.winRate.okay) return "text-okay";
+    return "text-bad";
+}
+
+function renderUniligaSummary(data) {
+    const teams = data.teams || [];
+    const players = data.players || [];
+    const leader = teams[0];
+    const topPlayer = players[0];
+
+    dom.summaryTeamCount.textContent = number.format(teams.length);
+    dom.summaryUniligaPlayerCount.textContent = number.format(players.length);
+    dom.summaryLeadingTeam.textContent = leader?.name || "—";
+    dom.summaryLeadingTeamPoints.textContent = leader ? `${number.format(leader.points ?? 0)} Punkte` : "aktuelle Punkte";
+    dom.summaryTopRating.textContent = topPlayer ? safeFixed(topPlayer.rating, 2) : "—";
+    dom.summaryTopPlayer.textContent = topPlayer?.nickname || "bester Spieler";
+}
+
+function renderUniligaData(data) {
+    const teams = [...data.teams].sort((a, b) => {
+        const points = (b.points ?? 0) - (a.points ?? 0);
+        if (points !== 0) return points;
+        const wins = (b.matchWins ?? 0) - (a.matchWins ?? 0);
+        if (wins !== 0) return wins;
         return (b.avgRating ?? 0) - (a.avgRating ?? 0);
     });
+    const players = [...data.players].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    const updated = formatDate(data.lastUpdated);
 
-    sortedTeams.forEach((team, index) => {
-        const teamName = team.name || `Team ID ${team.id.substring(0,8)}...`;
-        const iconFilename = teamIconMap[teamName];
-        const iconPath = iconFilename ? `/uniliga_icons/${iconFilename}` : 'default_team_icon.png';
-        const altText = iconFilename ? `Logo ${teamName}` : 'Standard Team Icon';
-        teamTableHtml += `
-            <tr data-team-id="${team.id}">
-                <td>${index + 1}</td>
-                <td class="player-cell team-cell">
-                    <img src="${iconPath}" class="table-avatar team-avatar" alt="${altText}" onerror="this.style.display='none'; this.onerror=null;"/>
-                    <span>${teamName}</span>
-                </td>
-                <td>${team.matchesPlayed ?? '0'}</td>
-                <td>${team.points ?? '0'}</td>
-                <td>${team.matchWins ?? '0'}</td> <td>${team.matchDraws ?? '0'}</td> <td>${team.matchLosses ?? '0'}</td> <td class="${getTeamWinrateClass(team.matchWinRate)}">${safe(team.matchWinRate, 1)}</td> <td>${safe(team.avgRating, 2)}</td>
-            </tr>`;
-    });
-    teamTableHtml += `</tbody></table></div>`;
-
-    let playerTableHtml = `
-        <h3>Spieler Rangliste (Rating)</h3>
-        <div class="table-container">
-            <table class="stats-table player-ranking-table">
-                <thead><tr><th>#</th><th>Spieler</th><th>Spiele</th><th>Rating</th><th>IMPACT</th><th>ADR</th><th>KAST%</th><th>HS%</th><th>WR%</th></tr></thead>
-                <tbody>`;
-    data.players.forEach((player, index) => {
-        playerTableHtml += `
+    const teamRows = teams.map((team, index) => {
+        const teamName = team.name || `Team ${index + 1}`;
+        const iconName = state.teamIconMap[teamName];
+        const iconUrl = iconName
+            ? `/uniliga_icons/${encodeURIComponent(iconName)}`
+            : "/default_team_icon.png";
+        const record = `${team.matchWins ?? 0}–${team.matchDraws ?? 0}–${team.matchLosses ?? 0}`;
+        return `
             <tr>
-                <td>${index + 1}</td>
-                <td class="player-cell">
-                    <img src="${player.avatar || 'default_avatar.png'}" class="table-avatar" alt="Avatar" onerror="this.src='default_avatar.png'"/>
-                    <span>${player.nickname || 'Unbekannt'}</span>
+                <td class="${index < 3 ? "table-rank-top" : ""}">${index + 1}</td>
+                <td>
+                    <span class="table-identity">
+                        <img src="${escapeHtml(iconUrl)}" alt="" loading="lazy" onerror="this.src='/default_team_icon.png'">
+                        <span>${escapeHtml(teamName)}</span>
+                    </span>
                 </td>
-                <td>${player.matchesPlayed ?? '0'}</td><td>${safe(player.rating, 2)}</td><td>${safe(player.impact - 0.2, 2)}</td>
-                <td>${safe(player.adr, 1)}</td><td>${safe(player.kast, 1)}</td><td>${safe(player.hsp, 1)}</td>
-                <td class="${getTeamWinrateClass(player.winRate)}">${safe(player.winRate, 1)}</td>
-            </tr>`;
+                <td>${number.format(team.matchesPlayed ?? 0)}</td>
+                <td><strong>${number.format(team.points ?? 0)}</strong></td>
+                <td>${record}</td>
+                <td class="${winRateClass(team.matchWinRate)}">${safeFixed(team.matchWinRate, 1, "%")}</td>
+                <td>${safeFixed(team.avgRating, 2)}</td>
+            </tr>
+        `;
+    }).join("");
+
+    const playerRows = players.map((player, index) => {
+        const avatar = escapeHtml(safeUrl(player.avatar, "/default_avatar.png"));
+        return `
+            <tr>
+                <td class="${index < 3 ? "table-rank-top" : ""}">${index + 1}</td>
+                <td>
+                    <span class="table-identity">
+                        <img src="${avatar}" alt="" loading="lazy" onerror="this.src='/default_avatar.png'">
+                        <span>${escapeHtml(player.nickname || "Unbekannt")}</span>
+                    </span>
+                </td>
+                <td>${number.format(player.matchesPlayed ?? 0)}</td>
+                <td><strong>${safeFixed(player.rating, 2)}</strong></td>
+                <td>${safeFixed(toNumber(player.impact) === null ? null : player.impact - 0.2, 2)}</td>
+                <td>${safeFixed(player.adr, 1)}</td>
+                <td>${safeFixed(player.kast, 1, "%")}</td>
+                <td class="${winRateClass(player.winRate)}">${safeFixed(player.winRate, 1, "%")}</td>
+            </tr>
+        `;
+    }).join("");
+
+    dom.uniligaArea.innerHTML = `
+        <section class="uniliga-panel">
+            <header class="uniliga-panel-header">
+                <div>
+                    <h2>Team Standings</h2>
+                    <p>Punkte, Bilanz und Teamform</p>
+                </div>
+                <span class="panel-status">${teams.length} Teams</span>
+            </header>
+            <div class="table-wrap">
+                <table class="stats-table">
+                    <caption class="sr-only">Uniliga Team Rangliste</caption>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Team</th>
+                            <th>Sp.</th>
+                            <th>Pkt.</th>
+                            <th>S–U–N</th>
+                            <th>WR</th>
+                            <th>Rating</th>
+                        </tr>
+                    </thead>
+                    <tbody>${teamRows}</tbody>
+                </table>
+            </div>
+            <div class="last-updated">${updated ? `Stand ${updated} Uhr` : "Aktuelle Championship-Daten"}</div>
+        </section>
+
+        <section class="uniliga-panel">
+            <header class="uniliga-panel-header">
+                <div>
+                    <h2>Player Performance</h2>
+                    <p>Sortiert nach Rating 2.0</p>
+                </div>
+                <span class="panel-status">${players.length} Spieler</span>
+            </header>
+            <div class="table-wrap">
+                <table class="stats-table">
+                    <caption class="sr-only">Uniliga Spieler Rangliste</caption>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Spieler</th>
+                            <th>Maps</th>
+                            <th>Rating</th>
+                            <th>Impact</th>
+                            <th>ADR</th>
+                            <th>KAST</th>
+                            <th>WR</th>
+                        </tr>
+                    </thead>
+                    <tbody>${playerRows}</tbody>
+                </table>
+            </div>
+            <div class="last-updated">${updated ? `Stand ${updated} Uhr` : "Aktuelle Championship-Daten"}</div>
+        </section>
+    `;
+}
+
+async function loadUniligaView() {
+    if (state.uniligaData || state.uniligaLoading) return;
+
+    state.uniligaLoading = true;
+    dom.uniligaLoading.hidden = false;
+    dom.uniligaError.hidden = true;
+    setStatus(dom.uniligaUpdated, "Daten werden synchronisiert", "loading");
+
+    try {
+        const [response] = await Promise.all([
+            fetch("/api/uniliga-stats", {
+                headers: { Accept: "application/json" }
+            }),
+            loadTeamIconMap()
+        ]);
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+            throw new Error(data?.error || `HTTP ${response.status}`);
+        }
+        if (!Array.isArray(data?.teams) || !Array.isArray(data?.players)) {
+            throw new Error("Ungültiges Datenformat");
+        }
+
+        state.uniligaData = data;
+        renderUniligaSummary(data);
+        renderUniligaData(data);
+        const updated = formatDate(data.lastUpdated);
+        setStatus(
+            dom.uniligaUpdated,
+            updated ? `Stand ${updated} Uhr` : "Gerade synchronisiert",
+            "ready"
+        );
+    } catch (error) {
+        dom.uniligaError.textContent = `Uniliga-Daten konnten nicht geladen werden: ${error.message}`;
+        dom.uniligaError.hidden = false;
+        setStatus(dom.uniligaUpdated, "Synchronisierung fehlgeschlagen", "error");
+    } finally {
+        state.uniligaLoading = false;
+        dom.uniligaLoading.hidden = true;
+    }
+}
+
+function setSortMode(mode) {
+    if (!["elo", "worth"].includes(mode) || state.sortMode === mode) return;
+    state.sortMode = mode;
+    dom.sortElo.classList.toggle("active", mode === "elo");
+    dom.sortWorth.classList.toggle("active", mode === "worth");
+    dom.sortElo.setAttribute("aria-pressed", String(mode === "elo"));
+    dom.sortWorth.setAttribute("aria-pressed", String(mode === "worth"));
+    renderPlayerList();
+
+    const selected = state.players.find((player) => player.nickname === state.selectedNickname);
+    if (selected) renderPlayerDetail(selected);
+}
+
+function switchView(view, updateUrl = true) {
+    const targetView = view === "uniliga" ? "uniliga" : "saverabi";
+
+    dom.views.forEach((element) => {
+        const isActive = element.id === `${targetView}-content`;
+        element.classList.toggle("active", isActive);
+        element.hidden = !isActive;
     });
-    playerTableHtml += `</tbody></table></div>`;
 
-    const lastUpdatedHtml = data.lastUpdated
-        ? `<div class="last-updated">Stand: ${new Date(data.lastUpdated).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} Uhr</div>`
-        : '';
+    dom.tabs.forEach((tab) => {
+        const isActive = tab.dataset.view === targetView;
+        tab.classList.toggle("active", isActive);
+        tab.setAttribute("aria-selected", String(isActive));
+        tab.tabIndex = isActive ? 0 : -1;
+    });
 
-    uniligaDataArea.innerHTML = teamTableHtml + playerTableHtml + lastUpdatedHtml;
-    console.log("[LOG] Uniliga tables rendered.");
-}
-
-function getTeamWinrateClass(winRate) {
-    const val = parseFloat(winRate);
-    if (isNaN(val)) return '';
-    const cfg = thresholds.winRate;
-    // Assuming thresholds.winRate is for percentage (0-100)
-    if (val >= cfg.great) return 'text-great'; // Use great threshold for highest win rate class
-    if (val >= cfg.good) return 'text-good';
-    if (val >= cfg.okay) return 'text-okay';
-    return 'text-bad';
-}
-
-// -------------------------------------------------------------
-// Umschaltlogik für Ansichten (unverändert)
-// -------------------------------------------------------------
-function switchView(viewToShow) {
-    console.log(`[LOG] Switching view to: ${viewToShow}`);
-    document.querySelectorAll('.view-content').forEach(content => content.classList.remove('active'));
-    if (toggleButtons) toggleButtons.forEach(button => button.classList.remove('active'));
-
-    const contentToShow = document.getElementById(`${viewToShow}-content`);
-    const buttonToActivate = document.querySelector(`.toggle-button[data-view="${viewToShow}"]`);
-
-    if (contentToShow) contentToShow.classList.add('active');
-    if (buttonToActivate) buttonToActivate.classList.add('active');
-
-    const sortButtonContainer = document.getElementById('saverabi-sort-controls');
-    if (sortButtonContainer) {
-        sortButtonContainer.style.display = (viewToShow === 'saverabi') ? 'flex' : 'none';
+    if (updateUrl) {
+        history.replaceState(null, "", `#${targetView}`);
     }
 
-    if (viewToShow === 'uniliga') {
-        if (detailCardContainer) detailCardContainer.style.display = 'none';
-        if (mainContentArea) mainContentArea.classList.remove('detail-visible');
+    if (targetView === "saverabi") {
+        loadSaverAbiView();
+    } else {
         loadUniligaView();
-    } else if (viewToShow === 'saverabi') {
-        if (detailCardContainer) detailCardContainer.style.display = 'none';
-        if (mainContentArea) mainContentArea.classList.remove('detail-visible');
-        if (allPlayersData.length === 0) {
-             loadSaverAbiView();
-         } else {
-             sortAndDisplayPlayers(); // Beim Wechsel zurück, einfach neu sortieren/anzeigen
-         }
     }
 }
 
-// -------------------------------------------------------------
-// Initialisierung beim Laden der Seite (unverändert)
-// -------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-    console.log("[LOG] DOMContentLoaded event fired.");
-    cacheDOMElements();
+function bindEvents() {
+    dom.tabs.forEach((tab) => {
+        tab.addEventListener("click", () => switchView(tab.dataset.view));
+        tab.addEventListener("keydown", (event) => {
+            if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+            event.preventDefault();
+            const target = tab.dataset.view === "saverabi" ? "uniliga" : "saverabi";
+            switchView(target);
+            document.querySelector(`.nav-tab[data-view="${target}"]`)?.focus();
+        });
+    });
 
-    if (toggleButtons) {
-        toggleButtons.forEach(button => {
-            button.addEventListener('click', (event) => {
-                const view = event.currentTarget.dataset.view;
-                if (view) switchView(view);
+    dom.sortElo.addEventListener("click", () => setSortMode("elo"));
+    dom.sortWorth.addEventListener("click", () => setSortMode("worth"));
+
+    dom.playerSearch.addEventListener("input", (event) => {
+        state.search = event.currentTarget.value;
+        renderPlayerList();
+    });
+
+    dom.playerList.addEventListener("click", (event) => {
+        const row = event.target.closest(".player-row[data-nickname]");
+        if (!row) return;
+        const player = state.players.find((entry) => entry.nickname === row.dataset.nickname);
+        if (!player) return;
+
+        renderPlayerDetail(player);
+        const narrowViewport = window.matchMedia?.("(max-width: 1080px)");
+        if (
+            narrowViewport?.matches
+            && typeof dom.playerDetail.scrollIntoView === "function"
+        ) {
+            dom.playerDetail.scrollIntoView({
+                behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+                block: "start"
             });
-        });
-    } else { console.warn("[LOG] Toggle buttons not found."); }
+        }
+    });
 
-    if (sortEloButton) {
-        sortEloButton.addEventListener('click', () => {
-            if (currentSortMode !== 'elo') {
-                console.log("[LOG] Switching sort mode to: elo");
-                currentSortMode = 'elo';
-                sortAndDisplayPlayers();
-            }
-        });
-    } else { console.warn("[LOG] Sort Elo Button not found."); }
+    window.addEventListener("hashchange", () => {
+        switchView(window.location.hash.slice(1), false);
+    });
+}
 
-    if (sortWorthButton) {
-        sortWorthButton.addEventListener('click', () => {
-            if (currentSortMode !== 'worth') {
-                console.log("[LOG] Switching sort mode to: worth");
-                currentSortMode = 'worth';
-                sortAndDisplayPlayers();
-            }
-        });
-    } else { console.warn("[LOG] Sort Worth Button not found."); }
-
-
-    console.log("[LOG] Initializing default view: saverabi");
-    switchView('saverabi');
+document.addEventListener("DOMContentLoaded", () => {
+    cacheDom();
+    bindEvents();
+    const initialView = window.location.hash.slice(1) === "uniliga" ? "uniliga" : "saverabi";
+    switchView(initialView, false);
 });

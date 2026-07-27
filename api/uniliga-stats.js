@@ -5,6 +5,7 @@ import Redis from "ioredis";
 import { calculateAverageStats } from './utils/stats.js'; // Pfad prüfen!
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 console.log('[API Uniliga - Punkte Final V5] Modul Imports geladen.'); // Log version updated again for debugging
 
@@ -46,7 +47,8 @@ else { console.warn("[Redis Uniliga] REDIS_URL not set."); }
 // --- Lade Team-Informationen aus JSON ---
 let teamInfoMap = {}; let jsonLoadError = null; let calculatedJsonPath = "[Nicht berechnet]";
 try {
-    const jsonPath = path.join(__dirname, '..', "uniliga_teams.json"); calculatedJsonPath = jsonPath;
+    const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+    const jsonPath = path.join(moduleDirectory, '..', "uniliga_teams.json"); calculatedJsonPath = jsonPath;
     console.log(`[API Uniliga] Attempting to load JSON from: ${jsonPath}`);
     if (!fs.existsSync(jsonPath)) { throw new Error(`File not found at path: ${jsonPath}.`); }
     const fileContent = fs.readFileSync(jsonPath, 'utf-8'); const teamsData = JSON.parse(fileContent);

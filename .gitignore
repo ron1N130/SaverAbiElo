@@ -1,9 +1,9 @@
-
-.env
-
 node_modules/
-
+.vercel/
+.env
+.env.*
+!.env.example
 .DS_Store
 .idx/dev.nix
-
 log_result.json
+npm-debug.log*

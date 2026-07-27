@@ -1,30 +1,34 @@
 {
-  "name": "faceiteloviewer",
-  "version": "1.0.0",
-  "description": "",
+  "name": "saverabi-performance-hub",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "FACEIT community leaderboard and Uniliga CS2 statistics.",
   "main": "script.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "check": "node --check script.js && node --check api/faceit-data.js && node --check api/leetify-data.js && node --check api/uniliga-stats.js && node --check api/update-stats.js",
+    "test": "npm run check && node --test test/app.test.mjs"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ronin1221/ron1n1221.github.io.git"
+    "url": "git+https://github.com/ron1N130/SaverAbiElo.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "faceit",
+    "cs2",
+    "leaderboard",
+    "uniliga"
+  ],
+  "author": "ron1N130",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/ronin1221/ron1n1221.github.io/issues"
+    "url": "https://github.com/ron1N130/SaverAbiElo/issues"
   },
-  "homepage": "https://github.com/ronin1221/ron1n1221.github.io#readme",
+  "homepage": "https://saverabielo.vercel.app/",
   "dependencies": {
-    "@vercel/kv": "^3.0.0",
-    "cheerio": "^1.0.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^5.1.0",
-    "ioredis": "^4.30.0",
-    "node-fetch": "^2.7.0",
-    "redis": "^4.7.0"
+    "ioredis": "^5.11.1"
+  },
+  "devDependencies": {
+    "jsdom": "^29.0.1"
   }
 }
