@@ -36,6 +36,7 @@ const clubs = {
 const cacheKeys = {
     players: "saverabi:players:v3"
 };
+const UNILIGA_API_SCHEMA_VERSION = 16;
 
 const state = {
     players: [],
@@ -1188,9 +1189,12 @@ async function loadUniligaPhase(phase) {
 
     try {
         const [response] = await Promise.all([
-            fetch(`/api/uniliga-stats?phase=${encodeURIComponent(phase)}`, {
-                headers: { Accept: "application/json" }
-            }),
+            fetch(
+                `/api/uniliga-stats?phase=${encodeURIComponent(phase)}&v=${UNILIGA_API_SCHEMA_VERSION}`,
+                {
+                    headers: { Accept: "application/json" }
+                }
+            ),
             loadTeamIconMap()
         ]);
         const data = await response.json().catch(() => null);

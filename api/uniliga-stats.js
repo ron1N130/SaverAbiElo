@@ -14,6 +14,7 @@ const GROUP_STAGE_CHAMPIONSHIP_ID =
 const PLAYOFFS_CHAMPIONSHIP_ID = "4ee001a9-f6f3-4936-916b-798d3171cca8";
 const CACHE_VERSION = 16;
 const CACHE_TTL_SECONDS = 4 * 60 * 60;
+const CLIENT_CACHE_SECONDS = 5 * 60;
 const API_DELAY = 500;
 const MATCH_DETAIL_BATCH_SIZE = 10;
 const MAX_MATCHES_TO_FETCH = 500;
@@ -576,7 +577,10 @@ export default async function handler(req, res) {
         const cachedData = await readCache(cacheKey);
         if (cachedData) {
             res.setHeader("X-Cache-Status", "HIT");
-            res.setHeader("Cache-Control", `public, max-age=${CACHE_TTL_SECONDS}`);
+            res.setHeader(
+                "Cache-Control",
+                `public, max-age=${CLIENT_CACHE_SECONDS}, stale-while-revalidate=${CACHE_TTL_SECONDS}`
+            );
             return res.status(200).json(cachedData);
         }
     }
@@ -610,7 +614,10 @@ export default async function handler(req, res) {
         };
 
         await writeCache(cacheKey, responseData);
-        res.setHeader("Cache-Control", `public, max-age=${CACHE_TTL_SECONDS}`);
+        res.setHeader(
+            "Cache-Control",
+            `public, max-age=${CLIENT_CACHE_SECONDS}, stale-while-revalidate=${CACHE_TTL_SECONDS}`
+        );
         return res.status(200).json(responseData);
     } catch (error) {
         console.error(`[API Uniliga] ${phase} fehlgeschlagen:`, error);
