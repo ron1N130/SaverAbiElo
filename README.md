@@ -29,8 +29,10 @@ REDIS_URL=
 
 Create the Leetify key at [leetify.com/app/developer](https://leetify.com/app/developer).
 It stays server-side and is optional for local development, but recommended for
-reliable production limits. Leetify profiles are fetched on demand and are not
-stored in Redis or browser storage.
+reliable production limits. Leetify profiles are fetched on demand and cached
+server-side in Redis for 24 hours. Successful stale profiles are retained for up
+to seven days and are returned when Leetify is rate-limited or temporarily
+unavailable. Leetify profiles are not stored in browser storage.
 
 ## Validation
 

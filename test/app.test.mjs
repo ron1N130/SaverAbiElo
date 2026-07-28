@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
-import leetifyHandler from "../api/leetify-data.js";
+import leetifyHandler, { createLeetifyHandler } from "../api/leetify-data.js";
 import { buildGroupStandings, buildPlayoffBracket } from "../api/uniliga-stats.js";
 
 const playerFixtures = {
@@ -300,7 +300,7 @@ async function waitFor(predicate, message) {
     throw new Error(message);
 }
 
-test("Leetify proxy validates and returns a no-store profile subset", async () => {
+test("Leetify proxy validates and returns a Redis-cacheable no-store profile subset", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => ({
         ok: true,
@@ -334,11 +334,82 @@ test("Leetify proxy validates and returns a no-store profile subset", async () =
 
         assert.equal(response.statusCode, 200);
         assert.equal(response.headers["cache-control"], "no-store");
+        assert.equal(response.headers["x-leetify-cache"], "MISS");
         assert.equal(response.body.aimRating, 84.2);
         assert.equal(response.body.profileUrl, "https://leetify.com/public/profile/76561198000000001");
     } finally {
         globalThis.fetch = originalFetch;
     }
+});
+
+test("Leetify Redis cache prevents repeated upstream profile requests", async () => {
+    let storedProfile = null;
+    let fetchCalls = 0;
+    const handler = createLeetifyHandler({
+        cacheReader: async () => storedProfile,
+        cacheWriter: async (_key, value) => {
+            storedProfile = value;
+        },
+        fetchImpl: async () => {
+            fetchCalls += 1;
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    name: "Alpha",
+                    ranks: { leetify: 2.12 }
+                })
+            };
+        },
+        now: () => Date.parse("2026-07-28T08:00:00.000Z")
+    });
+
+    const request = {
+        method: "GET",
+        query: { steam64_id: "76561198000000001" }
+    };
+    const firstResponse = mockVercelResponse();
+    const secondResponse = mockVercelResponse();
+
+    await handler(request, firstResponse);
+    await handler(request, secondResponse);
+
+    assert.equal(fetchCalls, 1);
+    assert.equal(firstResponse.headers["x-leetify-cache"], "MISS");
+    assert.equal(secondResponse.headers["x-leetify-cache"], "HIT");
+    assert.equal(secondResponse.body.leetifyRating, 2.12);
+});
+
+test("Leetify serves stale Redis data when the upstream rate limit is reached", async () => {
+    const staleProfile = {
+        version: 1,
+        freshUntil: Date.parse("2026-07-27T08:00:00.000Z"),
+        data: {
+            available: true,
+            steam64Id: "76561198000000001",
+            leetifyRating: 1.42
+        }
+    };
+    const handler = createLeetifyHandler({
+        cacheReader: async () => staleProfile,
+        cacheWriter: async () => {},
+        fetchImpl: async () => ({
+            ok: false,
+            status: 429,
+            json: async () => ({})
+        }),
+        now: () => Date.parse("2026-07-28T08:00:00.000Z")
+    });
+    const response = mockVercelResponse();
+
+    await handler({
+        method: "GET",
+        query: { steam64_id: "76561198000000001" }
+    }, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["x-leetify-cache"], "STALE");
+    assert.equal(response.body.leetifyRating, 1.42);
 });
 
 test("uses the requested Uniliga championship and SaverAbi roster", async () => {
