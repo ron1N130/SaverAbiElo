@@ -4,9 +4,9 @@ Dark-mode FACEIT community leaderboard and Uniliga CS2 dashboard, deployed on Ve
 
 ## Features
 
-- Progressive SaverAbi leaderboard with Elo and market-value sorting
+- Progressive SaverAbi leaderboard with Elo, market-value, and Leetify-stat sorting
 - Player search, detail view, form indicators, and direct FACEIT links
-- On-demand Leetify ratings and mechanics data in the player detail view
+- Rate-limit-aware Leetify ratings and mechanics with a 24-hour Redis cache
 - Uniliga team standings and player-performance tables
 - Responsive layout, keyboard-accessible tabs, and loading/error states
 - Redis-backed API caching plus a daily Uniliga refresh
