@@ -79,6 +79,38 @@ const leetifyFixture = {
     sprayAccuracy: 41.7
 };
 
+const leetifyFixtures = {
+    "76561198000000001": leetifyFixture,
+    "76561198000000002": {
+        ...leetifyFixture,
+        name: "Bravo",
+        steam64Id: "76561198000000002",
+        profileUrl: "https://leetify.com/public/profile/76561198000000002",
+        leetifyRating: 3.1,
+        aimRating: 91.5,
+        positioningRating: 73.2,
+        utilityRating: 62.8,
+        timeToDamage: 550,
+        crosshairPlacement: 8.1,
+        counterStrafing: 92.4,
+        sprayAccuracy: 48.6
+    },
+    "76561198000000003": {
+        ...leetifyFixture,
+        name: "Charlie",
+        steam64Id: "76561198000000003",
+        profileUrl: "https://leetify.com/public/profile/76561198000000003",
+        leetifyRating: 0.5,
+        aimRating: 72.1,
+        positioningRating: 82.6,
+        utilityRating: 88.3,
+        timeToDamage: 420,
+        crosshairPlacement: 5.9,
+        counterStrafing: 79.8,
+        sprayAccuracy: 36.2
+    }
+};
+
 const uniligaGroupsFixture = {
     lastUpdated: "2026-07-27T08:00:00.000Z",
     phase: "groups",
@@ -893,7 +925,7 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
                     return jsonResponse(playerFixtures[url.searchParams.get("nickname")]);
                 }
                 if (url.pathname === "/api/leetify-data") {
-                    return jsonResponse(leetifyFixture);
+                    return jsonResponse(leetifyFixtures[url.searchParams.get("steam64_id")]);
                 }
                 if (url.pathname === "/uniliga_teams.json") {
                     return jsonResponse([
@@ -931,6 +963,55 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
         document.querySelector(".leetify-profile-link").getAttribute("href"),
         /leetify\.com/
     );
+
+    const sortSelect = document.getElementById("player-sort-select");
+    assert.deepEqual(
+        [...sortSelect.options].map((option) => option.value),
+        [
+            "elo",
+            "worth",
+            "leetifyRating",
+            "aimRating",
+            "positioningRating",
+            "utilityRating",
+            "timeToDamage",
+            "crosshairPlacement",
+            "counterStrafing",
+            "sprayAccuracy"
+        ]
+    );
+
+    sortSelect.value = "leetifyRating";
+    sortSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await waitFor(
+        () => [...document.querySelectorAll(".player-name")]
+            .map((element) => element.textContent)
+            .join(",") === "Bravo,Alpha,Charlie",
+        "Leetify rating sort did not render"
+    );
+    await waitFor(
+        () => document.getElementById("player-load-progress").textContent === "3 Leetify-Profile",
+        "Leetify profiles did not finish loading"
+    );
+    assert.deepEqual(
+        [...document.querySelectorAll(".player-value")].map((element) => element.textContent),
+        ["+3.10", "+2.12", "+0.50"]
+    );
+
+    sortSelect.value = "timeToDamage";
+    sortSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    assert.deepEqual(
+        [...document.querySelectorAll(".player-name")].map((element) => element.textContent),
+        ["Charlie", "Alpha", "Bravo"]
+    );
+    assert.equal(document.getElementById("sort-direction-icon").textContent, "↑");
+
+    document.getElementById("sort-direction-btn").click();
+    assert.deepEqual(
+        [...document.querySelectorAll(".player-name")].map((element) => element.textContent),
+        ["Bravo", "Alpha", "Charlie"]
+    );
+    assert.equal(document.getElementById("sort-direction-icon").textContent, "↓");
 
     const tierCases = [
         [0.9, "bad", "Schlecht"],

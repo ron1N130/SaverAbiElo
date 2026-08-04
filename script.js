@@ -24,6 +24,90 @@ const thresholds = {
     winRate: { okay: 50, good: 60, great: 70 }
 };
 
+const sortDefinitions = {
+    elo: {
+        label: "Elo",
+        shortLabel: "Elo",
+        key: "sortElo",
+        defaultDirection: "desc"
+    },
+    worth: {
+        label: "Marktwert",
+        shortLabel: "Marktwert",
+        key: "worth",
+        defaultDirection: "desc"
+    },
+    leetifyRating: {
+        label: "Leetify Rating",
+        shortLabel: "Leetify",
+        key: "leetifyRating",
+        defaultDirection: "desc",
+        leetify: true,
+        digits: 2,
+        signed: true
+    },
+    aimRating: {
+        label: "Aim Rating",
+        shortLabel: "Aim",
+        key: "aimRating",
+        defaultDirection: "desc",
+        leetify: true,
+        digits: 1
+    },
+    positioningRating: {
+        label: "Positioning Rating",
+        shortLabel: "Positioning",
+        key: "positioningRating",
+        defaultDirection: "desc",
+        leetify: true,
+        digits: 1
+    },
+    utilityRating: {
+        label: "Utility Rating",
+        shortLabel: "Utility",
+        key: "utilityRating",
+        defaultDirection: "desc",
+        leetify: true,
+        digits: 1
+    },
+    timeToDamage: {
+        label: "Time to Damage",
+        shortLabel: "TTD",
+        key: "timeToDamage",
+        defaultDirection: "asc",
+        leetify: true,
+        digits: 0,
+        suffix: " ms"
+    },
+    crosshairPlacement: {
+        label: "Crosshair Placement",
+        shortLabel: "Preaim",
+        key: "crosshairPlacement",
+        defaultDirection: "asc",
+        leetify: true,
+        digits: 1,
+        suffix: "°"
+    },
+    counterStrafing: {
+        label: "Counter-Strafing",
+        shortLabel: "Counter-Strafe",
+        key: "counterStrafing",
+        defaultDirection: "desc",
+        leetify: true,
+        digits: 1,
+        suffix: "%"
+    },
+    sprayAccuracy: {
+        label: "Spray Accuracy",
+        shortLabel: "Spray",
+        key: "sprayAccuracy",
+        defaultDirection: "desc",
+        leetify: true,
+        digits: 1,
+        suffix: "%"
+    }
+};
+
 const clubs = {
     "Royal Madrid": "royal_madrid.png",
     "Bastard München": "bastard_munchen.png",
@@ -41,6 +125,7 @@ const UNILIGA_API_SCHEMA_VERSION = 19;
 const state = {
     players: [],
     sortMode: "elo",
+    sortDirection: "desc",
     search: "",
     selectedNickname: null,
     saverAbiLoaded: false,
@@ -56,7 +141,11 @@ const state = {
     teamIconMap: {},
     leetifyProfiles: new Map(),
     leetifyLoading: new Set(),
-    leetifyErrors: new Map()
+    leetifyRequests: new Map(),
+    leetifyErrors: new Map(),
+    leetifyBulkPromise: null,
+    leetifyBulkTotal: 0,
+    leetifyBulkRateLimited: false
 };
 
 const dom = {};
@@ -76,8 +165,10 @@ function cacheDom() {
     dom.playerError = document.getElementById("error-message-saverabi");
     dom.playerProgress = document.getElementById("player-load-progress");
     dom.saverUpdated = document.getElementById("saverabi-updated");
-    dom.sortElo = document.getElementById("sort-elo-btn");
-    dom.sortWorth = document.getElementById("sort-worth-btn");
+    dom.playerSort = document.getElementById("player-sort-select");
+    dom.sortDirection = document.getElementById("sort-direction-btn");
+    dom.sortDirectionIcon = document.getElementById("sort-direction-icon");
+    dom.leetifySortStatus = document.getElementById("leetify-sort-status");
     dom.uniligaLoading = document.getElementById("loading-indicator-uniliga");
     dom.uniligaError = document.getElementById("error-message-uniliga");
     dom.uniligaArea = document.getElementById("uniliga-data-area");
@@ -262,14 +353,55 @@ function clubForPlayer(player, rank) {
     return null;
 }
 
+function activeSortDefinition() {
+    return sortDefinitions[state.sortMode] || sortDefinitions.elo;
+}
+
+function isLeetifySort(mode = state.sortMode) {
+    return Boolean(sortDefinitions[mode]?.leetify);
+}
+
+function playerSortValue(player, mode = state.sortMode) {
+    const definition = sortDefinitions[mode] || sortDefinitions.elo;
+    if (!definition.leetify) return toNumber(player[definition.key]);
+
+    const profile = player.steam64Id
+        ? state.leetifyProfiles.get(player.steam64Id)
+        : null;
+    if (!profile?.available) return null;
+    return toNumber(profile[definition.key]);
+}
+
+function formatPlayerSortValue(player) {
+    const definition = activeSortDefinition();
+    const value = playerSortValue(player);
+    if (value === null) return "—";
+    if (state.sortMode === "elo") return number.format(value);
+    if (state.sortMode === "worth") return formatWorth(value);
+    if (definition.signed) return formatSigned(value, definition.digits);
+    return safeFixed(value, definition.digits, definition.suffix);
+}
+
 function rankedPlayers() {
     const sorted = [...state.players].sort((a, b) => {
         if (a.error && !b.error) return 1;
         if (!a.error && b.error) return -1;
 
-        const aValue = state.sortMode === "worth" ? a.worth : a.sortElo;
-        const bValue = state.sortMode === "worth" ? b.worth : b.sortElo;
-        return (bValue ?? -Infinity) - (aValue ?? -Infinity);
+        const aValue = playerSortValue(a);
+        const bValue = playerSortValue(b);
+        if (aValue === null && bValue !== null) return 1;
+        if (aValue !== null && bValue === null) return -1;
+
+        if (aValue !== null && bValue !== null && aValue !== bValue) {
+            return state.sortDirection === "asc"
+                ? aValue - bValue
+                : bValue - aValue;
+        }
+
+        const eloDifference = (toNumber(b.sortElo) ?? -Infinity)
+            - (toNumber(a.sortElo) ?? -Infinity);
+        if (eloDifference !== 0) return eloDifference;
+        return a.nickname.localeCompare(b.nickname, "de-DE");
     });
 
     return sorted.map((player, index) => ({
@@ -341,9 +473,8 @@ function renderPlayerList() {
         const clubIcon = club
             ? `<img src="/icons/${escapeHtml(club[1])}" class="club-icon" alt="${escapeHtml(club[0])}">`
             : "";
-        const displayValue = state.sortMode === "worth"
-            ? formatWorth(player.worth)
-            : number.format(player.sortElo);
+        const sortDefinition = activeSortDefinition();
+        const displayValue = formatPlayerSortValue(player);
         const subline = [
             player.level ? `Level ${escapeHtml(player.level)}` : null,
             player.matchesConsidered ? `${number.format(player.matchesConsidered)} Matches` : null
@@ -370,9 +501,13 @@ function renderPlayerList() {
                     </span>
                     <span class="player-value-wrap">
                         <span class="player-value">${escapeHtml(displayValue)}</span>
-                        <span class="elo-track" aria-hidden="true">
-                            <span class="elo-fill" style="width:${eloProgress(player.sortElo)}%"></span>
-                        </span>
+                        ${state.sortMode === "elo" ? `
+                            <span class="elo-track" aria-hidden="true">
+                                <span class="elo-fill" style="width:${eloProgress(player.sortElo)}%"></span>
+                            </span>
+                        ` : `
+                            <span class="player-value-label">${escapeHtml(sortDefinition.shortLabel)}</span>
+                        `}
                     </span>
                 </button>
             </li>
@@ -578,40 +713,157 @@ function renderLeetifySection(player) {
     `;
 }
 
+function leetifyCandidates() {
+    return state.players.filter((player) => !player.error && player.steam64Id);
+}
+
+function leetifyLoadCounts(players = leetifyCandidates()) {
+    return players.reduce((counts, player) => {
+        const profile = state.leetifyProfiles.get(player.steam64Id);
+        if (profile) {
+            counts.complete += 1;
+            if (profile.available) counts.available += 1;
+        } else if (state.leetifyErrors.has(player.steam64Id)) {
+            counts.complete += 1;
+            counts.failed += 1;
+        }
+        return counts;
+    }, { complete: 0, available: 0, failed: 0 });
+}
+
+function updateLeetifySortStatus() {
+    if (!dom.leetifySortStatus) return;
+    if (!isLeetifySort()) {
+        dom.leetifySortStatus.hidden = true;
+        dom.leetifySortStatus.classList.remove("is-error");
+        return;
+    }
+
+    const candidates = leetifyCandidates();
+    const counts = leetifyLoadCounts(candidates);
+    dom.leetifySortStatus.hidden = false;
+    dom.leetifySortStatus.classList.toggle("is-error", state.leetifyBulkRateLimited);
+
+    if (state.leetifyBulkPromise) {
+        dom.leetifySortStatus.textContent =
+            `Leetify-Profile werden geladen: ${counts.complete} / ${candidates.length}`;
+    } else if (state.leetifyBulkRateLimited) {
+        dom.leetifySortStatus.textContent =
+            `Leetify-Limit erreicht · ${counts.available} Profile verfügbar · fehlende Werte unten`;
+    } else {
+        dom.leetifySortStatus.textContent =
+            `${counts.available} von ${candidates.length} Leetify-Profilen verfügbar`;
+    }
+}
+
 async function loadLeetifyProfile(player) {
     const steam64Id = player?.steam64Id;
-    if (
-        !steam64Id
-        || state.leetifyProfiles.has(steam64Id)
-        || state.leetifyLoading.has(steam64Id)
-        || state.leetifyErrors.has(steam64Id)
-    ) {
-        return;
+    if (!steam64Id) return { kind: "missing" };
+    if (state.leetifyProfiles.has(steam64Id)) return { kind: "known" };
+    if (state.leetifyErrors.has(steam64Id)) return { kind: "error" };
+    if (state.leetifyRequests.has(steam64Id)) {
+        return state.leetifyRequests.get(steam64Id);
     }
 
     state.leetifyLoading.add(steam64Id);
 
-    try {
-        const response = await fetch(
-            `/api/leetify-data?steam64_id=${encodeURIComponent(steam64Id)}`,
-            { headers: { Accept: "application/json" } }
-        );
-        const data = await response.json().catch(() => null);
-        if (!response.ok) {
-            throw new Error(data?.error || `HTTP ${response.status}`);
+    const request = (async () => {
+        try {
+            const response = await fetch(
+                `/api/leetify-data?steam64_id=${encodeURIComponent(steam64Id)}`,
+                { headers: { Accept: "application/json" } }
+            );
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                const error = new Error(data?.error || `HTTP ${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
+            state.leetifyProfiles.set(steam64Id, data);
+            return {
+                kind: "loaded",
+                cacheStatus: response.headers?.get?.("x-leetify-cache") || null
+            };
+        } catch (error) {
+            state.leetifyErrors.set(
+                steam64Id,
+                error.message || "Leetify-Daten konnten nicht geladen werden."
+            );
+            return { kind: "error", status: error.status || null };
+        } finally {
+            state.leetifyLoading.delete(steam64Id);
+            state.leetifyRequests.delete(steam64Id);
+            if (state.selectedNickname === player.nickname) {
+                renderPlayerDetail(player);
+            }
         }
-        state.leetifyProfiles.set(steam64Id, data);
-    } catch (error) {
-        state.leetifyErrors.set(
-            steam64Id,
-            error.message || "Leetify-Daten konnten nicht geladen werden."
-        );
-    } finally {
-        state.leetifyLoading.delete(steam64Id);
-        if (state.selectedNickname === player.nickname) {
-            renderPlayerDetail(player);
-        }
+    })();
+
+    state.leetifyRequests.set(steam64Id, request);
+    return request;
+}
+
+async function loadAllLeetifyProfiles() {
+    if (state.leetifyBulkPromise) return state.leetifyBulkPromise;
+
+    const candidates = leetifyCandidates();
+    const pending = candidates.filter((player) => (
+        !state.leetifyProfiles.has(player.steam64Id)
+        && !state.leetifyErrors.has(player.steam64Id)
+    ));
+    state.leetifyBulkTotal = candidates.length;
+    state.leetifyBulkRateLimited = false;
+
+    if (pending.length === 0) {
+        updateLeetifySortStatus();
+        updatePlayerProgress();
+        return null;
     }
+
+    let nextIndex = 0;
+    let stopForRateLimit = false;
+    const bulkPromise = (async () => {
+        const worker = async () => {
+            while (!stopForRateLimit && nextIndex < pending.length) {
+                const player = pending[nextIndex++];
+                const result = await loadLeetifyProfile(player);
+                if (result?.status === 429) {
+                    stopForRateLimit = true;
+                    state.leetifyBulkRateLimited = true;
+                }
+                if (isLeetifySort()) {
+                    renderPlayerList();
+                    updateLeetifySortStatus();
+                    updatePlayerProgress();
+                }
+            }
+        };
+
+        const concurrency = Math.min(2, pending.length);
+        await Promise.all(Array.from({ length: concurrency }, worker));
+    })();
+
+    state.leetifyBulkPromise = bulkPromise;
+    updateLeetifySortStatus();
+    updatePlayerProgress();
+
+    try {
+        await bulkPromise;
+    } finally {
+        if (state.leetifyBulkPromise === bulkPromise) {
+            state.leetifyBulkPromise = null;
+        }
+        renderPlayerList();
+        updateLeetifySortStatus();
+        updatePlayerProgress();
+
+        const selected = state.players.find(
+            (player) => player.nickname === state.selectedNickname
+        );
+        if (selected) renderPlayerDetail(selected);
+    }
+
+    return bulkPromise;
 }
 
 function renderPlayerDetail(player) {
@@ -681,6 +933,13 @@ function updatePlayerProgress() {
         dom.playerProgress.textContent = "Wird geladen";
         return;
     }
+    if (isLeetifySort() && state.leetifyBulkTotal > 0) {
+        const counts = leetifyLoadCounts();
+        dom.playerProgress.textContent = state.leetifyBulkPromise
+            ? `Leetify ${counts.complete} / ${state.leetifyBulkTotal}`
+            : `${counts.available} Leetify-Profile`;
+        return;
+    }
     dom.playerProgress.textContent = state.loadedPlayers < state.totalPlayers
         ? `${state.loadedPlayers} / ${state.totalPlayers}`
         : `${state.totalPlayers} Spieler`;
@@ -728,6 +987,7 @@ async function loadSaverAbiView() {
         if (leader) renderPlayerDetail(leader);
         dom.playerLoading.hidden = true;
         setStatus(dom.saverUpdated, "Vor wenigen Minuten synchronisiert", "ready");
+        if (isLeetifySort()) void loadAllLeetifyProfiles();
         return;
     }
 
@@ -785,6 +1045,7 @@ async function loadSaverAbiView() {
             formatDate(latestUpdate) ? `Stand ${formatDate(latestUpdate)} Uhr` : "Gerade synchronisiert",
             "ready"
         );
+        if (isLeetifySort()) void loadAllLeetifyProfiles();
     } catch (error) {
         dom.playerError.textContent = `Leaderboard konnte nicht geladen werden: ${error.message}`;
         dom.playerError.hidden = false;
@@ -1252,13 +1513,35 @@ function loadUniligaView() {
     selectUniligaPhase(state.uniligaPhase);
 }
 
+function updateSortControls() {
+    const definition = activeSortDefinition();
+    const directionLabel = state.sortDirection === "asc" ? "Aufsteigend" : "Absteigend";
+    dom.playerSort.value = state.sortMode;
+    dom.sortDirectionIcon.textContent = state.sortDirection === "asc" ? "↑" : "↓";
+    dom.sortDirection.title = directionLabel;
+    dom.sortDirection.setAttribute(
+        "aria-label",
+        `${definition.label} ${directionLabel.toLocaleLowerCase("de-DE")} sortieren. Reihenfolge umkehren`
+    );
+    updateLeetifySortStatus();
+    updatePlayerProgress();
+}
+
 function setSortMode(mode) {
-    if (!["elo", "worth"].includes(mode) || state.sortMode === mode) return;
+    if (!sortDefinitions[mode]) return;
     state.sortMode = mode;
-    dom.sortElo.classList.toggle("active", mode === "elo");
-    dom.sortWorth.classList.toggle("active", mode === "worth");
-    dom.sortElo.setAttribute("aria-pressed", String(mode === "elo"));
-    dom.sortWorth.setAttribute("aria-pressed", String(mode === "worth"));
+    state.sortDirection = sortDefinitions[mode].defaultDirection;
+    updateSortControls();
+    renderPlayerList();
+
+    const selected = state.players.find((player) => player.nickname === state.selectedNickname);
+    if (selected) renderPlayerDetail(selected);
+    if (isLeetifySort(mode)) void loadAllLeetifyProfiles();
+}
+
+function toggleSortDirection() {
+    state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
+    updateSortControls();
     renderPlayerList();
 
     const selected = state.players.find((player) => player.nickname === state.selectedNickname);
@@ -1304,8 +1587,10 @@ function bindEvents() {
         });
     });
 
-    dom.sortElo.addEventListener("click", () => setSortMode("elo"));
-    dom.sortWorth.addEventListener("click", () => setSortMode("worth"));
+    dom.playerSort.addEventListener("change", (event) => {
+        setSortMode(event.currentTarget.value);
+    });
+    dom.sortDirection.addEventListener("click", toggleSortDirection);
 
     dom.uniligaPhaseButtons.forEach((button, index) => {
         button.addEventListener("click", () => selectUniligaPhase(button.dataset.phase));
@@ -1353,6 +1638,7 @@ function bindEvents() {
 document.addEventListener("DOMContentLoaded", () => {
     cacheDom();
     bindEvents();
+    updateSortControls();
     const initialView = window.location.hash.slice(1) === "uniliga" ? "uniliga" : "saverabi";
     switchView(initialView, false);
 });

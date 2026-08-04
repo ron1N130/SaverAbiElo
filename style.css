@@ -466,6 +466,7 @@ img {
 .leaderboard-toolbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     gap: 0.65rem;
     border-bottom: 1px solid var(--line);
     padding: 0.85rem 1rem;
@@ -517,34 +518,100 @@ img {
     opacity: 0.55;
 }
 
-.segmented-control {
+.sort-controls {
     display: flex;
-    gap: 0.2rem;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.sort-select-control {
+    position: relative;
+    display: flex;
+    min-width: 174px;
+    flex: 1 1 174px;
+    align-items: center;
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.025);
-    padding: 0.2rem;
+    transition: border-color 160ms ease, background-color 160ms ease;
 }
 
-.sort-button {
+.sort-select-control:focus-within {
+    border-color: rgba(255, 95, 59, 0.55);
+    background: var(--accent-soft);
+}
+
+.sort-select-control select {
+    width: 100%;
+    min-width: 0;
+    appearance: none;
     border: 0;
-    border-radius: 7px;
+    outline: 0;
     background: transparent;
-    padding: 0.47rem 0.68rem;
+    padding: 0.68rem 2rem 0.68rem 0.72rem;
     color: var(--muted);
     cursor: pointer;
     font-size: 0.7rem;
     font-weight: 700;
-    transition: background-color 160ms ease, color 160ms ease;
 }
 
-.sort-button:hover {
-    color: var(--text-soft);
-}
-
-.sort-button.active {
-    background: var(--surface-hover);
+.sort-select-control select:focus,
+.sort-select-control select:hover {
     color: var(--text);
+}
+
+.sort-select-control option,
+.sort-select-control optgroup {
+    background: var(--surface-solid);
+    color: var(--text);
+}
+
+.sort-select-control svg {
+    position: absolute;
+    right: 0.62rem;
+    width: 15px;
+    pointer-events: none;
+    fill: none;
+    stroke: var(--muted);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+}
+
+.sort-direction-button {
+    display: grid;
+    width: 39px;
+    flex: 0 0 39px;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text-soft);
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.sort-direction-button:hover,
+.sort-direction-button:focus-visible {
+    border-color: rgba(255, 95, 59, 0.45);
+    outline: 0;
+    background: var(--accent-soft);
+    color: var(--accent-bright);
+}
+
+.sort-status {
+    flex: 0 0 100%;
+    margin: 0;
+    padding: 0.05rem 0.15rem;
+    color: var(--muted);
+    font-size: 0.61rem;
+}
+
+.sort-status.is-error {
+    color: var(--yellow);
 }
 
 .leaderboard-list-wrap {
@@ -695,6 +762,19 @@ img {
     font-size: 0.91rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+}
+
+.player-value-label {
+    display: block;
+    margin-top: 0.24rem;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.53rem;
+    font-weight: 700;
+    letter-spacing: 0.055em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .elo-track {
@@ -1783,9 +1863,13 @@ img {
         grid-template-columns: 1fr;
     }
 
-    .segmented-control {
+    .sort-controls {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .sort-status {
+        grid-column: 1 / -1;
     }
 
     .leaderboard-list-wrap {

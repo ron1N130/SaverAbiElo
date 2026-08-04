@@ -119,9 +119,39 @@
                             <input id="player-search" type="search" placeholder="Spieler suchen" autocomplete="off">
                         </label>
 
-                        <div id="saverabi-sort-controls" class="segmented-control" role="group" aria-label="Leaderboard sortieren">
-                            <button id="sort-elo-btn" class="sort-button active" type="button" data-sort="elo" aria-pressed="true">Elo</button>
-                            <button id="sort-worth-btn" class="sort-button" type="button" data-sort="worth" aria-pressed="false">Marktwert</button>
+                        <div id="saverabi-sort-controls" class="sort-controls" role="group" aria-label="Leaderboard sortieren">
+                            <label class="sort-select-control">
+                                <span class="sr-only">Sortieren nach</span>
+                                <select id="player-sort-select" aria-label="Sortieren nach">
+                                    <optgroup label="SaverAbi">
+                                        <option value="elo">Elo</option>
+                                        <option value="worth">Marktwert</option>
+                                    </optgroup>
+                                    <optgroup label="Leetify">
+                                        <option value="leetifyRating">Leetify Rating</option>
+                                        <option value="aimRating">Aim Rating</option>
+                                        <option value="positioningRating">Positioning Rating</option>
+                                        <option value="utilityRating">Utility Rating</option>
+                                        <option value="timeToDamage">Time to Damage</option>
+                                        <option value="crosshairPlacement">Crosshair Placement</option>
+                                        <option value="counterStrafing">Counter-Strafing</option>
+                                        <option value="sprayAccuracy">Spray Accuracy</option>
+                                    </optgroup>
+                                </select>
+                                <svg aria-hidden="true" viewBox="0 0 24 24">
+                                    <path d="m8 10 4 4 4-4"/>
+                                </svg>
+                            </label>
+                            <button
+                                id="sort-direction-btn"
+                                class="sort-direction-button"
+                                type="button"
+                                aria-label="Elo absteigend sortieren. Reihenfolge umkehren"
+                                title="Absteigend"
+                            >
+                                <span id="sort-direction-icon" aria-hidden="true">↓</span>
+                            </button>
+                            <p id="leetify-sort-status" class="sort-status" aria-live="polite" hidden></p>
                         </div>
                     </div>
 
