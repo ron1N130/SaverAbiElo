@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import faceitHandler from "../api/faceit-data.js";
 import leetifyHandler, { createLeetifyHandler } from "../api/leetify-data.js";
 import { buildGroupStandings, buildPlayoffBracket } from "../api/uniliga-stats.js";
+import {
+    extractSeasonElo,
+    faceitLevelForElo,
+    findFaceitSeasonRecord,
+    historicalEloFromMatchRounds,
+    profileCalibrationStatus,
+    resolveFaceitSeason
+} from "../api/utils/faceit-seasons.js";
 
 const playerFixtures = {
     Alpha: {
@@ -47,8 +56,11 @@ const playerFixtures = {
         steam64Id: "76561198000000003",
         avatar: "/default_avatar.png",
         faceitUrl: "https://www.faceit.com/en/players/Charlie",
-        elo: 1800,
-        level: 9,
+        elo: null,
+        level: null,
+        isUnranked: true,
+        placementStatus: "calibrating",
+        seasonAvailable: true,
         calculatedRating: 1.02,
         dpr: 0.75,
         kast: 64,
@@ -331,6 +343,113 @@ async function waitFor(predicate, message) {
     }
     throw new Error(message);
 }
+
+test("maps FACEIT placements and historical season Elo", () => {
+    assert.equal(profileCalibrationStatus({
+        payload: { games: { cs2: { is_calibrating: true } } }
+    }), true);
+    assert.equal(profileCalibrationStatus({
+        games: { cs2: { isCalibrating: false } }
+    }), false);
+
+    const season8 = resolveFaceitSeason("8");
+    const record = findFaceitSeasonRecord({
+        payload: {
+            cs2: {
+                seasons: [
+                    { season_id: "season-eight-id", name: "Season 8", active: false },
+                    { season_id: "season-nine-id", name: "Season 9", active: true }
+                ]
+            }
+        }
+    }, season8);
+    assert.equal(record.season_id, "season-eight-id");
+    assert.equal(extractSeasonElo({ payload: { cs2: { final_elo: 2417, highest_elo: 2800 } } }), 2417);
+
+    const matchRounds = {
+        payload: {
+            cs2: {
+                match_rounds: [{
+                    end_time: "2026-08-04T20:00:00.000Z",
+                    match_type: "matchmaking",
+                    elo_before: 2392,
+                    elo_delta: 25,
+                    is_calibrating: false
+                }, {
+                    end_time: "2026-08-05T20:00:00.000Z",
+                    match_type: "matchmaking",
+                    elo_before: 1700,
+                    elo_delta: 40,
+                    is_calibrating: true
+                }]
+            }
+        }
+    };
+    assert.equal(historicalEloFromMatchRounds(matchRounds, season8), 2417);
+    assert.equal(faceitLevelForElo(2417), 10);
+});
+
+test("FACEIT proxy hides current Elo during placements and returns historical Elo", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+        const url = String(input);
+        if (url.includes("open.faceit.com/data/v4/players?nickname=")) {
+            return jsonResponse({
+                player_id: "faceit-player-id",
+                nickname: "Alpha",
+                avatar: "/default_avatar.png",
+                faceit_url: "https://www.faceit.com/{lang}/players/Alpha",
+                steam_id_64: "76561198000000001",
+                games: { cs2: { faceit_elo: 2230, skill_level: 10 } }
+            });
+        }
+        if (url.includes("api.faceit.com/users/v1/nicknames/")) {
+            return jsonResponse({
+                payload: { games: { cs2: { is_calibrating: true } } }
+            });
+        }
+        if (url.endsWith("/statistics/v1/cs2/seasons")) {
+            return jsonResponse({
+                payload: {
+                    cs2: {
+                        seasons: [{
+                            season_id: "season-eight-id",
+                            name: "Season 8",
+                            active: false
+                        }]
+                    }
+                }
+            });
+        }
+        if (url.includes("/seasons/season-eight-id")) {
+            return jsonResponse({ payload: { cs2: { final_elo: 2417 } } });
+        }
+        if (url.includes("/history?game=cs2")) {
+            return jsonResponse({ items: [] });
+        }
+        throw new Error(`Unexpected FACEIT test URL: ${url}`);
+    };
+
+    try {
+        const currentResponse = mockVercelResponse();
+        await faceitHandler({ query: { nickname: "Alpha", season: "9" } }, currentResponse);
+        assert.equal(currentResponse.statusCode, 200);
+        assert.equal(currentResponse.body.isUnranked, true);
+        assert.equal(currentResponse.body.elo, null);
+        assert.equal("rawElo" in currentResponse.body, false);
+        assert.equal(currentResponse.body.level, null);
+
+        const historicalResponse = mockVercelResponse();
+        await faceitHandler({ query: { nickname: "Alpha", season: "8" } }, historicalResponse);
+        assert.equal(historicalResponse.statusCode, 200);
+        assert.equal(historicalResponse.body.isUnranked, false);
+        assert.equal(historicalResponse.body.elo, 2417);
+        assert.equal(historicalResponse.body.level, 10);
+        assert.equal(historicalResponse.body.season.label, "Season 8");
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
 
 test("Leetify proxy validates and returns a Redis-cacheable no-store profile subset", async () => {
     const originalFetch = globalThis.fetch;
@@ -922,7 +1041,36 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
                     return jsonResponse(Object.keys(playerFixtures));
                 }
                 if (url.pathname === "/api/faceit-data") {
-                    return jsonResponse(playerFixtures[url.searchParams.get("nickname")]);
+                    const nickname = url.searchParams.get("nickname");
+                    const fixture = playerFixtures[nickname];
+                    if (url.searchParams.get("season") === "8") {
+                        const elo = { Alpha: 2310, Bravo: 2450, Charlie: 1810 }[nickname];
+                        return jsonResponse({
+                            ...fixture,
+                            elo,
+                            level: elo >= 2001 ? 10 : 9,
+                            isUnranked: false,
+                            placementStatus: "historical",
+                            seasonAvailable: true,
+                            season: {
+                                number: 8,
+                                value: "8",
+                                label: "Season 8",
+                                shortLabel: "S8",
+                                current: false
+                            }
+                        });
+                    }
+                    return jsonResponse({
+                        ...fixture,
+                        season: {
+                            number: 9,
+                            value: "9",
+                            label: "Season 9",
+                            shortLabel: "S9",
+                            current: true
+                        }
+                    });
                 }
                 if (url.pathname === "/api/leetify-data") {
                     return jsonResponse(leetifyFixtures[url.searchParams.get("steam64_id")]);
@@ -953,7 +1101,16 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
     );
 
     assert.equal(document.getElementById("summary-player-count").textContent, "3");
+    assert.equal(document.getElementById("summary-average-elo").textContent, "2.400");
     assert.equal(document.getElementById("summary-leader").textContent, "Alpha");
+    assert.equal(
+        document.querySelector('.player-row[data-nickname="Charlie"] .player-value').textContent,
+        "Unranked"
+    );
+    assert.match(
+        document.querySelector('.player-row[data-nickname="Charlie"] .player-subline').textContent,
+        /Placement Matches/
+    );
     assert.match(document.querySelector(".profile-title h2").textContent, /Alpha/);
     await waitFor(
         () => document.querySelectorAll(".leetify-metric").length === 8,
@@ -1028,6 +1185,27 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
             assert.equal(metric.label, label, `${stat} ${value} should be ${label}`);
         }
     }
+
+    const seasonSelect = document.getElementById("faceit-season-select");
+    assert.deepEqual(
+        [...seasonSelect.options].map((option) => option.value),
+        ["9", "8"]
+    );
+    sortSelect.value = "elo";
+    sortSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    seasonSelect.value = "8";
+    seasonSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await waitFor(
+        () => document.getElementById("summary-leader").textContent === "Bravo"
+            && document.querySelectorAll(".player-row[data-nickname]").length === 3,
+        "Historical Season 8 Elo did not render"
+    );
+    assert.deepEqual(
+        [...document.querySelectorAll(".player-value")].map((element) => element.textContent),
+        ["2.450", "2.310", "1.810"]
+    );
+    assert.match(document.getElementById("faceit-season-status").textContent, /historischer Elo-Endstand/);
+    assert.match(document.querySelector(".profile-meta-item span").textContent, /S8/);
 
     const search = document.getElementById("player-search");
     search.value = "Bravo";

@@ -537,6 +537,11 @@ img {
     transition: border-color 160ms ease, background-color 160ms ease;
 }
 
+.season-select-control {
+    min-width: 148px;
+    flex-basis: 148px;
+}
+
 .sort-select-control:focus-within {
     border-color: rgba(255, 95, 59, 0.55);
     background: var(--accent-soft);
@@ -602,12 +607,17 @@ img {
     color: var(--accent-bright);
 }
 
+.season-status,
 .sort-status {
     flex: 0 0 100%;
     margin: 0;
     padding: 0.05rem 0.15rem;
     color: var(--muted);
     font-size: 0.61rem;
+}
+
+.season-status {
+    color: var(--text-soft);
 }
 
 .sort-status.is-error {
@@ -762,6 +772,13 @@ img {
     font-size: 0.91rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+}
+
+.player-value.is-unranked,
+.profile-meta-item strong.is-unranked {
+    color: var(--accent-bright);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
 }
 
 .player-value-label {
@@ -1868,6 +1885,8 @@ img {
         grid-template-columns: minmax(0, 1fr) auto;
     }
 
+    .season-select-control,
+    .season-status,
     .sort-status {
         grid-column: 1 / -1;
     }

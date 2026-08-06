@@ -24,6 +24,21 @@ const thresholds = {
     winRate: { okay: 50, good: 60, great: 70 }
 };
 
+const faceitSeasons = {
+    9: {
+        value: "9",
+        label: "Season 9",
+        shortLabel: "S9",
+        current: true
+    },
+    8: {
+        value: "8",
+        label: "Season 8",
+        shortLabel: "S8",
+        current: false
+    }
+};
+
 const sortDefinitions = {
     elo: {
         label: "Elo",
@@ -118,12 +133,13 @@ const clubs = {
 };
 
 const cacheKeys = {
-    players: "saverabi:players:v3"
+    players: "saverabi:players:v4"
 };
 const UNILIGA_API_SCHEMA_VERSION = 19;
 
 const state = {
     players: [],
+    faceitSeason: "9",
     sortMode: "elo",
     sortDirection: "desc",
     search: "",
@@ -165,6 +181,8 @@ function cacheDom() {
     dom.playerError = document.getElementById("error-message-saverabi");
     dom.playerProgress = document.getElementById("player-load-progress");
     dom.saverUpdated = document.getElementById("saverabi-updated");
+    dom.faceitSeason = document.getElementById("faceit-season-select");
+    dom.faceitSeasonStatus = document.getElementById("faceit-season-status");
     dom.playerSort = document.getElementById("player-sort-select");
     dom.sortDirection = document.getElementById("sort-direction-btn");
     dom.sortDirectionIcon = document.getElementById("sort-direction-icon");
@@ -240,6 +258,10 @@ function formatSigned(value, digits = 2) {
     return `${parsed > 0 ? "+" : ""}${parsed.toFixed(digits)}`;
 }
 
+function selectedFaceitSeason() {
+    return faceitSeasons[state.faceitSeason] || faceitSeasons[9];
+}
+
 function formatDate(value) {
     if (!value) return null;
     const isNumericTimestamp =
@@ -296,7 +318,12 @@ function normalizePlayer(data, fallbackNickname) {
     const player = {
         ...data,
         nickname: data.nickname || fallbackNickname,
-        sortElo: toNumber(data.elo) ?? toNumber(data.sortElo) ?? -1,
+        sortElo: data.isUnranked
+            ? null
+            : toNumber(data.elo) ?? toNumber(data.sortElo),
+        isUnranked: Boolean(data.isUnranked),
+        seasonAvailable: data.seasonAvailable !== false,
+        season: data.season || selectedFaceitSeason(),
         rating: toNumber(data.calculatedRating ?? data.rating),
         dpr: toNumber(data.dpr),
         kast: toNumber(data.kast),
@@ -312,9 +339,10 @@ function normalizePlayer(data, fallbackNickname) {
     return player;
 }
 
-async function getPlayerData(nickname) {
+async function getPlayerData(nickname, season = state.faceitSeason) {
     try {
-        const response = await fetch(`/api/faceit-data?nickname=${encodeURIComponent(nickname)}`, {
+        const params = new URLSearchParams({ nickname, season });
+        const response = await fetch(`/api/faceit-data?${params}`, {
             headers: { Accept: "application/json" }
         });
         const data = await response.json().catch(() => null);
@@ -375,6 +403,7 @@ function playerSortValue(player, mode = state.sortMode) {
 function formatPlayerSortValue(player) {
     const definition = activeSortDefinition();
     const value = playerSortValue(player);
+    if (state.sortMode === "elo" && player.isUnranked) return "Unranked";
     if (value === null) return "—";
     if (state.sortMode === "elo") return number.format(value);
     if (state.sortMode === "worth") return formatWorth(value);
@@ -406,7 +435,7 @@ function rankedPlayers() {
 
     return sorted.map((player, index) => ({
         player,
-        rank: index + 1
+        rank: playerSortValue(player) === null ? null : index + 1
     }));
 }
 
@@ -475,10 +504,18 @@ function renderPlayerList() {
             : "";
         const sortDefinition = activeSortDefinition();
         const displayValue = formatPlayerSortValue(player);
-        const subline = [
-            player.level ? `Level ${escapeHtml(player.level)}` : null,
-            player.matchesConsidered ? `${number.format(player.matchesConsidered)} Matches` : null
-        ].filter(Boolean).join(" · ") || "Aktuelle FACEIT-Daten";
+        const season = player.season || selectedFaceitSeason();
+        const subline = player.isUnranked
+            ? `${escapeHtml(season.label)} · Placement Matches`
+            : player.seasonAvailable === false
+                ? `${escapeHtml(season.label)} · keine historischen Elo-Daten`
+                : [
+                    season.label,
+                    player.level ? `Level ${escapeHtml(player.level)}` : null,
+                    player.matchesConsidered ? `${number.format(player.matchesConsidered)} Matches` : null
+                ].filter(Boolean).join(" · ") || "FACEIT-Daten";
+        const rankLabel = rank ?? "—";
+        const hasEloValue = state.sortMode !== "elo" || playerSortValue(player) !== null;
 
         return `
             <li class="player-list-item">
@@ -488,7 +525,7 @@ function renderPlayerList() {
                     data-nickname="${nickname}"
                     aria-current="${isSelected ? "true" : "false"}"
                 >
-                    <span class="rank${rank <= 3 ? " rank-top" : ""}">${rank}</span>
+                    <span class="rank${rank !== null && rank <= 3 ? " rank-top" : ""}">${rankLabel}</span>
                     <span class="player-identity">
                         <span class="avatar-wrap">
                             <img src="${avatar}" class="avatar" alt="" loading="lazy" onerror="this.src='/default_avatar.png'">
@@ -500,14 +537,14 @@ function renderPlayerList() {
                         </span>
                     </span>
                     <span class="player-value-wrap">
-                        <span class="player-value">${escapeHtml(displayValue)}</span>
-                        ${state.sortMode === "elo" ? `
+                        <span class="player-value${player.isUnranked && state.sortMode === "elo" ? " is-unranked" : ""}">${escapeHtml(displayValue)}</span>
+                        ${state.sortMode === "elo" && hasEloValue ? `
                             <span class="elo-track" aria-hidden="true">
                                 <span class="elo-fill" style="width:${eloProgress(player.sortElo)}%"></span>
                             </span>
-                        ` : `
+                        ` : state.sortMode !== "elo" ? `
                             <span class="player-value-label">${escapeHtml(sortDefinition.shortLabel)}</span>
-                        `}
+                        ` : ""}
                     </span>
                 </button>
             </li>
@@ -516,17 +553,21 @@ function renderPlayerList() {
 }
 
 function renderSaverAbiSummary() {
-    const validPlayers = state.players.filter((player) => !player.error && player.sortElo >= 0);
+    const availablePlayers = state.players.filter((player) => !player.error);
+    const validPlayers = availablePlayers.filter((player) => toNumber(player.sortElo) !== null);
     const byElo = [...validPlayers].sort((a, b) => b.sortElo - a.sortElo);
     const leader = byElo[0];
+    const season = selectedFaceitSeason();
     const averageElo = validPlayers.length
         ? Math.round(validPlayers.reduce((sum, player) => sum + player.sortElo, 0) / validPlayers.length)
         : null;
 
-    dom.summaryPlayerCount.textContent = number.format(validPlayers.length);
+    dom.summaryPlayerCount.textContent = number.format(availablePlayers.length);
     dom.summaryAverageElo.textContent = averageElo === null ? "—" : number.format(averageElo);
     dom.summaryLeader.textContent = leader?.nickname || "—";
-    dom.summaryLeaderElo.textContent = leader ? `${number.format(leader.sortElo)} Elo` : "höchstes Elo";
+    dom.summaryLeaderElo.textContent = leader
+        ? `${season.shortLabel} · ${number.format(leader.sortElo)} Elo`
+        : `${season.shortLabel} · noch kein Ranking`;
     dom.summaryEliteCount.textContent = number.format(
         validPlayers.filter((player) => player.sortElo >= 2000).length
     );
@@ -876,9 +917,15 @@ function renderPlayerDetail(player) {
         player.faceitUrl,
         `https://www.faceit.com/en/players/${encodeURIComponent(player.nickname)}`
     ));
+    const season = player.season || selectedFaceitSeason();
+    const eloDisplay = player.isUnranked
+        ? "Unranked"
+        : toNumber(player.sortElo) === null
+            ? "—"
+            : number.format(player.sortElo);
     const matches = player.matchesConsidered
-        ? `Form aus ${number.format(player.matchesConsidered)} Matches`
-        : "Aktuelle FACEIT-Statistiken";
+        ? `Aktuelle Form aus ${number.format(player.matchesConsidered)} Matches · Elo ${season.label}`
+        : `Aktuelle FACEIT-Statistiken · Elo ${season.label}`;
     const stats = [
         { stat: "rating", label: "Rating 2.0", value: player.rating, digits: 2 },
         { stat: "dpr", label: "DPR", value: player.dpr, digits: 2 },
@@ -893,7 +940,7 @@ function renderPlayerDetail(player) {
             <header class="profile-hero">
                 <img src="${avatar}" class="profile-avatar" alt="Avatar von ${escapeHtml(player.nickname)}" onerror="this.src='/default_avatar.png'">
                 <div class="profile-title">
-                    <p class="panel-kicker">#${rank ?? "—"} im Ranking</p>
+                    <p class="panel-kicker">${rank === null || rank === undefined ? "Unranked" : `#${rank} im Ranking`}</p>
                     <h2>${escapeHtml(player.nickname)}</h2>
                     <p>${matches}</p>
                 </div>
@@ -905,8 +952,8 @@ function renderPlayerDetail(player) {
             </header>
             <div class="profile-meta">
                 <div class="profile-meta-item">
-                    <span>Elo</span>
-                    <strong>${number.format(player.sortElo)}</strong>
+                    <span>Elo · ${escapeHtml(season.shortLabel)}</span>
+                    <strong class="${player.isUnranked ? "is-unranked" : ""}">${eloDisplay}</strong>
                 </div>
                 <div class="profile-meta-item">
                     <span>Level</span>
@@ -947,11 +994,16 @@ function updatePlayerProgress() {
 
 function readPlayerCache() {
     try {
-        const raw = localStorage.getItem(cacheKeys.players);
+        const raw = localStorage.getItem(`${cacheKeys.players}:${state.faceitSeason}`);
         if (!raw) return null;
         const cached = JSON.parse(raw);
         const maxAge = 5 * 60 * 1000;
-        if (!cached.savedAt || Date.now() - cached.savedAt > maxAge || !Array.isArray(cached.players)) {
+        if (
+            cached.season !== state.faceitSeason
+            || !cached.savedAt
+            || Date.now() - cached.savedAt > maxAge
+            || !Array.isArray(cached.players)
+        ) {
             return null;
         }
         return cached;
@@ -962,8 +1014,9 @@ function readPlayerCache() {
 
 function writePlayerCache() {
     try {
-        localStorage.setItem(cacheKeys.players, JSON.stringify({
+        localStorage.setItem(`${cacheKeys.players}:${state.faceitSeason}`, JSON.stringify({
             savedAt: Date.now(),
+            season: state.faceitSeason,
             players: state.players
         }));
     } catch {
@@ -992,6 +1045,7 @@ async function loadSaverAbiView() {
     }
 
     state.saverAbiLoading = true;
+    if (dom.faceitSeason) dom.faceitSeason.disabled = true;
     dom.playerError.hidden = true;
     dom.playerLoading.hidden = false;
     renderSkeletonRows();
@@ -1014,10 +1068,11 @@ async function loadSaverAbiView() {
         updatePlayerProgress();
 
         let nextIndex = 0;
+        const season = state.faceitSeason;
         const worker = async () => {
             while (nextIndex < names.length) {
                 const index = nextIndex++;
-                const player = await getPlayerData(names[index]);
+                const player = await getPlayerData(names[index], season);
                 state.players.push(player);
                 state.loadedPlayers += 1;
                 updatePlayerProgress();
@@ -1053,6 +1108,7 @@ async function loadSaverAbiView() {
         renderPlayerList();
     } finally {
         state.saverAbiLoading = false;
+        if (dom.faceitSeason) dom.faceitSeason.disabled = false;
         dom.playerLoading.hidden = true;
         updatePlayerProgress();
     }
@@ -1513,6 +1569,45 @@ function loadUniligaView() {
     selectUniligaPhase(state.uniligaPhase);
 }
 
+function updateSeasonControls() {
+    const season = selectedFaceitSeason();
+    if (dom.faceitSeason) dom.faceitSeason.value = season.value;
+    if (dom.faceitSeasonStatus) {
+        dom.faceitSeasonStatus.textContent = season.current
+            ? `${season.label} · offene Placements erscheinen als Unranked`
+            : `${season.label} · historischer Elo-Endstand`;
+    }
+}
+
+function setFaceitSeason(value) {
+    const season = faceitSeasons[value];
+    if (!season || season.value === state.faceitSeason) return;
+    if (state.saverAbiLoading) {
+        updateSeasonControls();
+        return;
+    }
+
+    state.faceitSeason = season.value;
+    state.players = [];
+    state.selectedNickname = null;
+    state.saverAbiLoaded = false;
+    state.loadedPlayers = 0;
+    state.totalPlayers = 0;
+    state.leetifyBulkTotal = 0;
+    updateSeasonControls();
+    renderSaverAbiSummary();
+    updatePlayerProgress();
+    dom.playerDetail.innerHTML = `
+        <div class="detail-empty">
+            <span class="detail-empty-mark" aria-hidden="true">+</span>
+            <p class="panel-kicker">${escapeHtml(season.label)}</p>
+            <h2>Saison wird geladen</h2>
+            <p>Historische Elo-Werte und Placement-Status werden mit FACEIT abgeglichen.</p>
+        </div>
+    `;
+    void loadSaverAbiView();
+}
+
 function updateSortControls() {
     const definition = activeSortDefinition();
     const directionLabel = state.sortDirection === "asc" ? "Aufsteigend" : "Absteigend";
@@ -1590,6 +1685,9 @@ function bindEvents() {
     dom.playerSort.addEventListener("change", (event) => {
         setSortMode(event.currentTarget.value);
     });
+    dom.faceitSeason?.addEventListener("change", (event) => {
+        setFaceitSeason(event.currentTarget.value);
+    });
     dom.sortDirection.addEventListener("click", toggleSortDirection);
 
     dom.uniligaPhaseButtons.forEach((button, index) => {
@@ -1638,6 +1736,7 @@ function bindEvents() {
 document.addEventListener("DOMContentLoaded", () => {
     cacheDom();
     bindEvents();
+    updateSeasonControls();
     updateSortControls();
     const initialView = window.location.hash.slice(1) === "uniliga" ? "uniliga" : "saverabi";
     switchView(initialView, false);

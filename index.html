@@ -70,7 +70,7 @@
                 <div>
                     <p class="eyebrow">Community Ranking</p>
                     <h1>Wer hat gerade die beste Form?</h1>
-                    <p class="hero-copy">Elo und Performance der letzten 15 FACEIT-Matches — kompakt an einem Ort.</p>
+                    <p class="hero-copy">Saison-Elo, Placement-Status und Performance der letzten 15 FACEIT-Matches — kompakt an einem Ort.</p>
                 </div>
                 <div id="saverabi-updated" class="sync-status" aria-live="polite">
                     <span class="sync-icon" aria-hidden="true"></span>
@@ -120,6 +120,16 @@
                         </label>
 
                         <div id="saverabi-sort-controls" class="sort-controls" role="group" aria-label="Leaderboard sortieren">
+                            <label class="sort-select-control season-select-control">
+                                <span class="sr-only">FACEIT Saison</span>
+                                <select id="faceit-season-select" aria-label="FACEIT Saison auswählen">
+                                    <option value="9">Season 9 · aktuell</option>
+                                    <option value="8">Season 8 · historisch</option>
+                                </select>
+                                <svg aria-hidden="true" viewBox="0 0 24 24">
+                                    <path d="m8 10 4 4 4-4"/>
+                                </svg>
+                            </label>
                             <label class="sort-select-control">
                                 <span class="sr-only">Sortieren nach</span>
                                 <select id="player-sort-select" aria-label="Sortieren nach">
@@ -151,6 +161,7 @@
                             >
                                 <span id="sort-direction-icon" aria-hidden="true">↓</span>
                             </button>
+                            <p id="faceit-season-status" class="season-status" aria-live="polite"></p>
                             <p id="leetify-sort-status" class="sort-status" aria-live="polite" hidden></p>
                         </div>
                     </div>
