@@ -8,6 +8,7 @@
 // -------------------------------------------------
 import Redis from "ioredis";
 import { calculateAverageStats } from './utils/stats.js'; // Stelle sicher, dass dieser Pfad korrekt ist
+import { seasonEndSnapshotElo } from './data/faceit-season-elo.js';
 import {
     CURRENT_FACEIT_SEASON,
     extractSeasonElo,
@@ -137,7 +138,7 @@ async function writeRedisJson(key, value, ttlSeconds) {
 async function currentPlacementState(nickname, playerId, details, openDataHeaders) {
     const detailStatus = profileCalibrationStatus(details);
 
-    const cacheKey = `faceit_placement:v2:${playerId}:${CURRENT_FACEIT_SEASON}`;
+    const cacheKey = `faceit_placement:v3:${playerId}:${CURRENT_FACEIT_SEASON}`;
     const cached = await readRedisJson(cacheKey);
     if (typeof cached?.isCalibrating === "boolean") return cached;
 
@@ -217,7 +218,21 @@ async function faceitSeasonCatalog() {
 }
 
 async function historicalSeasonElo(playerId, season, openDataHeaders, transitionElo = null) {
-    const cacheKey = `faceit_season_elo:v3:${playerId}:${season.number}`;
+    const cacheKey = `faceit_season_elo:v4:${playerId}:${season.number}`;
+    const seededElo = seasonEndSnapshotElo(playerId, season.number);
+    if (seededElo !== null) {
+        const snapshot = {
+            elo: seededElo,
+            available: true,
+            source: "season-end-snapshot",
+            checkedAt: new Date().toISOString()
+        };
+        // Keep a Redis copy for fast reads, while the versioned snapshot remains
+        // the durable source of truth if Redis is ever flushed.
+        await writeRedisJson(cacheKey, snapshot);
+        return snapshot;
+    }
+
     const cached = await readRedisJson(cacheKey);
     if (cached && Object.hasOwn(cached, "elo")) return cached;
 
@@ -348,8 +363,12 @@ export default async function handler(req, res) {
         let seasonAvailable = seasonElo !== null;
         let seasonSource = "current";
 
+        const hasSeasonEndSnapshot = seasonEndSnapshotElo(playerId, season.number) !== null;
         const needsPlacementState = season.current
-            || season.number === CURRENT_FACEIT_SEASON - 1;
+            || (
+                season.number === CURRENT_FACEIT_SEASON - 1
+                && !hasSeasonEndSnapshot
+            );
         const placementState = needsPlacementState
             ? await currentPlacementState(details.nickname || nickname, playerId, details, headers)
             : { isCalibrating: false, placementMatches: null };

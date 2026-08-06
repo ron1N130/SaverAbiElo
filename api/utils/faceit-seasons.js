@@ -7,7 +7,8 @@ export const FACEIT_SEASONS = Object.freeze([
         label: "Season 9",
         shortLabel: "S9",
         current: true,
-        startsAt: "2026-08-05T11:00:00.000Z",
+        // Observed FACEIT rollover: the first Season 9 placements started at 18:00 CEST.
+        startsAt: "2026-08-05T16:00:00.000Z",
         endsAt: null
     }),
     Object.freeze({
@@ -17,7 +18,7 @@ export const FACEIT_SEASONS = Object.freeze([
         shortLabel: "S8",
         current: false,
         startsAt: "2026-04-22T11:00:00.000Z",
-        endsAt: "2026-08-05T11:00:00.000Z"
+        endsAt: "2026-08-05T16:00:00.000Z"
     })
 ]);
 

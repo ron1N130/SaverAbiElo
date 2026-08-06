@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import faceitHandler from "../api/faceit-data.js";
 import leetifyHandler, { createLeetifyHandler } from "../api/leetify-data.js";
 import { buildGroupStandings, buildPlayoffBracket } from "../api/uniliga-stats.js";
+import { seasonEndSnapshotElo } from "../api/data/faceit-season-elo.js";
 import {
     extractSeasonElo,
     faceitLevelForElo,
@@ -407,6 +408,15 @@ test("maps FACEIT placements and historical season Elo", () => {
     }, season8), 2417);
     assert.equal(faceitLevelForElo(2417), 10);
     assert.equal(faceitLevelForElo(null), null);
+    assert.equal(
+        seasonEndSnapshotElo("e9872425-15ed-4a9a-8261-9cfc37d281a7", 8),
+        2689
+    );
+    assert.equal(
+        seasonEndSnapshotElo("e9872425-15ed-4a9a-8261-9cfc37d281a7", 9),
+        null
+    );
+    assert.equal(seasonEndSnapshotElo("unknown-player", 8), null);
 });
 
 test("FACEIT proxy hides current Elo during placements and returns historical Elo", async () => {
@@ -472,6 +482,41 @@ test("FACEIT proxy hides current Elo during placements and returns historical El
     }
 });
 
+test("FACEIT proxy serves the durable Season 8 snapshot without a placement lookup", async () => {
+    const originalFetch = globalThis.fetch;
+    let placementProfileRequested = false;
+    globalThis.fetch = async (input) => {
+        const url = String(input);
+        if (url.includes("open.faceit.com/data/v4/players?nickname=")) {
+            return jsonResponse({
+                player_id: "e9872425-15ed-4a9a-8261-9cfc37d281a7",
+                nickname: "MadMat",
+                games: { cs2: { faceit_elo: 2589, skill_level: 10 } }
+            });
+        }
+        if (url.includes("api.faceit.com/users/v1/nicknames/")) {
+            placementProfileRequested = true;
+            return jsonResponse({ payload: { games: { cs2: { is_calibrating: true } } } });
+        }
+        if (url.includes("/history?game=cs2&limit=")) {
+            return jsonResponse({ items: [] });
+        }
+        throw new Error(`Unexpected FACEIT test URL: ${url}`);
+    };
+
+    try {
+        const response = mockVercelResponse();
+        await faceitHandler({ query: { nickname: "MadMat", season: "8" } }, response);
+        assert.equal(response.statusCode, 200);
+        assert.equal(response.body.elo, 2689);
+        assert.equal(response.body.level, 10);
+        assert.equal(response.body.seasonSource, "season-end-snapshot");
+        assert.equal(placementProfileRequested, false);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test("FACEIT proxy infers unfinished placements when the profile flag is absent", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (input) => {
@@ -487,6 +532,7 @@ test("FACEIT proxy infers unfinished placements when the profile flag is absent"
             return jsonResponse({ payload: { games: { cs2: { faceit_elo: 1955 } } } });
         }
         if (url.includes("/history?") && url.includes("from=")) {
+            assert.equal(new URL(url).searchParams.get("from"), "1785945600");
             return jsonResponse({
                 items: [
                     { competition_type: "matchmaking", status: "finished" },
