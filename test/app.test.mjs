@@ -1127,6 +1127,17 @@ test("keeps FACEIT's published order for teams with identical records", () => {
     );
 });
 
+test("keeps leaderboard search and sort controls on separate responsive rows", async () => {
+    const stylesheet = await readFile(new URL("../style.css", import.meta.url), "utf8");
+    const toolbarRule = stylesheet.match(/\.leaderboard-toolbar\s*\{([^}]*)\}/)?.[1] || "";
+    const sortControlsRule = stylesheet.match(/\.sort-controls\s*\{([^}]*)\}/)?.[1] || "";
+
+    assert.match(toolbarRule, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    assert.doesNotMatch(toolbarRule, /\bauto\b/);
+    assert.match(sortControlsRule, /width:\s*100%/);
+    assert.match(sortControlsRule, /min-width:\s*0/);
+});
+
 test("renders the leaderboard, filters players, and switches to Uniliga", async () => {
     const [html, script] = await Promise.all([
         readFile(new URL("../index.html", import.meta.url), "utf8"),

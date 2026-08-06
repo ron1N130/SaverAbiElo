@@ -465,7 +465,7 @@ img {
 
 .leaderboard-toolbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 0.65rem;
     border-bottom: 1px solid var(--line);
@@ -520,6 +520,8 @@ img {
 
 .sort-controls {
     display: flex;
+    width: 100%;
+    min-width: 0;
     align-items: stretch;
     flex-wrap: wrap;
     gap: 0.4rem;
