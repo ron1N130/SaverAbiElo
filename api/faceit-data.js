@@ -14,6 +14,7 @@ import {
     faceitSeasonId,
     findFaceitSeasonRecord,
     historicalEloFromMatchRounds,
+    historicalEloFromPlayerStats,
     profileCalibrationStatus,
     resolveFaceitSeason
 } from './utils/faceit-seasons.js';
@@ -65,7 +66,8 @@ const faceitBrowserHeaders = {
     Accept: "application/json",
     Origin: "https://www.faceit.com",
     Referer: "https://www.faceit.com/",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136 Safari/537.36",
+    ...(FACEIT_API_KEY ? { Authorization: `Bearer ${FACEIT_API_KEY}` } : {})
 };
 
 // --- Funktion zur Berechnung der Form basierend auf den letzten MATCHES_MAX Matches ---
@@ -181,14 +183,15 @@ async function faceitSeasonCatalog() {
     return faceitSeasonCatalogPromise;
 }
 
-async function historicalSeasonElo(playerId, season) {
-    const cacheKey = `faceit_season_elo:v1:${playerId}:${season.number}`;
+async function historicalSeasonElo(playerId, season, openDataHeaders) {
+    const cacheKey = `faceit_season_elo:v2:${playerId}:${season.number}`;
     const cached = await readRedisJson(cacheKey);
     if (cached && Object.hasOwn(cached, "elo")) return cached;
 
     let elo = null;
     let source = null;
     let matchRoundSeason = season;
+    let debugKeys = [];
 
     try {
         const catalog = await faceitSeasonCatalog();
@@ -234,10 +237,37 @@ async function historicalSeasonElo(playerId, season) {
         }
     }
 
+    if (elo === null) {
+        try {
+            const from = Date.parse(matchRoundSeason.startsAt);
+            const to = Date.parse(matchRoundSeason.endsAt);
+            const params = new URLSearchParams({
+                offset: "0",
+                limit: "100",
+                from: String(from),
+                to: String(to)
+            });
+            const playerStats = await fetchJson(
+                `${API_BASE_URL}/players/${encodeURIComponent(playerId)}/games/cs2/stats?${params}`,
+                openDataHeaders
+            );
+            debugKeys = [...new Set(
+                (playerStats?.items || [])
+                    .slice(0, 3)
+                    .flatMap((item) => Object.keys(item?.stats || item || {}))
+            )].sort();
+            elo = historicalEloFromPlayerStats(playerStats, matchRoundSeason);
+            if (elo !== null) source = "open-data";
+        } catch (error) {
+            console.warn(`[Season FD] Open Data fallback unavailable for ${playerId}:`, error.message);
+        }
+    }
+
     const result = {
         elo,
         available: elo !== null,
         source,
+        debugKeys,
         checkedAt: new Date().toISOString()
     };
     await writeRedisJson(
@@ -277,6 +307,7 @@ export default async function handler(req, res) {
         let isCalibrating = false;
         let seasonAvailable = seasonElo !== null;
         let seasonSource = "current";
+        let seasonDebug = null;
 
         if (season.current) {
             isCalibrating = await currentPlacementStatus(details.nickname || nickname, playerId, details);
@@ -285,11 +316,14 @@ export default async function handler(req, res) {
                 seasonLevel = null;
             }
         } else {
-            const historical = await historicalSeasonElo(playerId, season);
+            const historical = await historicalSeasonElo(playerId, season, headers);
             seasonElo = historical.elo;
             seasonLevel = faceitLevelForElo(seasonElo);
             seasonAvailable = historical.available;
             seasonSource = historical.source;
+            if (req.query.debug === "season-fields") {
+                seasonDebug = historical.debugKeys;
+            }
             isCalibrating = false;
         }
 
@@ -321,6 +355,7 @@ export default async function handler(req, res) {
             hsPercent: null, kast: null, impact: null, matchesConsidered: 0,
             lastUpdated: null, cacheStatus: 'miss', fetchDurationMs: null
            };
+        if (seasonDebug) resp.seasonDebug = seasonDebug;
 
         let statsObj = null;
         let isCacheStaleByActivity = false;

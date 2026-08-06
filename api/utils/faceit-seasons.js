@@ -28,6 +28,7 @@ export function resolveFaceitSeason(value) {
 }
 
 export function faceitLevelForElo(value) {
+    if (value === null || value === undefined || value === "") return null;
     const elo = Number(value);
     if (!Number.isFinite(elo) || elo < 0) return null;
     if (elo >= 2001) return 10;
@@ -227,4 +228,59 @@ export function historicalEloFromMatchRounds(payload, season) {
         }
     }
     return null;
+}
+
+export function historicalEloFromPlayerStats(payload, season) {
+    const resolved = typeof season === "object" && season
+        ? season
+        : resolveFaceitSeason(season);
+    const startsAt = Date.parse(resolved.startsAt);
+    const endsAt = Date.parse(resolved.endsAt);
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt)) return null;
+
+    const candidates = items.map((item) => {
+        const stats = item?.stats || item || {};
+        const timestamp = Number(
+            stats["Match Finished At"]
+            ?? stats["Match Finished"]
+            ?? stats.match_finished_at
+            ?? stats.finished_at
+        );
+        const normalizedTimestamp = Number.isFinite(timestamp)
+            ? timestamp < 1e12 ? timestamp * 1000 : timestamp
+            : Date.parse(
+                stats["Match Finished At"]
+                ?? stats["Match Finished"]
+                ?? stats.match_finished_at
+                ?? stats.finished_at
+                ?? ""
+            );
+        const before = Number(
+            stats["Elo Before"]
+            ?? stats["ELO Before"]
+            ?? stats.elo_before
+            ?? stats.eloBefore
+        );
+        const delta = Number(
+            stats["Elo Change"]
+            ?? stats["ELO Change"]
+            ?? stats.elo_delta
+            ?? stats.eloDelta
+        );
+        const calculatedElo = Number.isFinite(before) && before > 0 && Number.isFinite(delta)
+            ? Math.round(before + delta)
+            : null;
+        return {
+            timestamp: normalizedTimestamp,
+            elo: extractSeasonElo(stats) ?? calculatedElo
+        };
+    }).filter(({ timestamp, elo }) => (
+        Number.isFinite(timestamp)
+        && timestamp >= startsAt
+        && timestamp < endsAt
+        && elo !== null
+    )).sort((a, b) => b.timestamp - a.timestamp);
+
+    return candidates[0]?.elo ?? null;
 }

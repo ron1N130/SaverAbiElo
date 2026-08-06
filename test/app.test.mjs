@@ -10,6 +10,7 @@ import {
     faceitLevelForElo,
     findFaceitSeasonRecord,
     historicalEloFromMatchRounds,
+    historicalEloFromPlayerStats,
     profileCalibrationStatus,
     resolveFaceitSeason
 } from "../api/utils/faceit-seasons.js";
@@ -386,7 +387,17 @@ test("maps FACEIT placements and historical season Elo", () => {
         }
     };
     assert.equal(historicalEloFromMatchRounds(matchRounds, season8), 2417);
+    assert.equal(historicalEloFromPlayerStats({
+        items: [{
+            stats: {
+                "Match Finished At": 1785873600000,
+                "Elo Before": 2392,
+                "Elo Change": 25
+            }
+        }]
+    }, season8), 2417);
     assert.equal(faceitLevelForElo(2417), 10);
+    assert.equal(faceitLevelForElo(null), null);
 });
 
 test("FACEIT proxy hides current Elo during placements and returns historical Elo", async () => {
