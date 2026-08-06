@@ -9,12 +9,14 @@
 import Redis from "ioredis";
 import { calculateAverageStats } from './utils/stats.js'; // Stelle sicher, dass dieser Pfad korrekt ist
 import {
+    CURRENT_FACEIT_SEASON,
     extractSeasonElo,
     faceitLevelForElo,
     faceitSeasonId,
     findFaceitSeasonRecord,
     historicalEloFromMatchRounds,
     historicalEloFromPlayerStats,
+    placementMatchCount,
     profileCalibrationStatus,
     resolveFaceitSeason
 } from './utils/faceit-seasons.js';
@@ -31,7 +33,6 @@ const FETCH_BUFFER = 5;
 const CACHE_TTL_SECONDS = 24 * 60 * 60; // Cache-Ablaufzeit: 24 Stunden (als Fallback)
 const PLACEMENT_CACHE_TTL_SECONDS = 5 * 60;
 const RANKED_CACHE_TTL_SECONDS = 30 * 60;
-const HISTORICAL_ELO_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
 const MISSING_HISTORICAL_ELO_CACHE_TTL_SECONDS = 10 * 60;
 const OPTIONAL_FETCH_TIMEOUT_MS = 8_000;
 
@@ -123,38 +124,70 @@ async function readRedisJson(key) {
 async function writeRedisJson(key, value, ttlSeconds) {
     if (!redis || redis.status !== "ready") return;
     try {
-        await redis.set(key, JSON.stringify(value), "EX", ttlSeconds);
+        if (Number.isFinite(ttlSeconds) && ttlSeconds > 0) {
+            await redis.set(key, JSON.stringify(value), "EX", ttlSeconds);
+        } else {
+            await redis.set(key, JSON.stringify(value));
+        }
     } catch (error) {
         console.warn(`[Cache FD] Could not write ${key}:`, error.message);
     }
 }
 
-async function currentPlacementStatus(nickname, playerId, details) {
+async function currentPlacementState(nickname, playerId, details, openDataHeaders) {
     const detailStatus = profileCalibrationStatus(details);
-    if (detailStatus !== null) return detailStatus;
 
-    const cacheKey = `faceit_placement:v1:${playerId}:9`;
+    const cacheKey = `faceit_placement:v2:${playerId}:${CURRENT_FACEIT_SEASON}`;
     const cached = await readRedisJson(cacheKey);
-    if (typeof cached?.isCalibrating === "boolean") return cached.isCalibrating;
+    if (typeof cached?.isCalibrating === "boolean") return cached;
+
+    let isCalibrating = detailStatus;
+    let placementMatches = null;
 
     try {
         const profile = await fetchOptionalJson(
             `${FACEIT_PROFILE_BASE_URL}/nicknames/${encodeURIComponent(nickname)}`,
             faceitBrowserHeaders
         );
-        const isCalibrating = profileCalibrationStatus(profile);
-        if (typeof isCalibrating === "boolean") {
-            await writeRedisJson(
-                cacheKey,
-                { isCalibrating, checkedAt: new Date().toISOString() },
-                isCalibrating ? PLACEMENT_CACHE_TTL_SECONDS : RANKED_CACHE_TTL_SECONDS
-            );
-        }
-        return isCalibrating;
+        isCalibrating = profileCalibrationStatus(profile) ?? isCalibrating;
     } catch (error) {
         console.warn(`[Season FD] Placement status unavailable for ${nickname}:`, error.message);
-        return null;
     }
+
+    if (isCalibrating === null) {
+        try {
+            const currentSeason = resolveFaceitSeason(CURRENT_FACEIT_SEASON);
+            const from = Math.floor(Date.parse(currentSeason.startsAt) / 1000);
+            const params = new URLSearchParams({
+                game: "cs2",
+                from: String(from),
+                offset: "0",
+                limit: "100"
+            });
+            const history = await fetchJson(
+                `${API_BASE_URL}/players/${encodeURIComponent(playerId)}/history?${params}`,
+                openDataHeaders
+            );
+            placementMatches = placementMatchCount(history);
+            isCalibrating = placementMatches < 10;
+        } catch (error) {
+            console.warn(`[Season FD] Placement match count unavailable for ${nickname}:`, error.message);
+        }
+    }
+
+    const result = {
+        isCalibrating,
+        placementMatches,
+        checkedAt: new Date().toISOString()
+    };
+    if (typeof isCalibrating === "boolean") {
+        await writeRedisJson(
+            cacheKey,
+            result,
+            isCalibrating ? PLACEMENT_CACHE_TTL_SECONDS : RANKED_CACHE_TTL_SECONDS
+        );
+    }
+    return result;
 }
 
 let faceitSeasonCatalogPromise = null;
@@ -183,15 +216,29 @@ async function faceitSeasonCatalog() {
     return faceitSeasonCatalogPromise;
 }
 
-async function historicalSeasonElo(playerId, season, openDataHeaders) {
-    const cacheKey = `faceit_season_elo:v2:${playerId}:${season.number}`;
+async function historicalSeasonElo(playerId, season, openDataHeaders, transitionElo = null) {
+    const cacheKey = `faceit_season_elo:v3:${playerId}:${season.number}`;
     const cached = await readRedisJson(cacheKey);
     if (cached && Object.hasOwn(cached, "elo")) return cached;
+
+    if (
+        season.number === CURRENT_FACEIT_SEASON - 1
+        && Number.isFinite(transitionElo)
+    ) {
+        const snapshot = {
+            elo: Math.round(transitionElo),
+            available: true,
+            source: "season-transition",
+            checkedAt: new Date().toISOString()
+        };
+        // Historical season Elo is immutable and intentionally has no expiry.
+        await writeRedisJson(cacheKey, snapshot);
+        return snapshot;
+    }
 
     let elo = null;
     let source = null;
     let matchRoundSeason = season;
-    let debugKeys = [];
 
     try {
         const catalog = await faceitSeasonCatalog();
@@ -251,11 +298,6 @@ async function historicalSeasonElo(playerId, season, openDataHeaders) {
                 `${API_BASE_URL}/players/${encodeURIComponent(playerId)}/games/cs2/stats?${params}`,
                 openDataHeaders
             );
-            debugKeys = [...new Set(
-                (playerStats?.items || [])
-                    .slice(0, 3)
-                    .flatMap((item) => Object.keys(item?.stats || item || {}))
-            )].sort();
             elo = historicalEloFromPlayerStats(playerStats, matchRoundSeason);
             if (elo !== null) source = "open-data";
         } catch (error) {
@@ -267,15 +309,12 @@ async function historicalSeasonElo(playerId, season, openDataHeaders) {
         elo,
         available: elo !== null,
         source,
-        debugKeys,
         checkedAt: new Date().toISOString()
     };
     await writeRedisJson(
         cacheKey,
         result,
-        result.available
-            ? HISTORICAL_ELO_CACHE_TTL_SECONDS
-            : MISSING_HISTORICAL_ELO_CACHE_TTL_SECONDS
+        result.available ? undefined : MISSING_HISTORICAL_ELO_CACHE_TTL_SECONDS
     );
     return result;
 }
@@ -305,25 +344,34 @@ export default async function handler(req, res) {
         let seasonElo = Number.isFinite(currentElo) ? currentElo : null;
         let seasonLevel = details.games?.cs2?.skill_level ?? null;
         let isCalibrating = false;
+        let placementMatches = null;
         let seasonAvailable = seasonElo !== null;
         let seasonSource = "current";
-        let seasonDebug = null;
+
+        const needsPlacementState = season.current
+            || season.number === CURRENT_FACEIT_SEASON - 1;
+        const placementState = needsPlacementState
+            ? await currentPlacementState(details.nickname || nickname, playerId, details, headers)
+            : { isCalibrating: false, placementMatches: null };
 
         if (season.current) {
-            isCalibrating = await currentPlacementStatus(details.nickname || nickname, playerId, details);
-            if (isCalibrating === true) {
+            // If both placement sources fail, hiding Elo is safer than exposing a
+            // provisional value as ranked.
+            isCalibrating = placementState.isCalibrating !== false;
+            placementMatches = placementState.placementMatches;
+            if (isCalibrating) {
                 seasonElo = null;
                 seasonLevel = null;
             }
         } else {
-            const historical = await historicalSeasonElo(playerId, season, headers);
+            const transitionElo = placementState.isCalibrating === true
+                ? currentElo
+                : null;
+            const historical = await historicalSeasonElo(playerId, season, headers, transitionElo);
             seasonElo = historical.elo;
             seasonLevel = faceitLevelForElo(seasonElo);
             seasonAvailable = historical.available;
             seasonSource = historical.source;
-            if (req.query.debug === "season-fields") {
-                seasonDebug = historical.debugKeys;
-            }
             isCalibrating = false;
         }
 
@@ -342,6 +390,7 @@ export default async function handler(req, res) {
                         ? "ranked"
                         : "unknown"
                 : "historical",
+            placementMatches,
             seasonAvailable,
             seasonSource,
             season: {
@@ -355,7 +404,6 @@ export default async function handler(req, res) {
             hsPercent: null, kast: null, impact: null, matchesConsidered: 0,
             lastUpdated: null, cacheStatus: 'miss', fetchDurationMs: null
            };
-        if (seasonDebug) resp.seasonDebug = seasonDebug;
 
         let statsObj = null;
         let isCacheStaleByActivity = false;

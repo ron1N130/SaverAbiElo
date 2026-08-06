@@ -55,6 +55,14 @@ export function profileCalibrationStatus(payload) {
             : null;
 }
 
+export function placementMatchCount(payload) {
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    return items.filter((match) => (
+        String(match?.competition_type || "").toLowerCase() === "matchmaking"
+        && String(match?.status || "finished").toLowerCase() === "finished"
+    )).length;
+}
+
 function seasonRecords(payload) {
     const candidates = [
         payload?.payload?.cs2?.seasons,

@@ -11,6 +11,7 @@ import {
     findFaceitSeasonRecord,
     historicalEloFromMatchRounds,
     historicalEloFromPlayerStats,
+    placementMatchCount,
     profileCalibrationStatus,
     resolveFaceitSeason
 } from "../api/utils/faceit-seasons.js";
@@ -352,6 +353,14 @@ test("maps FACEIT placements and historical season Elo", () => {
     assert.equal(profileCalibrationStatus({
         games: { cs2: { isCalibrating: false } }
     }), false);
+    assert.equal(placementMatchCount({
+        items: [
+            { competition_type: "matchmaking", status: "FINISHED" },
+            { competition_type: "matchmaking", status: "finished" },
+            { competition_type: "championship", status: "finished" },
+            { competition_type: "matchmaking", status: "ongoing" }
+        ]
+    }), 2);
 
     const season8 = resolveFaceitSeason("8");
     const record = findFaceitSeasonRecord({
@@ -454,9 +463,50 @@ test("FACEIT proxy hides current Elo during placements and returns historical El
         await faceitHandler({ query: { nickname: "Alpha", season: "8" } }, historicalResponse);
         assert.equal(historicalResponse.statusCode, 200);
         assert.equal(historicalResponse.body.isUnranked, false);
-        assert.equal(historicalResponse.body.elo, 2417);
+        assert.equal(historicalResponse.body.elo, 2230);
         assert.equal(historicalResponse.body.level, 10);
+        assert.equal(historicalResponse.body.seasonSource, "season-transition");
         assert.equal(historicalResponse.body.season.label, "Season 8");
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test("FACEIT proxy infers unfinished placements when the profile flag is absent", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+        const url = String(input);
+        if (url.includes("open.faceit.com/data/v4/players?nickname=")) {
+            return jsonResponse({
+                player_id: "inactive-player-id",
+                nickname: "Inactive",
+                games: { cs2: { faceit_elo: 1955, skill_level: 9 } }
+            });
+        }
+        if (url.includes("api.faceit.com/users/v1/nicknames/")) {
+            return jsonResponse({ payload: { games: { cs2: { faceit_elo: 1955 } } } });
+        }
+        if (url.includes("/history?") && url.includes("from=")) {
+            return jsonResponse({
+                items: [
+                    { competition_type: "matchmaking", status: "finished" },
+                    { competition_type: "matchmaking", status: "finished" },
+                    { competition_type: "championship", status: "finished" }
+                ]
+            });
+        }
+        if (url.includes("/history?game=cs2")) return jsonResponse({ items: [] });
+        throw new Error(`Unexpected FACEIT test URL: ${url}`);
+    };
+
+    try {
+        const response = mockVercelResponse();
+        await faceitHandler({ query: { nickname: "Inactive", season: "9" } }, response);
+        assert.equal(response.statusCode, 200);
+        assert.equal(response.body.isUnranked, true);
+        assert.equal(response.body.placementStatus, "calibrating");
+        assert.equal(response.body.placementMatches, 2);
+        assert.equal(response.body.elo, null);
     } finally {
         globalThis.fetch = originalFetch;
     }
