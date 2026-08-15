@@ -3,12 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#080a0f">
+    <meta name="theme-color" content="#09090b">
     <meta name="description" content="SaverAbi FACEIT Leaderboard und Uniliga CS2 Statistiken.">
     <title>SaverAbi — FACEIT Performance Hub</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -20,42 +17,44 @@
     <div class="ambient ambient-two" aria-hidden="true"></div>
 
     <header class="topbar">
-        <a class="brand" href="#saverabi" aria-label="SaverAbi Startseite">
-            <span class="brand-mark" aria-hidden="true">SA</span>
-            <span class="brand-copy">
-                <strong>SaverAbi</strong>
-                <small>Performance Hub</small>
-            </span>
-        </a>
+        <div class="topbar-inner">
+            <a class="brand" href="#saverabi" aria-label="SaverAbi Startseite">
+                <span class="brand-mark" aria-hidden="true">SA</span>
+                <span class="brand-copy">
+                    <strong>SaverAbi</strong>
+                    <small>Performance Hub</small>
+                </span>
+            </a>
 
-        <nav id="view-toggle-buttons" class="primary-nav" role="tablist" aria-label="Bereich wählen">
-            <button
-                id="btn-toggle-saverabi"
-                class="nav-tab active"
-                type="button"
-                role="tab"
-                aria-selected="true"
-                aria-controls="saverabi-content"
-                data-view="saverabi"
-            >
-                Leaderboard
-            </button>
-            <button
-                id="btn-toggle-uniliga"
-                class="nav-tab"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="uniliga-content"
-                data-view="uniliga"
-            >
-                Uniliga
-            </button>
-        </nav>
+            <nav id="view-toggle-buttons" class="primary-nav" role="tablist" aria-label="Bereich wählen">
+                <button
+                    id="btn-toggle-saverabi"
+                    class="nav-tab active"
+                    type="button"
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="saverabi-content"
+                    data-view="saverabi"
+                >
+                    Leaderboard
+                </button>
+                <button
+                    id="btn-toggle-uniliga"
+                    class="nav-tab"
+                    type="button"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="uniliga-content"
+                    data-view="uniliga"
+                >
+                    Uniliga
+                </button>
+            </nav>
 
-        <div class="live-badge" title="Daten werden live von FACEIT geladen">
-            <span class="live-dot" aria-hidden="true"></span>
-            FACEIT DATA
+            <div class="live-badge" title="Daten werden live von FACEIT geladen">
+                <span class="live-dot" aria-hidden="true"></span>
+                <span>FACEIT live</span>
+            </div>
         </div>
     </header>
 
@@ -68,7 +67,7 @@
         >
             <div class="hero">
                 <div>
-                    <p class="eyebrow">Community Ranking</p>
+                    <p class="eyebrow"><span aria-hidden="true"></span> Community Ranking</p>
                     <h1>Wer hat gerade die beste Form?</h1>
                     <p class="hero-copy">Saison-Elo, Placement-Status und Performance der letzten 15 FACEIT-Matches — kompakt an einem Ort.</p>
                 </div>
@@ -177,6 +176,8 @@
                     </div>
                 </section>
 
+                <button id="player-detail-scrim" class="detail-scrim" type="button" aria-label="Spieleransicht schließen" aria-hidden="true" tabindex="-1"></button>
+
                 <aside id="player-detail-card-container" class="detail-panel" aria-live="polite">
                     <div class="detail-empty">
                         <span class="detail-empty-mark" aria-hidden="true">+</span>
@@ -197,7 +198,7 @@
         >
             <div class="hero">
                 <div>
-                    <p class="eyebrow">University Esports</p>
+                    <p class="eyebrow"><span aria-hidden="true"></span> University Esports</p>
                     <h1 id="uniliga-championship-title">Uniliga CS2</h1>
                     <p id="uniliga-hero-copy" class="hero-copy">Gruppenphase und Playoffs der laufenden Championship.</p>
                 </div>

@@ -1138,6 +1138,26 @@ test("keeps leaderboard search and sort controls on separate responsive rows", a
     assert.match(sortControlsRule, /min-width:\s*0/);
 });
 
+test("ships the Apple-style accessibility and responsive interaction layers", async () => {
+    const [html, stylesheet, script] = await Promise.all([
+        readFile(new URL("../index.html", import.meta.url), "utf8"),
+        readFile(new URL("../style.css", import.meta.url), "utf8"),
+        readFile(new URL("../script.js", import.meta.url), "utf8")
+    ]);
+
+    assert.doesNotMatch(html, /fonts\.googleapis\.com/);
+    assert.match(stylesheet, /-apple-system/);
+    assert.match(stylesheet, /backdrop-filter:\s*blur/);
+    assert.match(stylesheet, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+    assert.match(stylesheet, /@media\s*\(prefers-reduced-transparency:\s*reduce\)/);
+    assert.match(stylesheet, /@media\s*\(prefers-contrast:\s*more\)/);
+    assert.match(stylesheet, /body\.detail-open\s+\.detail-panel/);
+    assert.match(stylesheet, /touch-action:\s*none/);
+    assert.match(script, /function animateSheetTo\(/);
+    assert.match(script, /function projectMomentum\(/);
+    assert.match(script, /setPointerCapture/);
+});
+
 test("renders the leaderboard, filters players, and switches to Uniliga", async () => {
     const [html, script] = await Promise.all([
         readFile(new URL("../index.html", import.meta.url), "utf8"),
@@ -1238,6 +1258,23 @@ test("renders the leaderboard, filters players, and switches to Uniliga", async 
         document.querySelector(".leetify-profile-link").getAttribute("href"),
         /leetify\.com/
     );
+
+    dom.window.matchMedia = (query) => ({
+        matches: query.includes("max-width: 1080px") || query.includes("prefers-reduced-motion"),
+        addEventListener() {},
+        removeEventListener() {}
+    });
+    document.querySelector('.player-row[data-nickname="Alpha"]').click();
+    assert.equal(document.body.classList.contains("detail-open"), true);
+    assert.equal(document.getElementById("player-detail-card-container").getAttribute("role"), "dialog");
+    assert.equal(document.getElementById("player-detail-card-container").getAttribute("aria-modal"), "true");
+    assert.equal(document.getElementById("player-detail-scrim").getAttribute("aria-hidden"), "false");
+    document.querySelector(".detail-sheet-close").click();
+    assert.equal(document.body.classList.contains("detail-open"), false);
+    assert.equal(document.getElementById("player-detail-card-container").hasAttribute("aria-modal"), false);
+    assert.equal(document.getElementById("player-detail-scrim").getAttribute("aria-hidden"), "true");
+    assert.ok(Math.abs(dom.window.rubberband(200, 800)) < 200);
+    assert.ok(dom.window.projectMomentum(600) > 0);
 
     const sortSelect = document.getElementById("player-sort-select");
     assert.deepEqual(

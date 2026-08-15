@@ -170,6 +170,12 @@ const compactNumber = new Intl.NumberFormat("de-DE", {
     maximumFractionDigits: 1,
     minimumFractionDigits: 1
 });
+const sheetMotion = {
+    animationFrame: null,
+    drag: null,
+    lastFocused: null,
+    y: 0
+};
 
 function cacheDom() {
     dom.views = [...document.querySelectorAll(".view-content")];
@@ -177,6 +183,7 @@ function cacheDom() {
     dom.playerList = document.getElementById("player-list");
     dom.playerSearch = document.getElementById("player-search");
     dom.playerDetail = document.getElementById("player-detail-card-container");
+    dom.playerDetailScrim = document.getElementById("player-detail-scrim");
     dom.playerLoading = document.getElementById("loading-indicator-saverabi");
     dom.playerError = document.getElementById("error-message-saverabi");
     dom.playerProgress = document.getElementById("player-load-progress");
@@ -218,6 +225,191 @@ function toNumber(value) {
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+}
+
+function reducedMotionRequested() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
+
+function isSheetViewport() {
+    return window.matchMedia?.("(max-width: 1080px)").matches ?? false;
+}
+
+function rubberband(overshoot, dimension, constant = 0.42) {
+    return (overshoot * dimension * constant)
+        / (dimension + constant * Math.abs(overshoot));
+}
+
+function projectMomentum(initialVelocity, decelerationRate = 0.995) {
+    return (initialVelocity / 1000)
+        * decelerationRate
+        / (1 - decelerationRate);
+}
+
+function setSheetPosition(value) {
+    sheetMotion.y = Number.isFinite(value) ? value : 0;
+    dom.playerDetail?.style.setProperty("--sheet-y", `${sheetMotion.y}px`);
+}
+
+function cancelSheetAnimation() {
+    if (sheetMotion.animationFrame !== null) {
+        window.cancelAnimationFrame(sheetMotion.animationFrame);
+        sheetMotion.animationFrame = null;
+    }
+}
+
+function animateSheetTo(target, initialVelocity = 0, onComplete = null) {
+    cancelSheetAnimation();
+    if (reducedMotionRequested()) {
+        setSheetPosition(target);
+        onComplete?.();
+        return;
+    }
+
+    let position = sheetMotion.y;
+    let velocity = initialVelocity;
+    let previousTime = performance.now();
+    const response = target === 0 ? 0.32 : 0.36;
+    const dampingRatio = target === 0 ? 1 : 0.86;
+    const angularFrequency = (Math.PI * 2) / response;
+
+    const step = (time) => {
+        let remaining = Math.min((time - previousTime) / 1000, 0.034);
+        previousTime = time;
+
+        while (remaining > 0) {
+            const delta = Math.min(remaining, 1 / 120);
+            const acceleration = -2 * dampingRatio * angularFrequency * velocity
+                - angularFrequency ** 2 * (position - target);
+            velocity += acceleration * delta;
+            position += velocity * delta;
+            remaining -= delta;
+        }
+
+        setSheetPosition(position);
+        if (Math.abs(velocity) < 7 && Math.abs(position - target) < 0.6) {
+            setSheetPosition(target);
+            sheetMotion.animationFrame = null;
+            onComplete?.();
+            return;
+        }
+        sheetMotion.animationFrame = window.requestAnimationFrame(step);
+    };
+
+    sheetMotion.animationFrame = window.requestAnimationFrame(step);
+}
+
+function finishClosingPlayerSheet(restoreFocus = true) {
+    document.body.classList.remove("detail-open");
+    dom.playerDetail?.classList.remove("is-dragging");
+    dom.playerDetail?.removeAttribute("role");
+    dom.playerDetail?.removeAttribute("aria-modal");
+    dom.playerDetail?.removeAttribute("aria-label");
+    dom.playerDetailScrim?.setAttribute("aria-hidden", "true");
+    setSheetPosition(0);
+
+    if (restoreFocus) {
+        const selectedRow = state.selectedNickname
+            ? [...(dom.playerList?.querySelectorAll("[data-nickname]") || [])]
+                .find((row) => row.dataset.nickname === state.selectedNickname)
+            : null;
+        (selectedRow || sheetMotion.lastFocused)?.focus?.({ preventScroll: true });
+    }
+    sheetMotion.lastFocused = null;
+}
+
+function openPlayerSheet() {
+    if (!isSheetViewport()) return;
+    sheetMotion.lastFocused = document.activeElement;
+    cancelSheetAnimation();
+    document.body.classList.add("detail-open");
+    dom.playerDetail.setAttribute("role", "dialog");
+    dom.playerDetail.setAttribute("aria-modal", "true");
+    dom.playerDetail.setAttribute("aria-label", "Spielerdetails");
+    dom.playerDetailScrim?.setAttribute("aria-hidden", "false");
+    if (reducedMotionRequested()) {
+        setSheetPosition(0);
+        dom.playerDetail.querySelector(".detail-sheet-close")?.focus({ preventScroll: true });
+        return;
+    }
+    setSheetPosition(42);
+    window.requestAnimationFrame(() => {
+        animateSheetTo(0);
+        dom.playerDetail.querySelector(".detail-sheet-close")?.focus({ preventScroll: true });
+    });
+}
+
+function closePlayerSheet({ immediate = false, restoreFocus = true, velocity = 0 } = {}) {
+    if (!document.body.classList.contains("detail-open")) return;
+    cancelSheetAnimation();
+    if (immediate || reducedMotionRequested()) {
+        finishClosingPlayerSheet(restoreFocus);
+        return;
+    }
+    animateSheetTo(window.innerHeight + 48, Math.max(velocity, 0), () => {
+        finishClosingPlayerSheet(restoreFocus);
+    });
+}
+
+function bindPlayerSheetGestures() {
+    dom.playerDetail.addEventListener("pointerdown", (event) => {
+        const handle = event.target.closest(".detail-sheet-handle");
+        if (!handle || !document.body.classList.contains("detail-open")) return;
+
+        cancelSheetAnimation();
+        handle.setPointerCapture?.(event.pointerId);
+        sheetMotion.drag = {
+            pointerId: event.pointerId,
+            startY: event.clientY,
+            startOffset: sheetMotion.y,
+            history: [{ y: event.clientY, time: performance.now() }]
+        };
+        dom.playerDetail.classList.add("is-dragging");
+    });
+
+    dom.playerDetail.addEventListener("pointermove", (event) => {
+        const drag = sheetMotion.drag;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+
+        const rawOffset = drag.startOffset + event.clientY - drag.startY;
+        const offset = rawOffset < 0
+            ? rubberband(rawOffset, Math.max(window.innerHeight, 1))
+            : rawOffset;
+        setSheetPosition(offset);
+
+        const now = performance.now();
+        drag.history.push({ y: event.clientY, time: now });
+        drag.history = drag.history.filter((sample) => now - sample.time <= 120).slice(-6);
+    });
+
+    const finishDrag = (event, cancelled = false) => {
+        const drag = sheetMotion.drag;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+
+        const history = drag.history;
+        const first = history[0];
+        const last = history[history.length - 1];
+        const elapsed = Math.max((last.time - first.time) / 1000, 0.001);
+        const velocity = (last.y - first.y) / elapsed;
+        const projected = sheetMotion.y + projectMomentum(velocity);
+        const dismissDistance = Math.min(190, window.innerHeight * 0.28);
+        const shouldDismiss = !cancelled && (
+            sheetMotion.y > dismissDistance
+            || projected > dismissDistance
+            || velocity > 900
+        );
+
+        sheetMotion.drag = null;
+        dom.playerDetail.classList.remove("is-dragging");
+        if (shouldDismiss) {
+            closePlayerSheet({ velocity });
+        } else {
+            animateSheetTo(0, velocity);
+        }
+    };
+
+    dom.playerDetail.addEventListener("pointerup", (event) => finishDrag(event));
+    dom.playerDetail.addEventListener("pointercancel", (event) => finishDrag(event, true));
 }
 
 function escapeHtml(value) {
@@ -937,6 +1129,14 @@ function renderPlayerDetail(player) {
 
     dom.playerDetail.innerHTML = `
         <article class="profile-card">
+            <div class="detail-sheet-chrome">
+                <div class="detail-sheet-handle" aria-hidden="true"><span></span></div>
+                <button class="detail-sheet-close" type="button" aria-label="Spieleransicht schließen">
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m7 7 10 10M17 7 7 17"/>
+                    </svg>
+                </button>
+            </div>
             <header class="profile-hero">
                 <img src="${avatar}" class="profile-avatar" alt="Avatar von ${escapeHtml(player.nickname)}" onerror="this.src='/default_avatar.png'">
                 <div class="profile-title">
@@ -1594,6 +1794,7 @@ function setFaceitSeason(value) {
     state.loadedPlayers = 0;
     state.totalPlayers = 0;
     state.leetifyBulkTotal = 0;
+    closePlayerSheet({ immediate: true, restoreFocus: false });
     updateSeasonControls();
     renderSaverAbiSummary();
     updatePlayerProgress();
@@ -1645,6 +1846,10 @@ function toggleSortDirection() {
 
 function switchView(view, updateUrl = true) {
     const targetView = view === "uniliga" ? "uniliga" : "saverabi";
+
+    if (targetView !== "saverabi") {
+        closePlayerSheet({ immediate: true, restoreFocus: false });
+    }
 
     dom.views.forEach((element) => {
         const isActive = element.id === `${targetView}-content`;
@@ -1716,15 +1921,45 @@ function bindEvents() {
         if (!player) return;
 
         renderPlayerDetail(player);
-        const narrowViewport = window.matchMedia?.("(max-width: 1080px)");
-        if (
-            narrowViewport?.matches
-            && typeof dom.playerDetail.scrollIntoView === "function"
-        ) {
-            dom.playerDetail.scrollIntoView({
-                behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-                block: "start"
-            });
+        openPlayerSheet();
+    });
+
+    dom.playerDetail.addEventListener("click", (event) => {
+        if (event.target.closest(".detail-sheet-close")) {
+            closePlayerSheet();
+        }
+    });
+    dom.playerDetailScrim?.addEventListener("click", () => closePlayerSheet());
+    bindPlayerSheetGestures();
+
+    document.addEventListener("keydown", (event) => {
+        if (!document.body.classList.contains("detail-open")) return;
+        if (event.key === "Escape") {
+            event.preventDefault();
+            closePlayerSheet();
+            return;
+        }
+        if (event.key !== "Tab") return;
+
+        const focusable = [...dom.playerDetail.querySelectorAll(
+            'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )].filter((element) => element.getClientRects().length > 0);
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    });
+
+    window.matchMedia?.("(max-width: 1080px)").addEventListener?.("change", (event) => {
+        if (!event.matches) {
+            closePlayerSheet({ immediate: true, restoreFocus: false });
         }
     });
 
